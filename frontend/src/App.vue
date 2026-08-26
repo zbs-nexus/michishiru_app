@@ -1,7 +1,12 @@
-<script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
+<script setup>
+/**
+ * @description アプリケーションのルートコンポーネント。
+ * 表示中の画面の切り替えはVue Routerに委ねる。
+ */
 </script>
 
 <template>
-  <HelloWorld />
+  <div id="app">
+    <RouterView />
+  </div>
 </template>
