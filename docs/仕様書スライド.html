@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ミチシル - 仕様書スライド</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: 'Hiragino Sans', 'Meiryo', sans-serif;
+      background: #1a1a2e;
+      color: #333;
+    }
+    
+    .slide {
+      width: 100vw;
+      height: 100vh;
+      padding: 60px 80px;
+      display: none;
+      flex-direction: column;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .slide.active { display: flex; }
+    .slide.white { background: #fff; }
+    .slide.light { background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%); }
+    .slide.dark { background: linear-gradient(135deg, #2D3E50 0%, #1a252f 100%); color: #fff; }
+    .slide.green { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); }
+    
+    /* タイトルスライド */
+    .title-slide {
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      color: #fff;
+    }
+    
+    .title-slide h1 {
+      font-size: 72px;
+      margin-bottom: 20px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+    }
+    
+    .title-slide p {
+      font-size: 28px;
+      opacity: 0.9;
+    }
+    
+    .title-slide .logo {
+      width: 150px;
+      height: 150px;
+      margin-bottom: 30px;
+      border-radius: 30px;
+    }
+    
+    /* コンテンツスライド */
+    h2 {
+      font-size: 42px;
+      margin-bottom: 40px;
+      color: #2D3E50;
+      border-bottom: 4px solid #667eea;
+      padding-bottom: 15px;
+    }
+    
+    .slide.dark h2 { color: #fff; border-color: #38ef7d; }
+    
+    .content { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+    
+    ul {
+      font-size: 28px;
+      line-height: 2;
+      margin-left: 40px;
+    }
+    
+    li { margin-bottom: 15px; }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 24px;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    th, td {
+      padding: 20px 25px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+    
+    th {
+      background: #2D3E50;
+      color: #fff;
+      font-weight: 600;
+    }
+    
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8f9fa; }
+    
+    .code-block {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 30px;
+      border-radius: 10px;
+      font-family: 'Consolas', monospace;
+      font-size: 20px;
+      line-height: 1.6;
+      overflow-x: auto;
+    }
+    
+    .highlight { color: #569cd6; }
+    .string { color: #ce9178; }
+    .comment { color: #6a9955; }
+    
+    .flow-diagram {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      flex-wrap: wrap;
+      margin: 30px 0;
+    }
+    
+    .flow-box {
+      background: #fff;
+      padding: 25px 35px;
+      border-radius: 15px;
+      font-size: 22px;
+      font-weight: 600;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+      text-align: center;
+      min-width: 150px;
+    }
+    
+    .flow-box.active-box { background: #667eea; color: #fff; }
+    
+    .arrow {
+      font-size: 30px;
+      color: #667eea;
+    }
+    
+    .two-column {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 50px;
+    }
+    
+    .card {
+      background: #fff;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+    }
+    
+    .card h3 {
+      font-size: 26px;
+      color: #667eea;
+      margin-bottom: 20px;
+    }
+    
+    .card p, .card li {
+      font-size: 22px;
+      line-height: 1.8;
+    }
+    
+    /* ナビゲーション */
+    .nav {
+      position: fixed;
+      bottom: 30px;
+      right: 30px;
+      display: flex;
+      gap: 15px;
+      z-index: 100;
+    }
+    
+    .nav button {
+      width: 60px;
+      height: 60px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.9);
+      color: #333;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+      transition: transform 0.2s;
+    }
+    
+    .nav button:hover { transform: scale(1.1); }
+    
+    .page-num {
+      position: fixed;
+      bottom: 30px;
+      left: 30px;
+      background: rgba(0,0,0,0.5);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 18px;
+    }
+    
+    .file-tree {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      padding: 30px;
+      border-radius: 10px;
+      font-family: 'Consolas', monospace;
+      font-size: 22px;
+      line-height: 1.8;
+    }
+    
+    .folder { color: #dcdcaa; }
+    .file { color: #9cdcfe; }
+    
+    .screen-list {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+    }
+    
+    .screen-item {
+      background: #fff;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    .screen-item .num {
+      display: inline-block;
+      width: 40px;
+      height: 40px;
+      background: #667eea;
+      color: #fff;
+      border-radius: 50%;
+      line-height: 40px;
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+    
+    .screen-item h4 { font-size: 18px; color: #333; }
+  </style>
+</head>
+<body>
+
+  <!-- スライド1: タイトル -->
+  <div class="slide title-slide active">
+    <img src="../src/assets/images/logo.png" alt="ミチシル" class="logo">
+    <h1>ミチシル</h1>
+    <p>ルート提案型お散歩アプリ - 仕様書</p>
+    <p style="margin-top: 50px; font-size: 20px; opacity: 0.7;">2026年8月19日</p>
+    <p style="margin-top: 30px; font-size: 18px; background: rgba(0,0,0,0.25); padding: 16px 24px; border-radius: 8px;">
+      この資料は Vue / Lambda 構成へ移行する前の内容です。<br>
+      最新の仕様は docs/仕様書.md、設計は docs/設計書.md を参照してください。
+    </p>
+  </div>
+
+  <!-- スライド2: 目次 -->
+  <div class="slide light">
+    <h2>📋 目次</h2>
+    <div class="content">
+      <ul style="font-size: 32px; line-height: 2.5;">
+        <li>アプリ概要</li>
+        <li>ファイル構成</li>
+        <li>画面構成（7画面）</li>
+        <li>画面遷移フロー</li>
+        <li>各ファイルの役割</li>
+        <li>処理の仕組み</li>
+        <li>今後の実装予定</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- スライド3: アプリ概要 -->
+  <div class="slide white">
+    <h2>📱 アプリ概要</h2>
+    <div class="content">
+      <table>
+        <tr><th>項目</th><th>内容</th></tr>
+        <tr><td>アプリ名</td><td>ミチシル</td></tr>
+        <tr><td>種類</td><td>ルート提案型お散歩アプリ（モック版）</td></tr>
+        <tr><td>目的</td><td>ユーザーが入力した条件に基づいて、AIが散歩ルートを提案</td></tr>
+        <tr><td>使用技術</td><td>Node.js + Express / HTML / CSS / JavaScript</td></tr>
+        <tr><td>現在の状態</td><td>UIモック（バックエンド・API未実装）</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- スライド4: ファイル構成 -->
+  <div class="slide light">
+    <h2>📁 ファイル構成</h2>
+    <div class="content">
+      <div class="two-column">
+        <div class="file-tree">
+<span class="folder">ミチシル/</span>
+├── <span class="file">server.js</span>
+├── <span class="file">package.json</span>
+├── <span class="folder">docs/</span>
+│   └── <span class="file">仕様書.md</span>
+└── <span class="folder">public/</span>
+    ├── <span class="file">index.html</span>
+    ├── <span class="file">styles.css</span>
+    ├── <span class="file">app.js</span>
+    └── <span class="file">logo.png</span>
+        </div>
+        <div class="card">
+          <h3>各ファイルの役割</h3>
+          <ul style="margin-left: 20px;">
+            <li><strong>server.js</strong>: Webサーバー</li>
+            <li><strong>index.html</strong>: 画面構造</li>
+            <li><strong>styles.css</strong>: デザイン</li>
+            <li><strong>app.js</strong>: 動作ロジック</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- スライド5: 画面構成 -->
+  <div class="slide white">
+    <h2>🖥️ 画面構成（全7画面）</h2>
+    <div class="content">
+      <div class="screen-list">
+        <div class="screen-item"><span class="num">①</span><h4>初期入力画面</h4></div>
+        <div class="screen-item"><span class="num">②</span><h4>ローディング</h4></div>
+        <div class="screen-item"><span class="num">③</span><h4>ルート提案</h4></div>
+        <div class="screen-item"><span class="num">④</span><h4>ルート詳細</h4></div>
+        <div class="screen-item"><span class="num">⑤</span><h4>ルート案内</h4></div>
+        <div class="screen-item"><span class="num">⑥</span><h4>終了確認</h4></div>
+        <div class="screen-item"><span class="num">⑦</span><h4>散歩結果</h4></div>
+        <div class="screen-item" style="background: #f0f0f0;"><span class="num" style="background: #999;">→</span><h4>①に戻る</h4></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- スライド6: 画面遷移フロー -->
+  <div class="slide dark">
+    <h2>🔄 画面遷移フロー</h2>
+    <div class="content">
+      <div class="flow-diagram">
+        <div class="flow-box active-box">①入力</div>
+        <span class="arrow" style="color:#fff;">→</span>
+        <div class="flow-box">②ローディング</div>
+        <span class="arrow" style="color:#fff;">→</span>
+        <div class="flow-box">③提案</div>
+        <span class="arrow" style="color:#fff;">→</span>
+        <div class="flow-box">④詳細</div>
+      </div>
+      <div class="flow-diagram">
+        <div class="flow-box">④詳細</div>
+        <span class="arrow" style="color:#fff;">→</span>
+        <div class="flow-box">⑤案内</div>
+        <span class="arrow" style="color:#fff;">→</span>
+        <div class="flow-box">⑥確認</div>
+        <span class="arrow" style="color:#fff;">→</span>
+        <div class="flow-box">⑦結果</div>
+        <span class="arrow" style="color:#fff;">→</span>
+        <div class="flow-box active-box">①に戻る</div>
+      </div>
+      <p style="text-align: center; margin-top: 40px; font-size: 22px; opacity: 0.8;">
+        ※ ③で「再作成」を押すと②に戻る
+      </p>
+    </div>
+  </div>
+
+  <!-- スライド7: 初期入力画面 -->
+  <div class="slide white">
+    <h2>① 初期入力画面</h2>
+    <div class="content">
+      <div class="two-column">
+        <div class="card">
+          <h3>入力項目</h3>
+          <table style="font-size: 20px;">
+            <tr><th>項目</th><th>タイプ</th><th>選択肢</th></tr>
+            <tr><td>目的</td><td>ボタン選択</td><td>気分転換/運動/観光/カフェ巡り</td></tr>
+            <tr><td>ジャンル</td><td>ボタン選択</td><td>自然/街歩き/歴史/グルメ</td></tr>
+            <tr><td>距離</td><td>スライダー</td><td>1km/3km/5km/8km</td></tr>
+          </table>
+        </div>
+        <div class="card">
+          <h3>処理内容</h3>
+          <ol style="margin-left: 20px; font-size: 20px; line-height: 2;">
+            <li>ボタンクリックで選択状態を保存</li>
+            <li>選択ボタンの色を変更</li>
+            <li>「ルート作成」で次画面へ</li>
+            <li>未選択時はアラート表示</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- スライド8: サーバー処理 -->
+  <div class="slide light">
+    <h2>⚙️ server.js の処理</h2>
+    <div class="content">
+      <div class="code-block">
+<span class="comment">// Expressフレームワークを読み込み</span>
+<span class="highlight">const</span> express = <span class="highlight">require</span>(<span class="string">'express'</span>);
+<span class="highlight">const</span> app = express();
+
+<span class="comment">// publicフォルダを公開</span>
+app.use(express.static(<span class="string">'public'</span>));
+
+<span class="comment">// サーバー起動（ポート3000）</span>
+app.listen(<span class="highlight">3000</span>, <span class="string">'0.0.0.0'</span>, () => {
+  console.log(<span class="string">'サーバー起動中'</span>);
+});
+      </div>
+      <p style="margin-top: 30px; font-size: 24px; text-align: center;">
+        📌 publicフォルダ内のHTML/CSS/JSをブラウザに配信する役割
+      </p>
+    </div>
+  </div>
+
+  <!-- スライド9: 画面切り替えの仕組み -->
+  <div class="slide white">
+    <h2>🔀 画面切り替えの仕組み</h2>
+    <div class="content">
+      <div class="two-column">
+        <div class="card">
+          <h3>HTML構造</h3>
+          <div class="code-block" style="font-size: 18px;">
+<span class="comment">&lt;!-- activeクラスがある画面だけ表示 --&gt;</span>
+&lt;div class="screen <span class="highlight">active</span>"&gt;表示&lt;/div&gt;
+&lt;div class="screen"&gt;非表示&lt;/div&gt;
+          </div>
+        </div>
+        <div class="card">
+          <h3>JavaScript処理</h3>
+          <div class="code-block" style="font-size: 18px;">
+<span class="highlight">function</span> showScreen(screenId) {
+  <span class="comment">// 全画面からactiveを削除</span>
+  screens.forEach(s => 
+    s.classList.remove(<span class="string">'active'</span>));
+  
+  <span class="comment">// 指定画面にactiveを追加</span>
+  document.getElementById(screenId)
+    .classList.add(<span class="string">'active'</span>);
+}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- スライド10: 状態管理 -->
+  <div class="slide light">
+    <h2>💾 状態管理（State）</h2>
+    <div class="content">
+      <div class="code-block" style="font-size: 26px;">
+<span class="highlight">const</span> state = {
+  purpose: <span class="highlight">null</span>,      <span class="comment">// 選択された目的</span>
+  genre: <span class="highlight">null</span>,        <span class="comment">// 選択されたジャンル</span>
+  distance: <span class="highlight">3</span>,        <span class="comment">// 選択された距離（km）</span>
+  currentRoute: <span class="highlight">null</span>  <span class="comment">// 現在のルート情報</span>
+};
+      </div>
+      <p style="margin-top: 40px; font-size: 24px; text-align: center;">
+        📌 ユーザーの選択内容を一つのオブジェクトで管理
+      </p>
+    </div>
+  </div>
+
+  <!-- スライド11: 今後の実装予定 -->
+  <div class="slide white">
+    <h2>🚀 今後の実装予定</h2>
+    <div class="content">
+      <table>
+        <tr><th>機能</th><th>説明</th><th>必要な技術</th></tr>
+        <tr><td>AIルート生成</td><td>実際のルートをAIで生成</td><td>OpenAI / Claude API</td></tr>
+        <tr><td>地図表示</td><td>Google Mapsでの地図表示</td><td>Google Maps API</td></tr>
+        <tr><td>GPS連携</td><td>現在地の取得と追跡</td><td>Geolocation API</td></tr>
+        <tr><td>データベース</td><td>ユーザー情報・履歴の保存</td><td>PostgreSQL / MongoDB</td></tr>
+        <tr><td>認証機能</td><td>ログイン・ユーザー管理</td><td>Firebase Auth</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- スライド12: まとめ -->
+  <div class="slide green title-slide">
+    <h1 style="font-size: 56px;">まとめ</h1>
+    <ul style="text-align: left; font-size: 28px; line-height: 2.5; margin-top: 40px;">
+      <li>✅ Node.js + Express でサーバー構築</li>
+      <li>✅ 7画面の画面遷移をJavaScriptで実装</li>
+      <li>✅ CSSでモバイルファーストのデザイン</li>
+      <li>✅ 状態管理でユーザー入力を保持</li>
+      <li>⏳ API連携・地図機能は今後実装予定</li>
+    </ul>
+  </div>
+
+  <!-- スライド13: 終了 -->
+  <div class="slide title-slide" style="background: linear-gradient(135deg, #2D3E50 0%, #1a252f 100%);">
+    <img src="../public/logo.png" alt="ミチシル" class="logo">
+    <h1>ご清聴ありがとうございました</h1>
+    <p style="margin-top: 30px;">ミチシル - ルート提案型お散歩アプリ</p>
+  </div>
+
+  <!-- ナビゲーション -->
+  <div class="nav">
+    <button onclick="prevSlide()">◀</button>
+    <button onclick="nextSlide()">▶</button>
+  </div>
+  <div class="page-num"><span id="current">1</span> / <span id="total">13</span></div>
+
+  <script>
+    const slides = document.querySelectorAll('.slide');
+    let currentSlide = 0;
+
+    function showSlide(index) {
+      slides.forEach(s => s.classList.remove('active'));
+      slides[index].classList.add('active');
+      document.getElementById('current').textContent = index + 1;
+    }
+
+    function nextSlide() {
+      currentSlide = (currentSlide + 1) % slides.length;
+      showSlide(currentSlide);
+    }
+
+    function prevSlide() {
+      currentSlide = (currentSlide - 1 + slides.length) % slides.length;
+      showSlide(currentSlide);
+    }
+
+    // キーボード操作
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+      if (e.key === 'ArrowLeft') prevSlide();
+    });
+
+    document.getElementById('total').textContent = slides.length;
+  </script>
+
+</body>
+</html>

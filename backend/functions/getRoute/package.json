@@ -1,0 +1,12 @@
+{
+  "name": "get-route",
+  "version": "1.0.0",
+  "description": "条件に合う散歩ルートを1件返すLambda関数",
+  "private": true,
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1118.0",
+    "@aws-sdk/lib-dynamodb": "3.1118.0"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "michishiru-app",
+  "version": "1.0.0",
+  "description": "ミチシル - ルート提案型お散歩アプリ（モノレポ）",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/dev.js",
+    "dev:web": "node frontend/node_modules/vite/bin/vite.js",
+    "dev:api": "node tools/localApiServer.js"
+  }
+}

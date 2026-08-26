@@ -1,15 +1,14 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "ミチシル バックエンド（Lambda関数）",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test \"functions/**/__tests__/**/*.test.js\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1118.0",
     "@aws-sdk/lib-dynamodb": "^3.1118.0"
