@@ -4,7 +4,8 @@
   "description": "ミチシル バックエンド（Lambda関数）",
   "type": "module",
   "scripts": {
-    "test": "node --test \"functions/**/__tests__/**/*.test.js\""
+    "test": "node --test \"functions/**/__tests__/**/*.test.js\"",
+    "seed": "node tools/seed.js"
   },
   "keywords": [],
   "author": "",
