@@ -1,3 +1,5 @@
+import { isJsonResponse } from '@/utils/apiResponse';
+
 /**
  * @description 検索条件マスタ（目的・ジャンル・距離）のAPI通信を担当する。
  * レスポンスを画面で扱う形へ変換して返し、失敗時は例外を投げる。
@@ -62,6 +64,10 @@ export const fetchConditionOptions = async () => {
 
   if (!response.ok) {
     throw new Error(`検索条件の取得に失敗しました（${response.status}）`);
+  }
+
+  if (!isJsonResponse(response)) {
+    throw new Error('検索条件APIから予期しない応答を受け取りました');
   }
 
   const items = await response.json();

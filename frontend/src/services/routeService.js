@@ -1,3 +1,5 @@
+import { isJsonResponse } from '@/utils/apiResponse';
+
 /**
  * @description ルートリソースのAPI通信を担当する。
  * レスポンスのデータ部分のみを返し、失敗時は例外を投げる。
@@ -44,6 +46,13 @@ export const fetchRoute = async ({ purpose, genre, distanceKm }) => {
 
   if (!response.ok) {
     throw new Error(await extractErrorMessage(response));
+  }
+
+  // APIが未配線の環境ではSPAのindex.htmlが200で返るため、解析前に判定する
+  if (!isJsonResponse(response)) {
+    throw new Error(
+      'ルート作成APIに接続できません（JSON以外の応答を受け取りました）'
+    );
   }
 
   return response.json();

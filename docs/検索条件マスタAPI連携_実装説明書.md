@@ -66,6 +66,38 @@
 
 ---
 
+## 追加対応: エラー表示とJSON以外の応答の扱い
+
+### `Unexpected token '<', "<!DOCTYPE "... is not valid JSON` の原因
+
+`/api/v1/routes` が **JSONではなくSPAの `index.html` を返している**ため、`response.json()` の解析時に発生していた。
+
+- CDKは `withBackend` が既定 `false` で、その場合 CloudFront に `/api/*` のビヘイビアが作られない（`iac/bin/iac.ts`）
+- そのため `/api/v1/routes` はS3へ向かい、403/404 のフォールバック設定で `index.html`（HTTP 200）が返る
+- `response.ok` が true になるため従来のエラー判定を通過し、JSON解析で初めて失敗していた
+- ルート作成が失敗すると `router.push` に到達しないため、**画面遷移もできない**
+
+### 対応
+
+- `utils/apiResponse.js` の `isJsonResponse` で `content-type` を確認し、JSON以外なら解析前に日本語のメッセージで例外を投げる（`routeService` / `conditionService` の両方）
+- これにより原因が読み取れるメッセージ（「ルート作成APIに接続できません」）が出るようになる。**APIが配信されていない事実自体は解消しないため、下記のいずれかが必要**
+
+| 環境 | 対応 |
+|---|---|
+| ローカル | リポジトリルートで `npm run dev` を実行する（Vite と `tools/localApiServer.js` が同時に起動し、`/api` が3001へプロキシされる）。`frontend/` と `backend/` の `npm ci` が必要 |
+| dev/prod | `cdk deploy -c withBackend=true` でバックエンド（API Gateway + Lambda + DynamoDB）を有効化する |
+
+ローカルAPIハーネス経由で `GET /api/v1/routes?purpose=refresh&category=nature&distance=3` が 200 + JSON を返すことを確認済み（テーブル未設定時は `seedRoutes.js` のデータが返る）。
+
+### エラーメッセージの表示方法
+
+- 「目的とジャンルを選択してください」の常時表示と、作成失敗メッセージのボタン上表示を廃止し、**画面上部のポップアップ（`BaseToast.vue`）へ集約**した
+- 「ルートを作成」ボタンは未選択でも押せるようにした（押下をきっかけにポップアップを出すため）。押した結果を知らせる方が、押せない理由が分からない状態より原因が伝わる
+- 表示は4秒で自動的に消え、閉じるボタンでも消せる。タイマーは `useToastMessage.js` が持ち、画面を離れるときに破棄する
+- `role="alert"` / `aria-live="assertive"` を付け、支援技術にも即時に伝える
+
+---
+
 ## 用語辞書への追記案（`naming-glossary.md`）
 
 コードで使う前に承認が必要な語。**まだ辞書には追記していない。** 承認後に反映する。
@@ -94,6 +126,9 @@
 | アイコン | icon | 選択肢に添える絵文字 |
 | アイコン（API） | iconEmoji | 検索条件マスタが返す絵文字 |
 | 目盛りラベル | scaleLabels | スライダーの目盛りとして表示する文字列 |
+| 通知ポップアップ | toast | 画面上部に一定時間表示する通知（`BaseToast`, `useToastMessage`） |
+
+`toast` は「画面中央に表示し操作を待つ確認ポップアップ（`BaseModal`）」とは別物として区別する。前者は自動で消え、操作を止めない。
 
 `icon` と `iconEmoji` を分けているのは、APIの項目名（`iconEmoji`）とアプリ内の項目名（`icon`）が異なるため。アプリ内は既存コードに合わせて `icon` を使う。
 
@@ -110,6 +145,7 @@
 - **【要対応】`getRoute` API が受け付ける距離と、マスタの距離範囲が一致していない。**
   `backend/functions/getRoute/constants.js` の `ALLOWED_DISTANCES_KM` は `[1, 3, 5, 8]` の列挙で、マスタの範囲（1〜10km）で 2km や 4km を選ぶと `distanceが不正です` で弾かれる。
   バックエンド側を「下限〜上限の範囲チェック」へ変更し、値の出どころをマスタへ揃える必要がある。目的（`ALLOWED_PURPOSES`）とジャンル（`ALLOWED_CATEGORIES`）の値はマスタと一致しているため対応不要。
+  ローカルAPIハーネスで確認した実際の応答: `{"code":"VALIDATION_ERROR","message":"distanceが不正です（許可値: 1, 3, 5, 8）"}`
 - 選択状態のクラス名が `selected` のままで、規約の `is-selected` に沿っていない（`global.css` の `.select-btn.selected` と対になっているため、CSS側と合わせて別途対応）。
 - APIのURLをコードに直書きしている。ステージごとの切り替えと、前提条件書のとおり CloudFront の `/api/*` 配下へ統合する対応が必要（サービス層にTODOを記載）。
 - APIのパスが `/`（バージョン・複数形なし）で、`naming-conventions.md` のAPIパス規則（`/api/v1/<複数形>`）と不一致。API側の対応が必要。

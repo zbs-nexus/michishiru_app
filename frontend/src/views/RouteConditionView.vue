@@ -2,11 +2,13 @@
 import { useRouter } from 'vue-router';
 import logoImage from '@/assets/images/logo.png';
 import BaseButton from '@/components/base/BaseButton.vue';
+import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import RouteConditionForm from '@/components/feature/route/RouteConditionForm.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import { useRouteConditionOptions } from '@/composables/useRouteConditionOptions';
 import { useRouteCreation } from '@/composables/useRouteCreation';
+import { useToastMessage } from '@/composables/useToastMessage';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
@@ -16,6 +18,11 @@ import { useRouteStore } from '@/stores/routeStore';
 const router = useRouter();
 const routeStore = useRouteStore();
 const { isCreating, errorMessage, createRoute } = useRouteCreation();
+const {
+  message: toastMessage,
+  showMessage,
+  hideMessage
+} = useToastMessage();
 const {
   purposeOptions,
   genreOptions,
@@ -30,11 +37,13 @@ const {
 loadConditionOptions();
 
 /**
- * @description 条件を検証してルートを作成し、成功時は提案画面へ進む
+ * @description 条件を検証してルートを作成し、成功時は提案画面へ進む。
+ * 未入力・失敗はいずれも画面上部のポップアップで知らせる。
  * @returns {Promise<void>}
  */
 const handleCreateRoute = async () => {
   if (!routeStore.hasRequiredConditions) {
+    showMessage('目的とジャンルを選択してください');
     return;
   }
 
@@ -42,7 +51,10 @@ const handleCreateRoute = async () => {
 
   if (isSucceeded) {
     router.push({ name: 'route-suggestion' });
+    return;
   }
+
+  showMessage(errorMessage.value ?? 'ルートの作成に失敗しました');
 };
 </script>
 
@@ -53,6 +65,12 @@ const handleCreateRoute = async () => {
     <template #background>
       <div class="header-bg" />
     </template>
+
+    <BaseToast
+      v-if="toastMessage"
+      :message="toastMessage"
+      @close="hideMessage"
+    />
 
     <div
       class="deploy-test-banner"
@@ -101,26 +119,8 @@ const handleCreateRoute = async () => {
         @select-distance="routeStore.selectDistance"
       />
 
-      <p
-        v-if="!routeStore.hasRequiredConditions"
-        class="hint"
-        role="status"
-      >
-        目的とジャンルを選択してください
-      </p>
-
-      <p
-        v-if="errorMessage"
-        class="hint"
-        role="alert"
-      >
-        {{ errorMessage }}
-      </p>
-
-      <BaseButton
-        :is-disabled="!routeStore.hasRequiredConditions"
-        @click="handleCreateRoute"
-      >
+      <!-- 未選択でも押せるようにし、押下時にポップアップで不足を知らせる -->
+      <BaseButton @click="handleCreateRoute">
         ルートを作成
       </BaseButton>
     </template>
