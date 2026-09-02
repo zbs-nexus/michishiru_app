@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ミチシル CI/CD ガイド（開発メンバー向け）</title>
+<style>
+  :root{
+    --dev:#2e7d32; --prod:#c62828; --ink:#1b2733; --muted:#5b6b7b;
+    --line:#dfe6ee; --bg:#f6f8fb; --card:#fff; --accent:#1565c0; --warn:#b26a00;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.75;font-size:15px}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 24px}
+  h2{font-size:20px;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px}
+  p{margin:8px 0}
+  code{background:#eef2f7;padding:2px 6px;border-radius:5px;font-size:13px;
+    font-family:Consolas,"Courier New",monospace}
+  pre{background:#0f1b2a;color:#e6edf3;padding:14px 16px;border-radius:8px;overflow:auto;font-size:13px}
+  pre code{background:none;color:inherit;padding:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0;
+    box-shadow:0 1px 3px rgba(20,40,70,.04)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;font-size:14px}
+  th,td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+  th{background:#eef3f9}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:600}
+  .tag.dev{background:var(--dev)} .tag.prod{background:var(--prod)} .tag.feat{background:#546e7a}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0}
+  .step{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:120px;text-align:center}
+  .arrow{font-size:20px;color:var(--muted)}
+  .note{border-left:4px solid var(--accent);background:#eff5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .warn{border-left:4px solid var(--warn);background:#fff7e8;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .danger{border-left:4px solid var(--prod);background:#fdecea;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  ul{margin:8px 0 8px 0;padding-left:22px}
+  li{margin:5px 0}
+  .kv{display:grid;grid-template-columns:180px 1fr;gap:6px 14px}
+  .kv div:nth-child(odd){color:var(--muted)}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .pill{font-size:12px;color:var(--muted)}
+  .env-dev{color:var(--dev);font-weight:700}
+  .env-prod{color:var(--prod);font-weight:700}
+  .small{font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>ミチシル CI/CD ガイド</h1>
+  <p class="sub">開発メンバー向け・はじめての人でも分かる版 ／ 最終更新: 2026-08-26</p>
+
+  <div class="card toc">
+    <strong>目次</strong>
+    <ul>
+      <li><a href="#what">1. CI/CD とは（ざっくり）</a></li>
+      <li><a href="#overview">2. 全体像と流れ</a></li>
+      <li><a href="#map">3. ブランチ ↔ 環境 ↔ リソース対応表</a></li>
+      <li><a href="#flow">4. 開発の進め方（毎日の作業）</a></li>
+      <li><a href="#pr">5. develop → main の PR について</a></li>
+      <li><a href="#cautions">6. 注意点（必読）</a></li>
+      <li><a href="#files">7. 仕組みを理解するための重要ファイル</a></li>
+      <li><a href="#glossary">8. 用語集</a></li>
+      <li><a href="#trouble">9. 困ったときは</a></li>
+    </ul>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="what">1. CI/CD とは（ざっくり）</h2>
+  <div class="card">
+    <p><strong>CI（継続的インテグレーション）</strong>＝ コードを push すると、<b>自動でビルド・テスト</b>して壊れていないか確認する仕組み。</p>
+    <p><strong>CD（継続的デリバリー/デプロイ）</strong>＝ コードを push すると、<b>自動でAWSへデプロイ</b>（公開）する仕組み。</p>
+    <p class="note">このプロジェクトでは <b>GitHub にプッシュするだけ</b>で、GitHub Actions が自動でビルドし、AWS（S3 + CloudFront）へ公開します。<b>手作業でファイルをアップロードする必要はありません。</b></p>
+    <p class="small">※ 誰が push しても同じように自動で走ります（人ではなく「ブランチ」で動きが決まります）。</p>
+  </div>
+
+  <!-- 2 -->
+  <h2 id="overview">2. 全体像と流れ</h2>
+  <div class="card">
+    <div class="flow">
+      <div class="step">コードを push<br><span class="small">develop / main</span></div>
+      <div class="arrow">→</div>
+      <div class="step">GitHub Actions<br><span class="small">自動起動</span></div>
+      <div class="arrow">→</div>
+      <div class="step">フロントを<br>自動ビルド</div>
+      <div class="arrow">→</div>
+      <div class="step">AWS へデプロイ<br><span class="small">CDK / cdk deploy</span></div>
+      <div class="arrow">→</div>
+      <div class="step">S3 に配置<br>+ CloudFront更新</div>
+      <div class="arrow">→</div>
+      <div class="step">URL で公開</div>
+    </div>
+    <p>ポイント：デプロイの中身は <b>AWS CDK</b>（インフラをコードで定義）が実行します。フロントの成果物（<code>frontend/dist</code>）は CDK が S3 へ同期し、CloudFront のキャッシュも自動でクリアします。</p>
+  </div>
+
+  <div class="card">
+    <h3>2つの環境（本番と開発は完全に分離）</h3>
+    <div class="flow">
+      <div class="step" style="border-color:var(--dev)"><span class="env-dev">開発 (dev)</span><br><span class="small">develop ブランチ</span></div>
+      <div class="arrow">|</div>
+      <div class="step" style="border-color:var(--prod)"><span class="env-prod">本番 (prod)</span><br><span class="small">main ブランチ</span></div>
+    </div>
+    <p class="small">同じ AWS アカウント内で、リソース名（スタック・バケット等）を <code>dev</code> / <code>prod</code> で分けて共存させています。互いに影響しません。</p>
+  </div>
+
+  <div class="card">
+    <h3>バックエンド有効化時のイメージ（将来／<code>withBackend=true</code>）</h3>
+    <p>バックエンドを有効化すると、<b>同じ「push → cdk deploy」の流れ</b>の中で、フロントに加えて次も<b>自動で作成・更新</b>されます。</p>
+    <div class="flow">
+      <div class="step">push<br><span class="small">develop / main</span></div>
+      <div class="arrow">→</div>
+      <div class="step">cdk deploy</div>
+      <div class="arrow">→</div>
+      <div class="step" style="border-color:var(--dev)">S3 + CloudFront<br><span class="small">フロント配信</span></div>
+      <div class="arrow">＋</div>
+      <div class="step" style="border-color:var(--accent)">Lambda(getRoute)<br>+ API Gateway<br>+ DynamoDB<br><span class="small">作成・更新</span></div>
+    </div>
+    <p>公開URLは1つのまま（同一 CloudFront）。<code>/api/*</code> へのリクエストは CloudFront 経由で <b>API Gateway → Lambda → DynamoDB</b> に届きます（同一オリジンのため CORS 不要）。コードを変えて push すれば、Lambda も<b>自動で更新</b>されます。</p>
+    <p class="small">※ 現在は <code>withBackend=false</code> のため、Lambda / API Gateway / DynamoDB は未作成です。有効化時は DynamoDB への初期データ投入（<code>npm run seed</code>）も必要です。</p>
+  </div>
+
+  <!-- 3 -->
+  <h2 id="map">3. ブランチ ↔ 環境 ↔ リソース対応表</h2>
+  <table>
+    <tr>
+      <th>ブランチ</th><th>環境</th><th>CDKスタック</th><th>S3バケット</th><th>CloudFront (公開URL)</th><th>Lambda</th>
+    </tr>
+    <tr>
+      <td><code>develop</code></td>
+      <td><span class="tag dev">dev</span></td>
+      <td><code>Michishiru-dev</code></td>
+      <td><code>michishiru-dev</code></td>
+      <td><a href="https://d29zgbkwje7tko.cloudfront.net">d29zgbkwje7tko.cloudfront.net</a></td>
+      <td rowspan="2">アプリのLambda(getRoute)は<b>現在は未作成</b><br><span class="small">（<code>withBackend=false</code>）</span></td>
+    </tr>
+    <tr>
+      <td><code>main</code></td>
+      <td><span class="tag prod">prod</span></td>
+      <td><code>Michishiru-prod</code></td>
+      <td><code>michishiru-prod</code></td>
+      <td><a href="https://d1hx5thfn4k5nf.cloudfront.net">d1hx5thfn4k5nf.cloudfront.net</a></td>
+    </tr>
+    <tr>
+      <td><code>feature/**</code><br><span class="small">作業用ブランチ</span></td>
+      <td><span class="tag feat">なし</span></td>
+      <td colspan="4">デプロイされません。<span class="small">（PR を main に向けて出すと CI のビルド・テストのみ実行）</span></td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <b>Lambda について：</b>いま AWS に見える <code>Michishiru-dev/prod-CustomCDKBucketDeployment...</code> や <code>...S3AutoDeleteObjects...</code> は、<b>CDK がデプロイ作業に使う補助Lambda</b>です（毎回作られるのではなく1回作って再利用、デプロイ時だけ動く）。<b>アプリ本体のバックエンドLambda（getRoute）はまだ作っていません</b>。バックエンドを有効化するときに追加します。
+  </div>
+
+  <div class="card">
+    <h3>共通の土台（1回だけ作成済み）</h3>
+    <div class="kv">
+      <div>AWSアカウント / リージョン</div><div><code>961308088333</code> / <code>ap-northeast-1</code>（東京）</div>
+      <div>認証方式</div><div>GitHub OIDC ＋ IAMロール <code>github-actions-michishiru-deploy</code>（長期キー不要）</div>
+      <div>GitHub Secret</div><div><code>AWS_DEPLOY_ROLE_ARN</code>（デプロイロールのARN。設定済み）</div>
+      <div>OIDCスタック</div><div><code>MichishiruOidcStack</code>（環境共通・手動デプロイ済み）</div>
+      <div>CDKブートストラップ</div><div><code>cdk-hnb659fds-*</code> 系リソース（<b>触らない</b>）</div>
+    </div>
+  </div>
+
+  <!-- 4 -->
+  <h2 id="flow">4. 開発の進め方（毎日の作業）</h2>
+
+  <div class="card">
+    <h3>はじめる前に：PC に用意するもの</h3>
+    <p><b>CI/CD 自体はクラウド（GitHub Actions）で動く</b>ため、デプロイのために個人PCへ特別なインストールは不要です。必要なのは主にローカル開発用です。</p>
+    <table>
+      <tr><th>用途</th><th>必要なもの</th><th>備考</th></tr>
+      <tr><td>push して CI/CD を動かす</td><td>Git ＋ GitHub アカウント（リポジトリ権限）</td><td>これだけで自動デプロイは走る</td></tr>
+      <tr><td>ローカルで開発・動作確認</td><td>Node.js 24 系（npm 同梱）／ エディタ（VS Code 等）</td><td><code>npm install</code> → <code>npm run dev</code> など</td></tr>
+      <tr><td>インフラ(iac)をローカルで触る</td><td>上記 Node.js（CDK は <code>npx</code> で実行）</td><td>通常メンバーは基本不要</td></tr>
+    </table>
+    <div class="note"><b>AWS CLI / AWS の認証情報は、通常の開発メンバーには不要です。</b>パイプラインは GitHub 側の OIDC で AWS に接続します。AWS CLI が要るのは「初回セットアップ（ブートストラップ／OIDCスタック作成）」や手動の AWS 操作を行う<b>インフラ担当者だけ</b>です。</div>
+  </div>
+
+  <div class="card">
+    <ol>
+      <li><b>最新を取得</b>：<code>git switch develop</code> → <code>git pull</code></li>
+      <li><b>変更を加える</b>：（推奨）作業用ブランチ <code>feature/○○</code> を切って開発、または develop で直接。</li>
+      <li><b>develop へ反映</b>：develop に push（またはPRでdevelopへマージ）。<br>
+        → <span class="env-dev">dev環境へ自動デプロイ</span>が走る。</li>
+      <li><b>開発環境で動作確認</b>：<a href="https://d29zgbkwje7tko.cloudfront.net">dev の URL</a> を開いて確認。<br>
+        <span class="small">※ CloudFront 反映に数分〜十数分かかることがあります。ブラウザは Ctrl+F5 で更新。</span></li>
+      <li><b>問題なければ本番へ</b>：<code>develop → main</code> の PR を作成してマージ。<br>
+        → <span class="env-prod">prod環境へ自動デプロイ</span>が走る。</li>
+      <li><b>本番確認</b>：<a href="https://d1hx5thfn4k5nf.cloudfront.net">prod の URL</a> で確認。</li>
+    </ol>
+    <div class="flow">
+      <div class="step">feature/○○<br><span class="small">作業</span></div>
+      <div class="arrow">→</div>
+      <div class="step" style="border-color:var(--dev)">develop<br><span class="env-dev">dev 自動デプロイ</span></div>
+      <div class="arrow">→</div>
+      <div class="step">dev で確認</div>
+      <div class="arrow">→</div>
+      <div class="step" style="border-color:var(--prod)">main<br><span class="env-prod">prod 自動デプロイ</span></div>
+      <div class="arrow">→</div>
+      <div class="step">prod で確認</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>GitHub Actions の実行を見る</h3>
+    <p>リポジトリの <b>「Actions」タブ</b>で実行状況が見られます。</p>
+    <ul>
+      <li><b>Deploy</b> ワークフロー … develop / main への push で実行。<b>まず checks（build/test/synth）→ 成功したら deploy</b>。最後の <code>Show stack outputs</code> に公開URL（<code>SiteUrl</code>）が出ます。</li>
+      <li><b>CI</b> ワークフロー … develop / main 向け <b>PR</b> で実行（共通の checks を呼び出し）。</li>
+      <li>共通のビルド・テストは再利用ワークフロー <code>checks.yml</code> にまとめ、CI と Deploy の両方から呼ばれます。</li>
+      <li>失敗時は赤くなります。ステップを開くとログが見られます。</li>
+    </ul>
+  </div>
+
+  <!-- 5 -->
+  <h2 id="pr">5. develop → main の PR について</h2>
+  <div class="card">
+    <p>PR（プルリクエスト）は「<b>その時点の develop の最新</b>」と main を比較します。したがって：</p>
+    <ul>
+      <li>他のメンバーが develop にマージした内容も<b>自動的に PR に含まれます</b>（PRページを開けば常に最新の develop HEAD が対象）。</li>
+      <li>develop→main の PR は<b>毎回同じリンク/操作でOK</b>。中身は最新の develop に応じて変わります。</li>
+    </ul>
+    <div class="warn">
+      <b>だからこそ確認を：</b>main へマージ＝<b>本番反映</b>です。マージ前に PR の差分を見て、「今 develop に入っている全員分の変更」がまとめて本番に出ることを理解してからマージしてください。
+    </div>
+  </div>
+
+  <!-- 6 -->
+  <h2 id="cautions">6. 注意点（必読）</h2>
+  <div class="danger">
+    <b>やってはいけないこと</b>
+    <ul>
+      <li><code>cdk-hnb659fds-assets-...</code> バケットを<b>削除しない</b>（CDKデプロイの土台。消すと全デプロイが壊れます）。</li>
+      <li>スタックが管理している S3 バケット等を<b>手動で削除・変更しない</b>（不整合の原因）。不要な旧リソースは CDK が置き換え時に自動削除します。</li>
+      <li>GitHub Secret <code>AWS_DEPLOY_ROLE_ARN</code> を消さない／名前を変えない。</li>
+    </ul>
+  </div>
+  <div class="warn">
+    <b>気をつけること</b>
+    <ul>
+      <li><b>main へのマージ＝本番デプロイ</b>。dev で確認してからにする。</li>
+      <li><b>develop / main への push では、まず CI（lint・テスト・iac検証）が実行され、成功した場合のみ自動デプロイ</b>されます（CI が失敗するとデプロイは実行されません）。PR でも CI が実行されます。dev でも見た目・動作の確認をしましょう。</li>
+      <li>CloudFront は変更反映に<b>数分〜十数分</b>かかることがある。表示が古い時はブラウザを強制更新（Ctrl+F5）。</li>
+      <li>S3 のバケット名は<b>世界で一意</b>。新しい環境や名前を足す時は名前衝突に注意。</li>
+      <li>現在ホーム画面に出ている「デプロイテスト」バナーは<b>検証用</b>。本番運用前に削除予定。</li>
+    </ul>
+  </div>
+  <div class="note">
+    <b>豆知識：</b>本プロジェクトの GitHub OIDC のトークンは「不変ID付き」形式（<code>repo:owner@ID/repo@ID:...</code>）です。IAMロールの信頼ポリシーは両形式に対応済みなので、通常は意識不要です。
+  </div>
+
+  <!-- 7 -->
+  <h2 id="files">7. 仕組みを理解するための重要ファイル</h2>
+  <table>
+    <tr><th>ファイル</th><th>役割</th><th>まず見るポイント</th></tr>
+    <tr>
+      <td><code>.github/workflows/deploy.yml</code></td>
+      <td><b>CD（デプロイ）</b>の定義</td>
+      <td>develop / main への push で起動。<code>checks</code>（品質ゲート）を <code>needs</code> し、成功後に <code>Determine stage</code> → OIDC認証 → <code>cdk deploy Michishiru-&lt;stage&gt;</code>。</td>
+    </tr>
+    <tr>
+      <td><code>.github/workflows/checks.yml</code></td>
+      <td><b>共通の品質チェック</b>（再利用ワークフロー）</td>
+      <td>frontend(lint/build) / backend(test) / iac(build/test/synth) の3ジョブ。CI と Deploy の両方から <code>uses</code> で呼ばれる。</td>
+    </tr>
+    <tr>
+      <td><code>.github/workflows/ci.yml</code></td>
+      <td><b>CI（PR時のチェック）</b>の定義</td>
+      <td>develop / main 向け PR で <code>checks.yml</code> を呼び出す。</td>
+    </tr>
+    <tr>
+      <td><code>iac/bin/iac.ts</code></td>
+      <td>CDKアプリの入口</td>
+      <td>アカウント/リージョン、<code>Michishiru-dev</code>/<code>Michishiru-prod</code> の生成、<code>withBackend</code> の切替。</td>
+    </tr>
+    <tr>
+      <td><code>iac/lib/michishiru-stack.ts</code></td>
+      <td>インフラ本体の定義</td>
+      <td>S3 + CloudFront（フロント配信）、<code>withBackend</code> で Lambda/API Gateway/DynamoDB を追加、バケット名 <code>michishiru-&lt;stage&gt;</code>。</td>
+    </tr>
+    <tr>
+      <td><code>iac/lib/oidc-stack.ts</code></td>
+      <td>GitHub連携（OIDC）とデプロイロール</td>
+      <td>GitHub Actions が AWS を操作できる仕組み（信頼ポリシー）。</td>
+    </tr>
+    <tr>
+      <td><code>frontend/</code></td>
+      <td>Vue 3 のフロントエンド（配信対象）</td>
+      <td><code>npm run build</code> で <code>dist/</code> を生成 → S3 へ。</td>
+    </tr>
+    <tr>
+      <td><code>backend/</code></td>
+      <td>Lambda 関数のコード（現在は未デプロイ）</td>
+      <td>バックエンド有効化時に <code>withBackend=true</code> で使用。</td>
+    </tr>
+  </table>
+  <div class="note">
+    まず理解すべき順番：<b>①deploy.yml（流れ）→ ②iac/bin/iac.ts（環境の作り分け）→ ③michishiru-stack.ts（何が作られるか）</b>。この3つで「push すると何が起きるか」が分かります。
+  </div>
+
+  <!-- 8 -->
+  <h2 id="glossary">8. 用語集</h2>
+  <div class="card">
+    <div class="kv">
+      <div>GitHub Actions</div><div>GitHub 上でコマンドを自動実行する仕組み。<code>.github/workflows/*.yml</code> に定義。</div>
+      <div>ワークフロー</div><div>Actions の1つの自動処理。ここでは「CI」と「Deploy」の2つ。</div>
+      <div>AWS CDK</div><div>インフラ（S3やCloudFrontなど）を TypeScript のコードで定義するツール。<code>cdk deploy</code> で構築。</div>
+      <div>スタック</div><div>CDK が作るリソースのまとまり。環境ごとに <code>Michishiru-dev</code> / <code>Michishiru-prod</code>。</div>
+      <div>S3</div><div>ファイル置き場。ここではフロントの成果物（HTML/JS/CSS）を配置。</div>
+      <div>CloudFront</div><div>S3 の前段に立つ配信網（CDN）。公開URLはここのドメイン。キャッシュあり。</div>
+      <div>OIDC</div><div>GitHub と AWS を安全につなぐ認証方式。長期のアクセスキーを持たずに済む。</div>
+      <div>IAMロール</div><div>AWS 上の「権限のまとまり」。GitHub Actions はこのロールを一時的に借りて操作する。</div>
+      <div>ブートストラップ</div><div>CDK を使う前に1回だけ行う土台作り（<code>cdk-hnb659fds-*</code>）。</div>
+      <div>withBackend</div><div>バックエンド（Lambda等）を作るかのスイッチ。現在 false（フロントのみ）。</div>
+    </div>
+  </div>
+
+  <!-- 9 -->
+  <h2 id="trouble">9. 困ったときは</h2>
+  <div class="card">
+    <ul>
+      <li><b>デプロイが赤い（失敗）</b>：Actions タブ → 該当実行 → 失敗ステップのログを確認。<code>Could not load credentials</code> や <code>AssumeRoleWithWebIdentity</code> 系は認証(OIDC/Secret)まわり。</li>
+      <li><b>画面に変更が出ない</b>：CloudFront の反映待ち（数分）＋ブラウザ強制更新（Ctrl+F5）。dev/prod で URL が違うので開いている環境も確認。</li>
+      <li><b>どの環境を見ている？</b>：dev=<code>d29zgbkwje7tko</code> / prod=<code>d1hx5thfn4k5nf</code>。</li>
+      <li><b>本番に出したくないもの</b>を develop に入れている間は main にマージしない。</li>
+    </ul>
+    <p class="small">不明点は CI/CD 構築担当に確認してください。この資料は現状（フロントのみ自動デプロイ／バックエンド未有効化）を前提にしています。</p>
+  </div>
+
+</div>
+</body>
+</html>
