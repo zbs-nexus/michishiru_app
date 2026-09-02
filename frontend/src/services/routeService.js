@@ -25,16 +25,19 @@ const extractErrorMessage = async (response) => {
  * @description 条件に合うルートを1件取得する
  * @param {object} conditions 検索条件
  * @param {string} conditions.purpose 目的
- * @param {string} conditions.category カテゴリ
- * @param {number} conditions.distance 希望距離（km）
+ * @param {string} conditions.genre ジャンル
+ * @param {number} conditions.distanceKm 希望距離（km）
  * @returns {Promise<object>} ルート情報
  * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
  */
-export const fetchRoute = async ({ purpose, category, distance }) => {
+export const fetchRoute = async ({ purpose, genre, distanceKm }) => {
   const query = new URLSearchParams({
     purpose,
-    category,
-    distance: String(distance)
+    // TODO: getRoute APIのパラメータ名が category のため、ここで変換している。
+    // API側を genre へ統一できた時点でこの変換を削除する（未決定事項 #1）
+    category: genre,
+    // リクエストのキーはkm固定の外部仕様のため、単位を付けない
+    distance: String(distanceKm)
   });
 
   const response = await fetch(`${API_BASE_PATH}/routes?${query.toString()}`);
