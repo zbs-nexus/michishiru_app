@@ -1,0 +1,56 @@
+name: Deploy
+
+# 手動実行のみ（動作確認後に push トリガーへ切り替え可能）
+on:
+  workflow_dispatch:
+
+# 同時に複数のデプロイが走らないようにする
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+# OIDC でロールを引き受けるために id-token: write が必須
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ap-northeast-1
+
+jobs:
+  deploy:
+    name: build & deploy (prod)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # OIDC でデプロイ用 IAM ロールを引き受ける
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # フロントエンドをビルドする（dist は cdk deploy で S3 へアップロードされる）
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # インフラをデプロイする。
+      # MichishiruStack 内の BucketDeployment が frontend/dist を S3 へ同期し、
+      # CloudFront のキャッシュ無効化まで行う。
+      - name: Deploy infrastructure (cdk deploy)
+        working-directory: iac
+        run: |
+          npm ci
+          npx cdk deploy MichishiruStack --require-approval never --outputs-file cdk-outputs.json
+
+      - name: Show stack outputs
+        working-directory: iac
+        run: cat cdk-outputs.json
