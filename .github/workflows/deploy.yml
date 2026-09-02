@@ -1,12 +1,21 @@
 name: Deploy
 
-# 手動実行のみ（動作確認後に push トリガーへ切り替え可能）
+# develop への push → 開発環境(dev)、main への push → 本番環境(prod) をデプロイする。
+# 手動実行でデプロイ先を選ぶこともできる。
 on:
+  push:
+    branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      stage:
+        description: デプロイ先の環境
+        type: choice
+        options: [dev, prod]
+        default: dev
 
-# 同時に複数のデプロイが走らないようにする
+# 環境ごとにデプロイの同時実行を防ぐ
 concurrency:
-  group: deploy-prod
+  group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
 # OIDC でロールを引き受けるために id-token: write が必須
@@ -19,10 +28,24 @@ env:
 
 jobs:
   deploy:
-    name: build & deploy (prod)
+    name: build & deploy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # ブランチ or 手動入力からデプロイ先の stage を決める
+      - name: Determine stage
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            STAGE="${{ github.event.inputs.stage }}"
+          elif [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            STAGE="prod"
+          else
+            STAGE="dev"
+          fi
+          echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
+          echo "デプロイ先: $STAGE"
 
       - uses: actions/setup-node@v4
         with:
@@ -42,14 +65,16 @@ jobs:
           npm ci
           npm run build
 
-      # インフラをデプロイする。
+      # 対象環境のスタックをデプロイする。
       # MichishiruStack 内の BucketDeployment が frontend/dist を S3 へ同期し、
       # CloudFront のキャッシュ無効化まで行う。
       - name: Deploy infrastructure (cdk deploy)
         working-directory: iac
         run: |
           npm ci
-          npx cdk deploy MichishiruStack --require-approval never --outputs-file cdk-outputs.json
+          npx cdk deploy "Michishiru-${{ steps.vars.outputs.stage }}" \
+            --require-approval never \
+            --outputs-file cdk-outputs.json
 
       - name: Show stack outputs
         working-directory: iac
