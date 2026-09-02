@@ -11,10 +11,15 @@ fileMatchPattern: 'backend/**'
 
 | 対象 | 規則 | 例 |
 |---|---|---|
-| テーブル名 | PascalCase（単数形） | `Route`, `Spot`, `User` |
-| 環境プレフィックス | 環境変数で管理（テーブル名にハードコードしない） | `dev-Route`, `prod-Route` |
+| テーブル名 | PascalCase（単数形） + `-<環境>` | `Route-dev`, `Route-prod` |
 | GSI名 | `GSI-<用途>` | `GSI-GenreDistance`, `GSI-UserRoutes` |
 | LSI名 | `LSI-<用途>` | `LSI-SortOrder` |
+
+### 環境識別子は後ろに付ける
+
+`dev-Route` ではなく `Route-dev` とする。AWSコンソールでテーブル一覧を名前順に見たとき、同じリソースの dev / prod が隣に並ぶため。CDKのスタック名（`Michishiru-dev`）とも揃う。
+
+テーブル名の実際の組み立ては IaC（`iac/lib/michishiru-stack.ts`）で行う。Lambda側は環境変数 `ROUTE_TABLE_NAME` から受け取り、コードにハードコードしない。
 
 ---
 
@@ -154,3 +159,4 @@ import { GSI_GENRE_DISTANCE, ROUTE_TABLE_NAME } from './constants.js';
 |---|---|
 | - | 初版作成 |
 | 2026/09/02 | 属性名の例を用語辞書に合わせて更新（`waypointCount` → `spotCount` 等）/ GSI名の例を `GSI-GenreDistance` に / 環境変数の参照先を `constants.js` に一本化 / リトライ対象の例外を明記 |
+| 2026/09/02 | IaC の実装に合わせ、テーブル名の環境識別子を前置（`dev-Route`）から後置（`Route-dev`）に変更 |

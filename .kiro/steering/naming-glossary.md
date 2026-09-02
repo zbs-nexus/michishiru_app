@@ -110,6 +110,17 @@ inclusion: always
 | ピン | pin | 地図上に表示するマーカー |
 | マーカー | marker | 地図上の地点を示すアイコン |
 
+### 環境とデプロイ
+
+| 日本語 | 英語（コード上） | 説明 |
+|---|---|---|
+| 環境（ステージ） | stage | デプロイ先の区分。値は `dev` / `prod` の2つのみ |
+| 開発環境 | dev | `develop` ブランチから自動デプロイされる環境 |
+| 本番環境 | prod | `main` ブランチから自動デプロイされる環境 |
+| デプロイ | deploy | AWSへ反映すること |
+
+`development` / `production` / `stg` / `staging` は使わない。値は `dev` / `prod` に統一する。
+
 ### ユーザーとデータ
 
 | 日本語 | 英語（コード上） | 説明 |
@@ -142,6 +153,9 @@ inclusion: always
 | place | spot | 「立ち寄り先」は spot に統一 |
 | landmark | spot | 同上 |
 | recreate | regenerate | 「再作成」は regenerate に統一 |
+| development / production | dev / prod | 環境名は短い形に統一 |
+| stg / staging | （使わない） | 環境は dev / prod の2つのみ |
+| env | stage | 環境の区分を指す語は stage に統一（`env` はAWSのアカウント・リージョン指定に使うため） |
 
 `spot` は使用可。以前は禁止語だったが、`waypoint` とは別概念のため解禁した（「特に間違えやすい2組」を参照）。
 
@@ -193,3 +207,4 @@ inclusion: always
 |---|---|
 | - | 初版作成 |
 | 2026/09/02 | `spot` を解禁し `waypoint` と役割を分離 / `genre` を追加し `category` を予約に変更 / 使用中で未登録だった語（purpose, condition, walk, suggestion, navigation, regenerate, loading, spotType, spotCount, totalDistance, 選択値）を追加 / 略語の優先順位を追記 |
+| 2026/09/02 | CI/CD導入に伴い「環境とデプロイ」の節を追加（stage / dev / prod / deploy）/ `development`・`staging`・`env` を表記揺れとして禁止 |

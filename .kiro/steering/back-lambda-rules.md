@@ -66,10 +66,15 @@ export const ROUTE_TABLE_NAME = process.env.ROUTE_TABLE_NAME ?? '';
 
 | 対象 | 規則 | 例 |
 |---|---|---|
-| 論理名（コード上・フォルダ名） | camelCase（動詞 + 名詞） | `getRoute`, `createRoute`, `deleteWaypoint` |
-| AWS上の物理名 | 未決定（`naming-conventions.md` の「未決定事項」を参照） | - |
+| 論理名（コード上・フォルダ名） | camelCase（動詞 + 名詞） | `getRoute`, `createRoute`, `deleteSpot` |
+| `package.json` の `name` | 論理名の kebab-case | `get-route` |
+| CDKの論理ID | PascalCase + `Function` | `GetRouteFunction` |
+| ハンドラの指定（CDK） | `functions/<論理名>/handler.handler` | `functions/getRoute/handler.handler` |
+| AWS上の物理名 | **指定しない**（CDKの自動生成に任せる） | - |
 
-フォルダ名は論理名と一致させる（`functions/getRoute/`）。
+フォルダ名は論理名と一致させる（`functions/getRoute/`）。`package.json` の `name` だけ kebab-case になるのは、npm がパッケージ名に大文字を許可しないため。
+
+物理名を固定しない理由は `iac-rules.md` を参照。
 
 ### エラーコード
 
@@ -122,8 +127,15 @@ backend/
 | レイヤー分離 | handler → service → repository の順に呼び出す |
 | handler にロジックを書かない | handler はリクエスト受付とレスポンス返却のみ |
 | 共通処理は `shared/` に切り出す | 2つ以上の関数で使うものは共通化する |
-| 関数ごとに `package.json` を持つ | 依存を最小限にしてデプロイサイズを抑える |
+| 関数ごとに `package.json` を持つ | 依存関係を関数単位で把握できるようにする |
+| `package.json` の `name` は論理名を kebab-case にしたもの | npm がパッケージ名に大文字を許可しないため。フォルダ `getRoute` に対して `"name": "get-route"` |
 | テストは `__tests__/` に置く | 対象ファイルと同名 + `.test.js` |
+
+### デプロイ単位について
+
+現在の IaC（`iac/lib/michishiru-stack.ts`）は `backend/` ディレクトリ全体を Lambda のコードとしてアップロードする（`node_modules` と `__tests__` を除外）。AWS SDK v3 は Lambda ランタイムに同梱されているためバンドルは行わない。
+
+したがって関数ごとの `package.json` は、現時点ではデプロイサイズの削減には効いていない。依存関係の記録と、将来の関数単位バンドルへの備えとして維持する。
 
 ### レイヤーの責務
 
@@ -207,3 +219,4 @@ Node.js にはアノテーション（Java の `@Override` 等）がないため
 |---|---|
 | - | 初版作成 |
 | 2026/09/02 | レイヤーファイル名を役割名固定に統一（`createRoute.js` の記載を削除）/ テストファイル名を `.test` に統一 / `handler` 関数名の例外を明記 / 環境変数の参照先を `constants.js` に明記 / エラーコードの命名規則とテストの節を追加 / Lambda物理名を未決定として整理 |
+| 2026/09/02 | IaC導入を反映。Lambda物理名を「指定しない」に確定 / CDKの論理IDとハンドラ指定の書式を追記 / `package.json` の `name` が kebab-case になる理由（npmの制約）を明記 / デプロイ単位の実態を追記し、関数ごとの `package.json` の目的を「依存関係の記録」に修正 |
