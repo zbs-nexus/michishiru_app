@@ -1,11 +1,12 @@
 name: CI
 
-# main への push と、main 向け PR で自動ビルド・テストを実行する
+# develop / main への push、および develop / main 向け PR で
+# 自動ビルド・テストを実行する（デプロイ前の品質ゲート）
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
 # 同一ブランチの実行が重なった場合は古い実行をキャンセルする
 concurrency:
