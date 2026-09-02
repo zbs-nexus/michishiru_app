@@ -5,14 +5,41 @@ import { OidcStack } from '../lib/oidc-stack';
 
 const env = { account: '123456789012', region: 'ap-northeast-1' };
 
-describe('MichishiruStack', () => {
+describe('MichishiruStack (フロントのみ・既定)', () => {
   const app = new cdk.App();
-  const stack = new MichishiruStack(app, 'TestMichishiruStack', { env });
+  const stack = new MichishiruStack(app, 'TestFrontendOnly', { env, stage: 'dev' });
+  const template = Template.fromStack(stack);
+
+  test('非公開のS3バケットとCloudFrontディストリビューションを作成する', () => {
+    template.hasResourceProperties('AWS::S3::Bucket', {
+      PublicAccessBlockConfiguration: {
+        BlockPublicAcls: true,
+        BlockPublicPolicy: true,
+        IgnorePublicAcls: true,
+        RestrictPublicBuckets: true
+      }
+    });
+    template.resourceCountIs('AWS::CloudFront::Distribution', 1);
+  });
+
+  test('バックエンド（API Gateway / DynamoDB）は作成しない', () => {
+    template.resourceCountIs('AWS::ApiGateway::RestApi', 0);
+    template.resourceCountIs('AWS::DynamoDB::GlobalTable', 0);
+  });
+});
+
+describe('MichishiruStack (バックエンド有効)', () => {
+  const app = new cdk.App();
+  const stack = new MichishiruStack(app, 'TestWithBackend', {
+    env,
+    stage: 'prod',
+    withBackend: true
+  });
   const template = Template.fromStack(stack);
 
   test('GSI付きのDynamoDBテーブルを作成する', () => {
     template.hasResourceProperties('AWS::DynamoDB::GlobalTable', {
-      TableName: 'Route',
+      TableName: 'Route-prod',
       GlobalSecondaryIndexes: Match.arrayWith([
         Match.objectLike({ IndexName: 'GSI-CategoryDistance' })
       ])
@@ -20,8 +47,6 @@ describe('MichishiruStack', () => {
   });
 
   test('getRoute の Lambda 関数を作成する', () => {
-    // autoDeleteObjects 用のカスタムリソース Lambda も生成されるため、
-    // 件数ではなくハンドラと環境変数で getRoute 関数を特定する
     template.hasResourceProperties('AWS::Lambda::Function', {
       Handler: 'functions/getRoute/handler.handler',
       Environment: {
@@ -37,18 +62,6 @@ describe('MichishiruStack', () => {
     template.hasResourceProperties('AWS::ApiGateway::Method', {
       HttpMethod: 'GET'
     });
-  });
-
-  test('非公開のS3バケットとCloudFrontディストリビューションを作成する', () => {
-    template.hasResourceProperties('AWS::S3::Bucket', {
-      PublicAccessBlockConfiguration: {
-        BlockPublicAcls: true,
-        BlockPublicPolicy: true,
-        IgnorePublicAcls: true,
-        RestrictPublicBuckets: true
-      }
-    });
-    template.resourceCountIs('AWS::CloudFront::Distribution', 1);
   });
 });
 

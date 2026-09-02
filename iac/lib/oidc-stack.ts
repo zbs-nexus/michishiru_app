@@ -18,6 +18,7 @@ export class OidcStack extends cdk.Stack {
     super(scope, id, props);
 
     const { githubRepo } = props;
+    const [githubOwner, githubRepoName] = githubRepo.split('/');
 
     // GitHub Actions の OIDC プロバイダ
     const githubProvider = new iam.OpenIdConnectProvider(this, 'GithubOidcProvider', {
@@ -36,8 +37,13 @@ export class OidcStack extends cdk.Stack {
           'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com'
         },
         StringLike: {
-          // 指定リポジトリからのトークンのみ許可する（ブランチ/イベントは限定しない）
-          'token.actions.githubusercontent.com:sub': `repo:${githubRepo}:*`
+          // 指定リポジトリからのトークンのみ許可する（ブランチ/イベントは限定しない）。
+          // 組織設定により sub が不変ID付き（repo:owner@ORGID/repo@REPOID:...）になる場合があるため、
+          // 標準形式と不変ID形式の両方を許可する。
+          'token.actions.githubusercontent.com:sub': [
+            `repo:${githubRepo}:*`,
+            `repo:${githubOwner}@*/${githubRepoName}@*:*`
+          ]
         }
       })
     });
