@@ -1,0 +1,59 @@
+name: Checks
+
+# 再利用可能ワークフロー。CI（PR）と Deploy（push）の両方から呼び出し、
+# frontend / backend / iac のビルド・テストを行う品質チェック。
+on:
+  workflow_call:
+
+jobs:
+  frontend:
+    name: frontend (build & lint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  backend:
+    name: backend (test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  iac:
+    name: iac (build, test & synth)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: iac
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: iac/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      # AWS 認証情報が不要な範囲で CloudFormation テンプレートの合成を検証する
+      - run: npx cdk synth

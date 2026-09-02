@@ -1,72 +1,15 @@
 name: CI
 
-# main への push と、main 向け PR で自動ビルド・テストを実行する
+# develop / main 向けの PR で品質チェック（build・test）を実行する。
+# （develop / main への push 時は Deploy ワークフローがデプロイ前に同じチェックを実行する）
 on:
-  push:
-    branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
 
-# 同一ブランチの実行が重なった場合は古い実行をキャンセルする
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  frontend:
-    name: frontend (build & lint)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run build
-      - name: dist を成果物として保存
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: frontend/dist
-          retention-days: 7
-
-  backend:
-    name: backend (test)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: backend/package-lock.json
-      - run: npm ci
-      - run: npm test
-
-  iac:
-    name: iac (build, test & synth)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: iac
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: iac/package-lock.json
-      - run: npm ci
-      - run: npm run build
-      - run: npm test
-      # AWS 認証情報が不要な範囲で CloudFormation テンプレートの合成を検証する
-      - run: npx cdk synth
+  checks:
+    uses: ./.github/workflows/checks.yml
