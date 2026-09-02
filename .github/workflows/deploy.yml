@@ -2,6 +2,7 @@ name: Deploy
 
 # develop への push → 開発環境(dev)、main への push → 本番環境(prod) をデプロイする。
 # 手動実行でデプロイ先を選ぶこともできる。
+# デプロイの前に品質チェック(checks)を実行し、成功した場合のみデプロイする。
 on:
   push:
     branches: [main, develop]
@@ -18,18 +19,21 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
-# OIDC でロールを引き受けるために id-token: write が必須
 permissions:
   id-token: write
   contents: read
 
-env:
-  AWS_REGION: ap-northeast-1
-
 jobs:
+  # デプロイ前の品質ゲート（build・test・synth）
+  checks:
+    uses: ./.github/workflows/checks.yml
+
   deploy:
     name: build & deploy
+    needs: checks
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-northeast-1
     steps:
       - uses: actions/checkout@v4
 
