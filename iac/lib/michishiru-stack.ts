@@ -16,23 +16,42 @@ const backendDir = path.resolve(__dirname, '..', '..', 'backend');
 /** フロントエンドのビルド成果物ディレクトリ */
 const frontendDistDir = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
 
+/** デプロイ対象の環境（ステージ） */
+export type Stage = 'dev' | 'prod';
+
+/** MichishiruStack のプロパティ */
+export interface MichishiruStackProps extends cdk.StackProps {
+  /** デプロイ先の環境（dev / prod） */
+  readonly stage: Stage;
+}
+
 /**
- * @description ミチシルの本番インフラを定義するスタック。
+ * @description ミチシルのインフラを定義するスタック。
  * フロントエンド（S3 + CloudFront）とバックエンド（Lambda + API Gateway + DynamoDB）を1スタックで構成する。
  * フロントエンドは CloudFront から配信し、`/api/*` は同一ディストリビューション経由で
  * API Gateway へ転送する（同一オリジンとなるため CORS は不要）。
+ * 環境（stage）ごとにスタック・リソース名を分け、同一アカウント内で dev / prod を共存させる。
  */
 export class MichishiruStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: MichishiruStackProps) {
     super(scope, id, props);
+
+    const { stage } = props;
+
+    // 本番のデータは保護（RETAIN）、開発は破棄しやすく（DESTROY）する
+    const isProd = stage === 'prod';
+
+    // 環境の識別用にスタック全体へタグを付与する
+    cdk.Tags.of(this).add('Project', 'michishiru');
+    cdk.Tags.of(this).add('Stage', stage);
 
     // ---- DynamoDB: ルートを格納するテーブル ----
     const routeTable = new dynamodb.TableV2(this, 'RouteTable', {
-      tableName: 'Route',
+      tableName: `Route-${stage}`,
       partitionKey: { name: 'routeId', type: dynamodb.AttributeType.STRING },
       billing: dynamodb.Billing.onDemand(),
-      // データ保護のため、スタック削除時もテーブルは保持する
-      removalPolicy: cdk.RemovalPolicy.RETAIN,
+      // 本番はデータ保護のため保持、開発は削除時に破棄する
+      removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
       globalSecondaryIndexes: [
         {
           // カテゴリ + 距離で検索するための GSI（設計書に準拠）
@@ -66,10 +85,10 @@ export class MichishiruStack extends cdk.Stack {
 
     // ---- API Gateway: GET /api/v1/routes ----
     const api = new apigateway.RestApi(this, 'MichishiruApi', {
-      restApiName: 'michishiru-api',
+      restApiName: `michishiru-api-${stage}`,
       description: 'ミチシル ルート取得 API',
       deployOptions: {
-        stageName: 'prod'
+        stageName: stage
       }
     });
 
@@ -90,7 +109,7 @@ export class MichishiruStack extends cdk.Stack {
 
     // ---- CloudFront: SPA 配信 + /api/* を API Gateway へ ----
     const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
-      comment: 'ミチシル フロントエンド配信',
+      comment: `ミチシル フロントエンド配信 (${stage})`,
       defaultRootObject: 'index.html',
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessControl(siteBucket),

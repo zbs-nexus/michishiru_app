@@ -7,12 +7,12 @@ const env = { account: '123456789012', region: 'ap-northeast-1' };
 
 describe('MichishiruStack', () => {
   const app = new cdk.App();
-  const stack = new MichishiruStack(app, 'TestMichishiruStack', { env });
+  const stack = new MichishiruStack(app, 'TestMichishiruStack', { env, stage: 'prod' });
   const template = Template.fromStack(stack);
 
   test('GSI付きのDynamoDBテーブルを作成する', () => {
     template.hasResourceProperties('AWS::DynamoDB::GlobalTable', {
-      TableName: 'Route',
+      TableName: 'Route-prod',
       GlobalSecondaryIndexes: Match.arrayWith([
         Match.objectLike({ IndexName: 'GSI-CategoryDistance' })
       ])
