@@ -10,18 +10,18 @@ export const useRouteStore = defineStore('route', () => {
   /** 選択した目的 */
   const purpose = ref(null);
 
-  /** 選択したカテゴリ */
-  const category = ref(null);
+  /** 選択したジャンル */
+  const genre = ref(null);
 
   /** 選択した距離（km） */
-  const distance = ref(DEFAULT_DISTANCE_KM);
+  const distanceKm = ref(DEFAULT_DISTANCE_KM);
 
   /** 取得済みのルート */
   const currentRoute = ref(null);
 
-  /** 目的とカテゴリが選択済みかどうか */
+  /** 目的とジャンルが選択済みかどうか */
   const hasRequiredConditions = computed(
-    () => Boolean(purpose.value) && Boolean(category.value)
+    () => Boolean(purpose.value) && Boolean(genre.value)
   );
 
   /** ルートを取得済みかどうか */
@@ -37,12 +37,12 @@ export const useRouteStore = defineStore('route', () => {
   };
 
   /**
-   * @description カテゴリを選択する
-   * @param {string} value カテゴリの値
+   * @description ジャンルを選択する
+   * @param {string} value ジャンルの値
    * @returns {void}
    */
-  const selectCategory = (value) => {
-    category.value = value;
+  const selectGenre = (value) => {
+    genre.value = value;
   };
 
   /**
@@ -51,7 +51,7 @@ export const useRouteStore = defineStore('route', () => {
    * @returns {void}
    */
   const selectDistance = (value) => {
-    distance.value = value;
+    distanceKm.value = value;
   };
 
   /**
@@ -69,20 +69,20 @@ export const useRouteStore = defineStore('route', () => {
    */
   const resetConditions = () => {
     purpose.value = null;
-    category.value = null;
-    distance.value = DEFAULT_DISTANCE_KM;
+    genre.value = null;
+    distanceKm.value = DEFAULT_DISTANCE_KM;
     currentRoute.value = null;
   };
 
   return {
     purpose,
-    category,
-    distance,
+    genre,
+    distanceKm,
     currentRoute,
     hasRequiredConditions,
     hasRoute,
     selectPurpose,
-    selectCategory,
+    selectGenre,
     selectDistance,
     setCurrentRoute,
     resetConditions

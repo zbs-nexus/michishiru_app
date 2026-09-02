@@ -40,8 +40,8 @@ export const useRouteCreation = () => {
     try {
       const route = await fetchRoute({
         purpose: routeStore.purpose,
-        category: routeStore.category,
-        distance: routeStore.distance
+        genre: routeStore.genre,
+        distanceKm: routeStore.distanceKm
       });
 
       routeStore.setCurrentRoute(route);
