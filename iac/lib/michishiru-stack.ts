@@ -54,6 +54,8 @@ export class MichishiruStack extends cdk.Stack {
 
     // ---- S3: フロントエンド配信用バケット（非公開・OAC 経由のみ） ----
     const siteBucket = new s3.Bucket(this, 'SiteBucket', {
+      // 環境が一目で分かる簡潔なバケット名（S3 はグローバル一意が必要）
+      bucketName: `michishiru-${stage}`,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
