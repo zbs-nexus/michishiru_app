@@ -7,9 +7,6 @@ import { DEFAULT_DISTANCE_KM } from '@/constants/routeConditions';
  * 複数のViewから参照するため、Piniaで一元管理する。
  */
 export const useRouteStore = defineStore('route', () => {
-  /** 選択した目的 */
-  const purpose = ref(null);
-
   /** 選択したジャンル */
   const genre = ref(null);
 
@@ -19,22 +16,11 @@ export const useRouteStore = defineStore('route', () => {
   /** 取得済みのルート */
   const currentRoute = ref(null);
 
-  /** 目的とジャンルが選択済みかどうか */
-  const hasRequiredConditions = computed(
-    () => Boolean(purpose.value) && Boolean(genre.value)
-  );
+  /** ジャンルが選択済みかどうか */
+  const hasRequiredConditions = computed(() => Boolean(genre.value));
 
   /** ルートを取得済みかどうか */
   const hasRoute = computed(() => currentRoute.value !== null);
-
-  /**
-   * @description 目的を選択する
-   * @param {string} value 目的の値
-   * @returns {void}
-   */
-  const selectPurpose = (value) => {
-    purpose.value = value;
-  };
 
   /**
    * @description ジャンルを選択する
@@ -68,20 +54,17 @@ export const useRouteStore = defineStore('route', () => {
    * @returns {void}
    */
   const resetConditions = () => {
-    purpose.value = null;
     genre.value = null;
     distanceKm.value = DEFAULT_DISTANCE_KM;
     currentRoute.value = null;
   };
 
   return {
-    purpose,
     genre,
     distanceKm,
     currentRoute,
     hasRequiredConditions,
     hasRoute,
-    selectPurpose,
     selectGenre,
     selectDistance,
     setCurrentRoute,
