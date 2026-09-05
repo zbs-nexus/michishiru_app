@@ -3,16 +3,11 @@ import { computed } from 'vue';
 import BaseSlider from '@/components/base/BaseSlider.vue';
 
 /**
- * @description ルート作成条件（目的・ジャンル・距離）の入力フォーム。
+ * @description ルート作成条件（ジャンル・距離）の入力フォーム。
  * 選択肢は親から受け取り、表示と入力のみを担当する。
  * 値の保持はストア側で行う。
  */
 const props = defineProps({
-  /** 選択中の目的 */
-  purpose: {
-    type: String,
-    default: null
-  },
   /** 選択中のジャンル */
   genre: {
     type: String,
@@ -21,11 +16,6 @@ const props = defineProps({
   /** 選択中の距離（km） */
   distanceKm: {
     type: Number,
-    required: true
-  },
-  /** 目的の選択肢 */
-  purposeOptions: {
-    type: Array,
     required: true
   },
   /** ジャンルの選択肢 */
@@ -40,7 +30,7 @@ const props = defineProps({
   }
 });
 
-defineEmits(['selectPurpose', 'selectGenre', 'selectDistance']);
+defineEmits(['selectGenre', 'selectDistance']);
 
 /** 距離スライダーの目盛り。下限と上限のラベルを表示する */
 const distanceScaleLabels = computed(() => [
@@ -51,24 +41,6 @@ const distanceScaleLabels = computed(() => [
 
 <template>
   <div>
-    <div class="input-section">
-      <h3>目的</h3>
-      <div class="button-grid">
-        <button
-          v-for="option in purposeOptions"
-          :key="option.value"
-          class="select-btn"
-          :class="{ selected: purpose === option.value }"
-          type="button"
-          :aria-pressed="purpose === option.value"
-          @click="$emit('selectPurpose', option.value)"
-        >
-          <span class="btn-icon">{{ option.icon }}</span>
-          <span>{{ option.label }}</span>
-        </button>
-      </div>
-    </div>
-
     <div class="input-section">
       <h3>ジャンル</h3>
       <div class="button-grid">

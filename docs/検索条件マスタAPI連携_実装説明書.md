@@ -17,12 +17,11 @@
 
 | APIの項目 | アプリ側 | 用途 |
 |---|---|---|
-| `purposeName` | `purposeOptions[].label` | 目的ボタンの文字列 |
 | `genreName` | `genreOptions[].label` | ジャンルボタンの文字列 |
 | `iconEmoji` | `options[].icon` | 選択肢のアイコン |
 | `displayLabel` | `distanceRange.minLabel` / `maxLabel` | 距離スライダーの下限・上限ラベル |
 | `distanceKm` | `distanceRange.minKm` / `maxKm` | 処理で使う距離の値（スライダーの範囲） |
-| `purposeId` / `genreId` | `options[].value` | 選択値（`refresh`, `nature` 等） |
+| `genreId` | `genreOptions[].value` | 選択値（`nature`, `city` 等） |
 | `sortOrder` | （並び順に使用） | 表示順の決定 |
 | `isActive` | （絞り込みに使用） | 無効な項目を除外 |
 | `isDefault` | `distanceRange.defaultKm` | 距離の初期値 |
@@ -34,7 +33,7 @@
 - **距離は「選択肢の列挙」ではなく「下限〜上限の範囲」として扱った。** APIが返す距離は2件（1km / 10km）で、`displayLabel` が上限値と下限値を表すという定義のため。`sortOrder` 順の先頭を下限、末尾を上限として組み立てているので、中間の値がマスタへ追加されても取得側のコード変更は不要。
 - **`BaseSlider` を「選択肢の配列から選ぶ」方式から「範囲から選ぶ」方式へ変更した。** 従来は `options: [1, 3, 5, 8]` の添字をつまみ位置にしていたため、下限・上限の2件を渡すとつまみが2段階しか動かない。範囲方式にすることで 1〜10km を 1km 刻みで選べる。利用箇所は `RouteConditionForm.vue` のみなので影響範囲は閉じている。
 - **目盛りラベルは `scaleLabels`（配列）として受け取る。** `displayLabel` をそのまま並べるだけの責務にしたため、将来中間目盛りが増えてもコンポーネントを変えずに対応できる。
-- **マスタが1種別でも欠けている場合はエラー扱いにした。** 目的・ジャンル・距離のいずれかが無いと条件を確定できないため、部分表示より「再読み込み」を促すほうが安全と判断した。
+- **マスタが1種別でも欠けている場合はエラー扱いにした。** 使用する種別（現在はジャンル・距離）のいずれかが無いと条件を確定できないため、部分表示より「再読み込み」を促すほうが安全と判断した。
 - **選択肢のフォールバックは持たせない。** 定数にハードコードした選択肢を残すと、DBとコードで二重管理になり、値のズレに気付けなくなる。取得失敗時は再読み込みボタンで復帰させる。
 - **距離の選択値が取得した範囲外だった場合のみ補正する。** マスタに `isDefault` があればその値、無ければ `DEFAULT_DISTANCE_KM` を範囲内へ丸める。範囲内なら上書きしないため、提案画面から戻ったときにユーザーの選択が消えない。
 - **選択肢はPiniaに置かず composable のstateにした。** 参照するのは条件選択画面だけで、画面をまたいで保持する必要がないため（`directory-structure.md` のストア利用条件）。画面を再表示するたびに再取得するが、マスタ1リクエストのため許容した。
@@ -54,15 +53,15 @@
   - ただし `getRoute` APIへのクエリキーは `distance` のまま（km固定の外部仕様という例外規定に従う）
   - Booleanは `isLoading` / `isActive` / `hasConditionOptions`
 - **props / emit の書き分け**（`component-design.md`）
-  - 宣言は camelCase（`distanceKm`, `purposeOptions`, `selectGenre`）
-  - テンプレートの属性は kebab-case（`:distance-km`, `:purpose-options`, `@select-genre`）
+  - 宣言は camelCase（`distanceKm`, `genreOptions`, `selectGenre`）
+  - テンプレートの属性は kebab-case（`:distance-km`, `:genre-options`, `@select-genre`）
   - propsは `required` または `default` を必ず指定し、配列の default はファクトリ関数（`() => []`）
 - **アクセシビリティ**（`component-design.md`）
   - 読み込み中メッセージに `role="status"`、失敗メッセージに `role="alert"`
   - 選択ボタンに `aria-pressed`、スライダーに `aria-labelledby` / `aria-valuetext`
   - ボタンには `type` を明示
 - **JSDoc**：サービス・composableの公開関数に `@description` / `@param` / `@returns` / `@throws` を記載
-- **コンポーネントの規模**：`RouteConditionForm.vue` のテンプレートは約60行、propsは6つで分割の目安内
+- **コンポーネントの規模**：`RouteConditionForm.vue` のテンプレートは約40行、propsは4つで分割の目安内
 
 ---
 
@@ -98,6 +97,38 @@
 
 ---
 
+## 追加対応: 選択条件の絞り込みとロード画面の維持
+
+### 変更点
+
+- ホーム画面の選択条件を**ジャンルと距離の2項目**にした。目的（`PURPOSE#ALL`）は取得も表示も行わない
+- ルート生成APIの**応答があるまでロード画面を表示し続ける**ようにした
+
+### 実装上の判断理由
+
+- **`PURPOSE#ALL` はAPIから取得しない。** 使わないデータを取得して捨てるより、必要な種別だけ読むほうが意図が明確になる。マスタ側にデータは残るため、目的を復活させる場合は `pickActiveItems` の呼び出しを1行足すだけで戻せる
+- **不足チェックの対象もジャンルと距離の2種別に絞った。** 目的が空でもホーム画面は成立するため、エラー扱いにしない
+- **必須条件（`hasRequiredConditions`）はジャンルのみにした。** 距離は初期値を持ち未選択状態が存在しないため、判定に含める意味がない
+- **ロード表示は一度開始したら自動で解除しない。** `isCreating` を `finally` で戻す実装をやめ、成功時は画面遷移で切り替わるのに任せた。失敗時も解除しないため、応答が返らない間はロード画面が出続ける
+- **成功時も `isCreating` を `false` に戻さない。** 戻すとロード画面からホーム画面が一瞬描画され、その後に遷移してちらつく。遷移で破棄されるので解除は不要
+- **最短表示時間（`MIN_LOADING_DURATION_MS` = 800ms）は成功時のみ適用する。** 「応答まで待つ」要件と競合しない範囲でちらつきを防ぐ目的のため、失敗時の待機は不要
+- **失敗時にポップアップを出す処理を削除した。** ロード画面の下に隠れて見えないため、呼んでも意味がない。原因は `errorMessage` に保持したままにしている
+
+### 規約に準拠したポイント
+
+- props / emit を減らしても書き分けは維持（宣言は camelCase、属性は kebab-case）。`RouteConditionForm` は props 4つ・emit 2つで、分割の目安内
+- ジャンル選択ボタンの `aria-pressed`、距離スライダーの `aria-labelledby` / `aria-valuetext` は残置
+- データ取得は View と composable のみ。`RouteConditionForm` は props を受け取る表示専任のまま
+- `distanceKm` / `minKm` / `maxKm` の単位付き命名を維持
+- 削除に伴って未使用になった変数・関数（`purpose`, `selectPurpose`, `purposeOptions`）はすべて除去し、残骸なし（`purpose` の全文検索で0件）
+
+### リスクと申し送り
+
+- **ロード画面から抜ける手段がありません。** 応答が返らない限りホーム画面へ戻れず、リロードが必要です。要件どおりの挙動ですが、ロード画面に「中止」ボタンを置くか、一定時間で切り上げる案を別途検討したほうが安全です
+- 現在の `getRoute` API は `purpose` を必須にしているため、`purpose` を送らなくなった今は **400（VALIDATION_ERROR）が返ります**。ルート生成APIが未実装の間はロード画面のまま止まります。API側で `purpose` を任意にするか、新しいルート生成APIの仕様に合わせる対応が必要です
+
+---
+
 ## 用語辞書への追記案（`naming-glossary.md`）
 
 コードで使う前に承認が必要な語。**まだ辞書には追記していない。** 承認後に反映する。
@@ -106,10 +137,9 @@
 
 | 日本語 | 英語（コード上） | 説明 |
 |---|---|---|
-| 選択肢 | option | ユーザーが選べる候補の1件（`purposeOptions` / `genreOptions`） |
+| 選択肢 | option | ユーザーが選べる候補の1件（`genreOptions`） |
 | 表示ラベル | label | 画面に表示する文字列 |
 | 表示ラベル（API） | displayLabel | 検索条件マスタが返す表示用の文字列 |
-| 目的名 | purposeName | 検索条件マスタが返す目的の表示名 |
 | ジャンル名 | genreName | 検索条件マスタが返すジャンルの表示名 |
 | 距離の選択範囲 | distanceRange | 距離の下限・上限・初期値をまとめたもの |
 | 下限の距離 | minKm | 選択できる距離の下限（km） |
@@ -158,3 +188,4 @@
 | 日付 | 内容 |
 |---|---|
 | 2026/09/02 | 初版作成 |
+| 2026/09/02 | 選択条件をジャンルと距離の2項目に絞り、目的（`PURPOSE#ALL`）の取得を削除 / ルート生成APIの応答までロード画面を維持する挙動に変更 / 用語辞書の追記案から `purposeName` を削除 |

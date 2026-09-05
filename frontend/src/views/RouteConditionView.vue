@@ -17,14 +17,13 @@ import { useRouteStore } from '@/stores/routeStore';
  */
 const router = useRouter();
 const routeStore = useRouteStore();
-const { isCreating, errorMessage, createRoute } = useRouteCreation();
+const { isCreating, createRoute } = useRouteCreation();
 const {
   message: toastMessage,
   showMessage,
   hideMessage
 } = useToastMessage();
 const {
-  purposeOptions,
   genreOptions,
   distanceRange,
   isLoading: isLoadingOptions,
@@ -38,12 +37,13 @@ loadConditionOptions();
 
 /**
  * @description 条件を検証してルートを作成し、成功時は提案画面へ進む。
- * 未入力・失敗はいずれも画面上部のポップアップで知らせる。
+ * 未選択の場合は画面上部のポップアップで知らせる。
+ * 作成に失敗した場合は、応答を待ち続ける仕様のためロード画面を表示したままにする。
  * @returns {Promise<void>}
  */
 const handleCreateRoute = async () => {
   if (!routeStore.hasRequiredConditions) {
-    showMessage('目的とジャンルを選択してください');
+    showMessage('ジャンルを選択してください');
     return;
   }
 
@@ -51,10 +51,7 @@ const handleCreateRoute = async () => {
 
   if (isSucceeded) {
     router.push({ name: 'route-suggestion' });
-    return;
   }
-
-  showMessage(errorMessage.value ?? 'ルートの作成に失敗しました');
 };
 </script>
 
@@ -108,13 +105,10 @@ const handleCreateRoute = async () => {
 
     <template v-else-if="hasConditionOptions">
       <RouteConditionForm
-        :purpose="routeStore.purpose"
         :genre="routeStore.genre"
         :distance-km="routeStore.distanceKm"
-        :purpose-options="purposeOptions"
         :genre-options="genreOptions"
         :distance-range="distanceRange"
-        @select-purpose="routeStore.selectPurpose"
         @select-genre="routeStore.selectGenre"
         @select-distance="routeStore.selectDistance"
       />

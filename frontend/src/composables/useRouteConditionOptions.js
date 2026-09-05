@@ -21,9 +21,6 @@ const clampValue = (value, minValue, maxValue) =>
 export const useRouteConditionOptions = () => {
   const routeStore = useRouteStore();
 
-  /** 目的の選択肢 */
-  const purposeOptions = ref([]);
-
   /** ジャンルの選択肢 */
   const genreOptions = ref([]);
 
@@ -70,7 +67,6 @@ export const useRouteConditionOptions = () => {
     try {
       const options = await fetchConditionOptions();
 
-      purposeOptions.value = options.purposeOptions;
       genreOptions.value = options.genreOptions;
       distanceRange.value = options.distanceRange;
       applyDistanceRange(options.distanceRange);
@@ -85,7 +81,6 @@ export const useRouteConditionOptions = () => {
   };
 
   return {
-    purposeOptions,
     genreOptions,
     distanceRange,
     isLoading,

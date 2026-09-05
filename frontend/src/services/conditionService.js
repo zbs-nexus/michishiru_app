@@ -1,7 +1,7 @@
 import { isJsonResponse } from '@/utils/apiResponse';
 
 /**
- * @description 検索条件マスタ（目的・ジャンル・距離）のAPI通信を担当する。
+ * @description 検索条件マスタ（ジャンル・距離）のAPI通信を担当する。
  * レスポンスを画面で扱う形へ変換して返し、失敗時は例外を投げる。
  * 例外の捕捉はcomposableが行う。
  */
@@ -13,9 +13,6 @@ import { isJsonResponse } from '@/utils/apiResponse';
  */
 const CONDITION_API_BASE_URL =
   'https://152wqulx7l.execute-api.ap-northeast-1.amazonaws.com/dev';
-
-/** 目的の項目を示すキー */
-const PURPOSE_ITEM_KEY = 'PURPOSE#ALL';
 
 /** ジャンルの項目を示すキー */
 const GENRE_ITEM_KEY = 'GENRE#ALL';
@@ -56,7 +53,7 @@ const toDistanceRange = (distanceItems) => {
 
 /**
  * @description 検索条件の選択肢をまとめて取得する
- * @returns {Promise<{purposeOptions: object[], genreOptions: object[], distanceRange: object}>} 目的・ジャンルの選択肢と距離の選択範囲
+ * @returns {Promise<{genreOptions: object[], distanceRange: object}>} ジャンルの選択肢と距離の選択範囲
  * @throws {Error} 通信に失敗した場合、またはマスタの項目が不足している場合
  */
 export const fetchConditionOptions = async () => {
@@ -76,25 +73,15 @@ export const fetchConditionOptions = async () => {
     throw new Error('検索条件のデータ形式が不正です');
   }
 
-  const purposeItems = pickActiveItems(items, PURPOSE_ITEM_KEY);
   const genreItems = pickActiveItems(items, GENRE_ITEM_KEY);
   const distanceItems = pickActiveItems(items, DISTANCE_ITEM_KEY);
 
   // いずれかが欠けると条件を選べないため、部分的な表示は行わずエラーとして扱う
-  if (
-    purposeItems.length === 0 ||
-    genreItems.length === 0 ||
-    distanceItems.length === 0
-  ) {
+  if (genreItems.length === 0 || distanceItems.length === 0) {
     throw new Error('検索条件のデータが不足しています');
   }
 
   return {
-    purposeOptions: purposeItems.map((item) => ({
-      value: item.purposeId,
-      label: item.purposeName,
-      icon: item.iconEmoji
-    })),
     genreOptions: genreItems.map((item) => ({
       value: item.genreId,
       label: item.genreName,
