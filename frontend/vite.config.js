@@ -12,6 +12,11 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  optimizeDeps: {
+    // maplibre-gl はWeb Workerを別ファイルとして持つため、依存最適化の対象にすると
+    // maplibre-gl-worker.mjs が見つからずGeoJSONの読み込みに失敗する
+    exclude: ['maplibre-gl']
+  },
   server: {
     port: 3000,
     // ポートが使用中の場合は別ポートへ切り替えず、明示的に失敗させる

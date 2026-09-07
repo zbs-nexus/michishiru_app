@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ミチシル ルート生成機能 ファイル構成と処理フロー</title>
+<style>
+  :root{
+    --ink:#1b2733; --muted:#5b6b7b; --line:#dfe6ee; --bg:#f6f8fb; --card:#fff;
+    --accent:#1565c0; --warn:#b26a00; --new:#2e7d32; --mod:#1565c0; --ext:#7b1fa2; --danger:#c62828;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.75;font-size:15px}
+  .wrap{max-width:1000px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 24px}
+  h2{font-size:20px;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px}
+  h4{font-size:14px;margin:16px 0 6px;color:var(--muted)}
+  p{margin:8px 0}
+  code{background:#eef2f7;padding:2px 6px;border-radius:5px;font-size:13px;
+    font-family:Consolas,"Courier New",monospace}
+  pre{background:#0f1b2a;color:#e6edf3;padding:14px 16px;border-radius:8px;overflow:auto;font-size:13px}
+  pre code{background:none;color:inherit;padding:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0;
+    box-shadow:0 1px 3px rgba(20,40,70,.04)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;font-size:14px}
+  th,td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+  th{background:#eef3f9}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:600;white-space:nowrap}
+  .tag.new{background:var(--new)} .tag.mod{background:var(--mod)} .tag.ext{background:var(--ext)}
+  .tag.a{background:#455a64} .tag.b{background:var(--warn)}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0}
+  .step{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:110px;text-align:center}
+  .arrow{font-size:20px;color:var(--muted)}
+  .note{border-left:4px solid var(--accent);background:#eff5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .warn{border-left:4px solid var(--warn);background:#fff7e8;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .danger{border-left:4px solid var(--danger);background:#fdecea;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  ul{margin:8px 0 8px 0;padding-left:22px}
+  li{margin:5px 0}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .small{font-size:13px;color:var(--muted)}
+  .tree{background:#0f1b2a;color:#e6edf3;padding:16px 18px;border-radius:8px;overflow:auto;
+    font-family:Consolas,"Courier New",monospace;font-size:13px;line-height:1.7;margin:12px 0;
+    white-space:pre}
+  .tree .c{color:#8fa6bd}
+  .tree .n{color:#7ee2a8}
+  .tree .m{color:#8ec7ff}
+  .lane{display:grid;grid-template-columns:44px 1fr;gap:0 14px;margin:0}
+  .lane .num{grid-column:1;background:var(--accent);color:#fff;width:30px;height:30px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin-top:10px}
+  .lane .body{grid-column:2;border-left:2px solid var(--line);padding:8px 0 18px 18px;margin-left:-16px}
+  .lane:last-child .body{border-left-color:transparent}
+  .where{font-size:12px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>ミチシル ルート生成機能</h1>
+  <p class="sub">追加ファイルの役割と処理のデータフロー ／ 最終更新: 2026-09-07 ／ 対象: US-2（ルート作成処理）・US-3（地図描画）</p>
+
+  <div class="note">
+    <b>段階1a は完了しています。</b>ブラウザでルート線・スポット・現在地の描画を確認済みで、GeoJSON をそのまま渡して地図に描けることを検証できました。段階1b（AWSの実サービスへの差し替え）は未着手です。
+  </div>
+
+  <div class="card toc">
+    <strong>目次</strong>
+    <ul>
+      <li><a href="#summary">1. この機能の概要</a></li>
+      <li><a href="#tree">2. 追加・変更するファイル（ディレクトリ構成）</a></li>
+      <li><a href="#files">3. ファイルごとの役割</a></li>
+      <li><a href="#flow">4. 処理のデータフロー</a></li>
+      <li><a href="#geojson">5. GeoJSON の構造</a></li>
+      <li><a href="#stage">6. 段階1a と 段階1b の差分</a></li>
+      <li><a href="#deps">7. 追加する依存パッケージ</a></li>
+      <li><a href="#notes">8. 注意点</a></li>
+    </ul>
+    <p class="legend" style="margin-top:12px">
+      <span class="tag new">新規</span> 新しく作るファイル
+      <span class="tag mod">変更</span> 既存ファイルへの追記
+      <span class="tag a">1a</span> AWSを呼ばない段階
+      <span class="tag b">1b</span> AWSを呼ぶ段階
+    </p>
+  </div>
+
+  <!-- 1 -->
+  <h2 id="summary">1. この機能の概要</h2>
+  <div class="card">
+    <p>ユーザーが入力した<b>ジャンル・目標距離・現在地</b>から、散歩ルートを自動生成して地図に表示します。</p>
+    <div class="flow">
+      <div class="step">条件を入力<br><span class="small">ジャンル / 距離</span></div>
+      <div class="arrow">→</div>
+      <div class="step">周辺スポットを<br>検索</div>
+      <div class="arrow">→</div>
+      <div class="step">AIが2〜3件<br>選定</div>
+      <div class="arrow">→</div>
+      <div class="step">徒歩ルートを<br>計算</div>
+      <div class="arrow">→</div>
+      <div class="step">距離が超過なら<br>スポットを削る</div>
+      <div class="arrow">→</div>
+      <div class="step" style="border-color:var(--new)">GeoJSONで返す<br><span class="small">地図に描画</span></div>
+    </div>
+    <p>既存の <code>getRoute</code>（DBに登録済みのルートを取得）とは別の機能です。条件から<b>新しく生成する</b>ため、Lambda の論理名を <code>generateRoute</code> としています。</p>
+    <div class="note">
+      <b>API は <code>POST /api/v1/routes</code>、成功時 201。</b>
+      既存の <code>GET /api/v1/routes</code> とはメソッドが違うため同じパスで共存できます。「取得」と「作成」を REST として自然に表現できる形です。
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <h2 id="tree">2. 追加・変更するファイル（ディレクトリ構成）</h2>
+  <div class="card">
+<div class="tree">michishiru_app/
+├── backend/
+│   ├── functions/
+│   │   ├── getRoute/                      <span class="c">← 既存。変更なし</span>
+│   │   └── <span class="n">generateRoute/</span>                 <span class="c">← 新規ディレクトリ</span>
+│   │       ├── <span class="n">handler.js</span>                 <span class="c">リクエスト受付・レスポンス返却</span>
+│   │       ├── <span class="n">validator.js</span>               <span class="c">入力チェック</span>
+│   │       ├── <span class="n">service.js</span>                 <span class="c">呼び出し順序・距離調整・GeoJSON組み立て</span>
+│   │       ├── <span class="n">repository.js</span>              <span class="c">外部サービスへのアクセス</span>
+│   │       ├── <span class="n">constants.js</span>               <span class="c">定数・環境変数の参照</span>
+│   │       └── <span class="n">package.json</span>               <span class="c">name は generate-route</span>
+│   ├── shared/                            <span class="c">← 既存を再利用。変更なし</span>
+│   │   ├── constants/errorCodes.js
+│   │   └── utils/{errorHandler,logger,responseBuilder}.js
+│   └── <span class="m">package.json</span>                       <span class="c">← 変更（段階1bでSDKを追加）</span>
+│
+├── frontend/
+│   ├── src/
+│   │   ├── services/
+│   │   │   └── <span class="m">routeService.js</span>            <span class="c">← 変更（generateRoute を追記）</span>
+│   │   ├── composables/
+│   │   │   └── <span class="n">useRouteGeneration.js</span>      <span class="c">← 新規</span>
+│   │   ├── components/feature/route/
+│   │   │   └── <span class="n">RouteGeoJsonMap.vue</span>        <span class="c">← 新規</span>
+│   │   ├── views/
+│   │   │   └── <span class="n">RouteGenerationSpikeView.vue</span> <span class="c">← 新規（検証用画面）</span>
+│   │   └── router/
+│   │       └── <span class="m">index.js</span>                   <span class="c">← 変更（ルート定義を1件追加）</span>
+│   ├── <span class="m">vite.config.js</span>                     <span class="c">← 変更（maplibre-gl を依存最適化から除外）</span>
+│   └── <span class="m">package.json</span>                       <span class="c">← 変更（maplibre-gl を追加）</span>
+│
+├── tools/
+│   └── <span class="m">localApiServer.js</span>                  <span class="c">← 変更（POSTの登録・ボディ読み取り）</span>
+│
+└── docs/
+    ├── <span class="n">ルート生成方式検証_実装説明書.md</span>    <span class="c">← 新規（判断理由・申し送り）</span>
+    └── <span class="n">ルート生成方式_ファイル構成と処理フロー.html</span> <span class="c">← 本ファイル</span></div>
+    <p class="small">配置は <code>directory-structure.md</code> と <code>back-lambda-rules.md</code> に従っています。バックエンドのレイヤーファイル名は役割名で固定し、機能名はフォルダ名（<code>generateRoute/</code>）で表します。</p>
+  </div>
+
+  <!-- 3 -->
+  <h2 id="files">3. ファイルごとの役割</h2>
+
+  <h3>バックエンド</h3>
+  <div class="card">
+    <table>
+      <tr><th style="width:210px">ファイル</th><th style="width:74px">区分</th><th>役割</th></tr>
+      <tr>
+        <td><code>handler.js</code></td><td><span class="tag new">新規</span></td>
+        <td>Lambda の入口。<code>event.body</code>（文字列）を JSON へ戻し、Validator を呼び、結果を <code>{ statusCode, headers, body }</code> の形へ整えて返す。<b>ビジネス判断は持たない。</b>JSONとして解釈できないボディは 400 で弾く。</td>
+      </tr>
+      <tr>
+        <td><code>validator.js</code></td><td><span class="tag new">新規</span></td>
+        <td><code>genre</code> / <code>distance</code> / <code>lat</code> / <code>lng</code> の必須・型・範囲を検査する<b>純粋関数</b>。エラーは全件集めて返すため、1回の応答で不足がすべて分かる。データ取得も副作用も持たない。</td>
+      </tr>
+      <tr>
+        <td><code>service.js</code></td><td><span class="tag new">新規</span></td>
+        <td>この機能の中核。<b>①</b> Repository の4関数を順番に呼ぶ、<b>②</b> 実測距離が目標を大幅超過したらスポットを削って再計算する、<b>③</b> 結果を GeoJSON へ組み立てる。HTTP に依存せず、プレーンなオブジェクトを受け取って返す。</td>
+      </tr>
+      <tr>
+        <td><code>repository.js</code></td><td><span class="tag new">新規</span></td>
+        <td>外部サービスへのアクセスを<b>すべてここに閉じ込める</b>。4つの関数を公開し、段階1a は固定データ、段階1b は実サービスを呼ぶ。中身が変わっても入出力は変えないため、Service 以上は影響を受けない。</td>
+      </tr>
+      <tr>
+        <td><code>constants.js</code></td><td><span class="tag new">新規</span></td>
+        <td>許可値（<code>ALLOWED_GENRES</code>）、距離の上下限、徒歩の分速、超過の許容倍率（<code>DISTANCE_OVERSHOOT_RATIO</code>）、<code>featureKind</code> の値などを定義する。<b>環境変数を読むのはこのファイルだけ</b>にする（段階1bでモデルIDを追加）。</td>
+      </tr>
+      <tr>
+        <td><code>package.json</code></td><td><span class="tag new">新規</span></td>
+        <td>関数ごとの依存関係の記録。<code>name</code> は <code>generate-route</code>（npm がパッケージ名に大文字を許可しないため、フォルダ名の camelCase と一致しない）。</td>
+      </tr>
+      <tr>
+        <td><code>shared/</code> 配下</td><td>―</td>
+        <td><b>変更しない。</b><code>errorCodes.js</code> / <code>errorHandler.js</code> / <code>logger.js</code> / <code>responseBuilder.js</code> を <code>getRoute</code> と共用する。エラーコードもレスポンス形式も既存と同じになる。</td>
+      </tr>
+    </table>
+  </div>
+
+  <h3>フロントエンド</h3>
+  <div class="card">
+    <table>
+      <tr><th style="width:210px">ファイル</th><th style="width:74px">区分</th><th>役割</th></tr>
+      <tr>
+        <td><code>routeService.js</code></td><td><span class="tag mod">変更</span></td>
+        <td><code>generateRoute</code> を追記する。<code>fetch</code> で POST し、レスポンスの中身をそのまま返す。失敗時は例外を投げ、捕捉は composable に任せる。内部の <code>distanceKm</code> を API の <code>distance</code> へ変換するのもこの層。既存の <code>isJsonResponse</code> 判定も適用する。</td>
+      </tr>
+      <tr>
+        <td><code>useRouteGeneration.js</code></td><td><span class="tag new">新規</span></td>
+        <td>生成中かどうか（<code>isGenerating</code>）、エラーメッセージ、生成結果を保持し、<code>generate()</code> を公開する。既存の <code>useRouteCreation</code> は<b>DBから取得する</b>処理用なので別に持つ。</td>
+      </tr>
+      <tr>
+        <td><code>RouteGeoJsonMap.vue</code></td><td><span class="tag new">新規</span></td>
+        <td>受け取った GeoJSON を<b>加工せず</b>MapLibre GL のソースへ登録し、<code>featureKind</code> で描画を振り分ける。props は <code>geojson</code> の1つだけ。GeoJSON が差し替わったらソースのデータのみ更新して表示範囲を合わせ直す。</td>
+      </tr>
+      <tr>
+        <td><code>RouteGenerationSpikeView.vue</code></td><td><span class="tag new">新規</span></td>
+        <td>検証用の画面。条件の入力、生成ボタン、地図、結果（コース名・紹介文・距離・所要時間・スポット一覧）を並べる。<b>本採用時は既存のルート作成フローへ統合するため、この画面は破棄する。</b></td>
+      </tr>
+      <tr>
+        <td><code>router/index.js</code></td><td><span class="tag mod">変更</span></td>
+        <td>検証用画面のルート定義を1件追加する。既存画面と違い <code>meta.requiresRoute</code> は付けない（ルート未取得でも開けるようにする）。</td>
+      </tr>
+    </table>
+  </div>
+
+  <h3>開発補助</h3>
+  <div class="card">
+    <table>
+      <tr><th style="width:210px">ファイル</th><th style="width:74px">区分</th><th>役割</th></tr>
+      <tr>
+        <td><code>tools/localApiServer.js</code></td><td><span class="tag mod">変更</span></td>
+        <td>Lambda ハンドラを Node のプロセス内で直接 import して呼ぶローカル用ハーネス。<code>ROUTE_HANDLERS</code> に <code>POST /api/v1/routes</code> を追加する。<b>既存はGETのみ想定でボディを読んでいなかった</b>ため、ボディを文字列として読み切り <code>event.body</code> へ渡す処理を足す。</td>
+      </tr>
+      <tr>
+        <td><code>frontend/vite.config.js</code></td><td><span class="tag mod">変更</span></td>
+        <td><code>optimizeDeps.exclude</code> に <code>maplibre-gl</code> を追加する。依存最適化を通すと MapLibre の Web Worker が読めなくなり、GeoJSON が描画されなくなるため（詳細は8節）。<code>/api</code> のプロキシ設定は既存のものをそのまま使う。</td>
+      </tr>
+    </table>
+    <p class="small">プロキシ設定によって <code>/api</code> はハーネス（ポート3001）へ転送されるため、リポジトリルートで <code>npm run dev</code> を実行すれば画面から呼べます。<code>backend/</code> と <code>frontend/</code> の <code>npm ci</code> が事前に必要です（ハーネスが <code>getRoute</code> の repository を import するため、<code>backend/</code> の依存が無いとハーネス全体が起動しません）。</p>
+  </div>
+
+  <!-- 4 -->
+  <h2 id="flow">4. 処理のデータフロー</h2>
+  <div class="card">
+    <p>ボタン押下から地図描画までを、データの形の変化とあわせて追います。</p>
+
+    <div class="lane">
+      <div class="num">1</div>
+      <div class="body">
+        <p class="where">RouteGenerationSpikeView.vue</p>
+        <p>ユーザーが条件を選び、生成ボタンを押す。現在地は既定で東京駅、ボタン操作で端末の位置情報に差し替えられる。</p>
+        <pre><code>generate({ genre: 'nature', distanceKm: 3, origin: { lat: 35.681236, lng: 139.767125 } })</code></pre>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">2</div>
+      <div class="body">
+        <p class="where">useRouteGeneration.js</p>
+        <p><code>isGenerating</code> を <code>true</code> にしてから service を呼ぶ。成否を boolean で返し、エラーは <code>errorMessage</code> に載せる。</p>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">3</div>
+      <div class="body">
+        <p class="where">routeService.js</p>
+        <p>内部表現の <code>distanceKm</code> を API の <code>distance</code> へ、<code>origin</code> を <code>lat</code> / <code>lng</code> へ展開して POST する。</p>
+        <pre><code>POST /api/v1/routes
+{ "genre": "nature", "distance": 3, "lat": 35.681236, "lng": 139.767125 }</code></pre>
+        <p class="small">単位を落とすのは <code>naming-conventions.md</code> の例外規定（API のキーは km 固定の <code>distance</code>）に従うため。</p>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">4</div>
+      <div class="body">
+        <p class="where">handler.js</p>
+        <p>文字列のボディを JSON へ戻し、Validator を呼ぶ。不正なら 400 とメッセージを返してここで終わる。</p>
+        <pre><code>{ "code": "VALIDATION_ERROR", "message": "genreは必須です / distanceは1以上10以下で指定してください" }</code></pre>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">5</div>
+      <div class="body">
+        <p class="where">service.js → repository.js ①</p>
+        <p><b>検索キーワードを取得する。</b>ジャンルに対応する英語の検索語を得る。地図APIへは英語で問い合わせるため。</p>
+        <pre><code>getSearchKeywords({ genre: 'nature' })
+→ ['park', 'garden', 'riverside']</code></pre>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">6</div>
+      <div class="body">
+        <p class="where">service.js → repository.js ②</p>
+        <p><b>周辺スポットを検索する。</b>現在地の周りにある実在の場所を15〜20件集める。0件なら <code>ROUTE_NOT_FOUND</code>（404）で終了。</p>
+        <pre><code>searchNearbySpots({ origin, genre, searchKeywords })
+→ [{ spotId, name: '大手町の森', spotType: 'park', lat, lng, distanceFromOrigin }, ...]</code></pre>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">7</div>
+      <div class="body">
+        <p class="where">service.js → repository.js ③</p>
+        <p><b>AIがスポットを選び、文言を作る。</b>候補と条件を渡し、2〜3件の選定・コース名・紹介文を一度の呼び出しでまとめて得る。</p>
+        <pre><code>selectSpotsByAi({ genre, distance, candidates })
+→ { routeName: '自然をたどる3スポットコース',
+    story: '大手町の森、KITTE屋上庭園…をめぐります。',
+    spots: [{ spotId, name, spotType, lat, lng, description }, ...] }</code></pre>
+        <div class="note">呼び出しは<b>1回だけ</b>。回数がそのまま費用と応答時間に効くため、選定と文言生成を1つのプロンプトに束ねます。</div>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">8</div>
+      <div class="body">
+        <p class="where">service.js → repository.js ④</p>
+        <p><b>徒歩ルートを計算する。</b>現在地を発着点にスポットを巡る周回ルートの実距離・所要時間・道沿いの座標列を得る。</p>
+        <pre><code>calculateWalkingRoute({ origin, spots })
+→ { distance: 2.28, duration: 34, waypoints: [{ lat, lng }, ... 49点] }</code></pre>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">9</div>
+      <div class="body">
+        <p class="where">service.js</p>
+        <p><b>距離の調整。</b>実測が目標の1.25倍を超えていたら、<b>AIを呼び直さず</b>末尾のスポットを配列から取り除いて ④ を再実行する。<code>MIN_SPOT_COUNT</code> を下回るまで繰り返す。</p>
+        <pre><code>目標 1km / 実測 2.28km → 許容 1.25km を超過
+  スポット 3件 → 2件 → 1件、実測 1.52km、経路 25点で確定</code></pre>
+        <p class="small">AI の再呼び出しに比べて速く、費用も増えません。</p>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">10</div>
+      <div class="body">
+        <p class="where">service.js</p>
+        <p><b>GeoJSON を組み立てる。</b>ルート線・出発地・スポットを1つの FeatureCollection にまとめる。ここで座標を <code>{ lat, lng }</code> から <code>[経度, 緯度]</code> へ入れ替える（GeoJSON の仕様。<b>入れ替えるのはこの1箇所だけ</b>）。</p>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">11</div>
+      <div class="body">
+        <p class="where">handler.js</p>
+        <p>201 で返す。</p>
+        <pre><code>{ "routeId": "...", "routeName": "...", "story": "...",
+  "distance": 2.28, "duration": 34, "spotCount": 3,
+  "origin": { "lat": ..., "lng": ... },
+  "spots": [ ... ],
+  "geojson": { "type": "FeatureCollection", "features": [ ... ] } }</code></pre>
+      </div>
+    </div>
+
+    <div class="lane">
+      <div class="num">12</div>
+      <div class="body">
+        <p class="where">RouteGeoJsonMap.vue</p>
+        <p><code>geojson</code> をそのままソースへ登録し、<code>featureKind</code> の <code>filter</code> で3つのレイヤーへ振り分ける。全 feature が収まるよう表示範囲を合わせる。</p>
+        <pre><code>route  → line レイヤー（緑の線）
+spot   → circle レイヤー（橙の丸）+ DOMマーカー（番号と名前）
+origin → circle レイヤー（青の丸）</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 -->
+  <h2 id="geojson">5. GeoJSON の構造</h2>
+  <div class="card">
+    <p><b>1つの FeatureCollection にすべてを入れます。</b>フロントエンドが加工せずそのまま地図ライブラリへ渡せる形にするためです。</p>
+    <table>
+      <tr><th style="width:110px">featureKind</th><th style="width:110px">geometry</th><th style="width:70px">個数</th><th>properties</th></tr>
+      <tr><td><code>route</code></td><td>LineString</td><td>1</td><td>―</td></tr>
+      <tr><td><code>origin</code></td><td>Point</td><td>1</td><td><code>name</code></td></tr>
+      <tr><td><code>spot</code></td><td>Point</td><td>1〜3</td><td><code>spotId</code> / <code>name</code> / <code>spotType</code> / <code>visitOrder</code></td></tr>
+    </table>
+<pre><code>{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature",
+      "properties": { "featureKind": "route" },
+      "geometry": { "type": "LineString",
+                    "coordinates": [[139.767125, 35.681236], ... ] } },
+    { "type": "Feature",
+      "properties": { "featureKind": "origin", "name": "現在地" },
+      "geometry": { "type": "Point", "coordinates": [139.767125, 35.681236] } },
+    { "type": "Feature",
+      "properties": { "featureKind": "spot", "spotId": "...", "name": "大手町の森",
+                      "spotType": "park", "visitOrder": 1 },
+      "geometry": { "type": "Point", "coordinates": [139.7645, 35.687] } }
+  ]
+}</code></pre>
+
+    <h3>spot と waypoint を分けている理由</h3>
+    <div class="danger">
+      <p><b>混同すると、エラーにならず数字だけが狂います。</b></p>
+      <p>用語辞書では <code>spot</code> が「ユーザーが立ち寄る場所」、<code>waypoint</code> が「経路を描くための座標の点」です。3スポットのルートで LineString は<b>49点</b>になります。ここを混同すると US-8 の「廻ったスポット数」が <code>3</code> ではなく <code>49</code> と表示されます。</p>
+      <p>既存の <code>getRoute</code> は <code>waypoints</code> しか返さず、これが <code>naming-conventions.md</code> の未決定事項 #2 に挙がっている負債です。新APIでは <code>spots</code>（配列）と <code>spotCount</code>（数値）を独立して返し、経路の点は GeoJSON の中だけに閉じ込めます。</p>
+    </div>
+  </div>
+
+  <!-- 6 -->
+  <h2 id="stage">6. 段階1a と 段階1b の差分</h2>
+  <div class="card">
+    <p>変わるのは <code>repository.js</code> の<b>中身だけ</b>です。関数の名前と入出力を先に固定してあるため、Service 以上は書き換えません。</p>
+    <table>
+      <tr><th style="width:200px">Repository の関数</th><th><span class="tag a">1a</span> 固定データ</th><th><span class="tag b">1b</span> 実サービス</th></tr>
+      <tr><td><code>getSearchKeywords</code></td><td><code>constants.js</code> の対応表を返す</td><td>DynamoDB（検索条件マスタ）</td></tr>
+      <tr><td><code>searchNearbySpots</code></td><td>東京駅周辺18件から絞って返す</td><td>Location Service Places（<code>SearchNearby</code>）</td></tr>
+      <tr><td><code>selectSpotsByAi</code></td><td>候補から3件選びテンプレートで文言生成</td><td>Bedrock（<code>InvokeModel</code>）</td></tr>
+      <tr><td><code>calculateWalkingRoute</code></td><td>座標を補間し球面距離を合計</td><td>Location Service Routes（<code>CalculateRoutes</code>）</td></tr>
+    </table>
+    <div class="note">
+      <b>どちらの段階でも AWS リソースは1つも作りません。</b>
+      Location Service の Places / Routes は API v2 でリソース作成が不要になり、Bedrock も基盤モデルの利用が既定で有効です。必要なのは実行ロールの IAM 権限だけなので、CloudFormation スタックに差分が出ず、dev / prod への影響は物理的に発生しません。
+    </div>
+    <p class="small">段階1a の <code>calculateWalkingRoute</code> は、各区間に12点の中間座標を作り進行方向の横へわずかにずらして曲線に見せています。直線で結ぶと道なりの形にならず、地図描画の確認材料にならないためです。</p>
+  </div>
+
+  <!-- 7 -->
+  <h2 id="deps">7. 追加する依存パッケージ</h2>
+  <div class="card">
+    <table>
+      <tr><th style="width:120px">場所</th><th style="width:70px">段階</th><th>パッケージ</th><th>用途</th></tr>
+      <tr><td><code>frontend/</code></td><td><span class="tag a">1a</span></td><td><code>maplibre-gl</code></td><td>地図描画</td></tr>
+      <tr><td><code>backend/</code></td><td><span class="tag b">1b</span></td><td><code>@aws-sdk/client-geo-places</code></td><td>周辺スポット検索</td></tr>
+      <tr><td><code>backend/</code></td><td><span class="tag b">1b</span></td><td><code>@aws-sdk/client-geo-routes</code></td><td>徒歩ルート計算</td></tr>
+      <tr><td><code>backend/</code></td><td><span class="tag b">1b</span></td><td><code>@aws-sdk/client-bedrock-runtime</code></td><td>スポット選定・文言生成</td></tr>
+    </table>
+    <p class="small">SDK のクライアント名が <code>location</code> ではなく <code>geo-places</code> / <code>geo-routes</code> なのは、Places / Routes が API v2 で別サービスとして分かれたためです。</p>
+  </div>
+
+  <!-- 8 -->
+  <h2 id="notes">8. 注意点</h2>
+  <div class="card">
+    <h3>MapLibre 導入でつまずいた3点（実際に踏んだ）</h3>
+    <div class="danger">
+      <p><b>3つのうち2つは「無言で描画されない」症状になります。</b>エラーが画面にもコンソールにも出ないため、原因の特定に時間がかかります。</p>
+    </div>
+
+    <h4>① default エクスポートが存在しない</h4>
+    <p><code>maplibre-gl</code> の6系は ESM で default エクスポートを持ちません。ビルドが <code>[MISSING_EXPORT]</code> で失敗するため、これは気付けます。</p>
+<pre><code>// 失敗する
+import maplibregl from 'maplibre-gl';
+
+// 正しい書き方（Map は Vue 側の名前と衝突しうるためリネームする）
+import { LngLatBounds, Map as MapLibreMap, Marker, NavigationControl } from 'maplibre-gl';</code></pre>
+
+    <h4>② Vite の依存最適化が Web Worker を壊す</h4>
+    <p>MapLibre は GeoJSON の解析を Web Worker で行いますが、Vite の依存最適化を通すと Worker のファイルが見つからなくなります。</p>
+<pre><code>The file does not exist at ".../node_modules/.vite/deps/maplibre-gl-worker.mjs"
+which is in the optimize deps directory.</code></pre>
+    <p><code>frontend/vite.config.js</code> で除外し、依存最適化のキャッシュ（<code>node_modules/.vite</code>）を削除して開発サーバを再起動します。</p>
+<pre><code>optimizeDeps: {
+  exclude: ['maplibre-gl']
+}</code></pre>
+    <div class="warn">
+      <p><b>Worker が読めないと GeoJSON ソースが読み込まれず、それを参照する <code>line</code> / <code>circle</code> レイヤーが何も描きません。</b>一方 <code>Marker</code> は DOM 要素なので影響を受けず表示されます。結果として<b>「スポットのラベルだけ出て、線と丸が出ない」</b>という症状になります。</p>
+    </div>
+
+    <h4>③ リアクティブな値をそのまま渡せない</h4>
+    <p>MapLibre は GeoJSON を Worker へ <code>postMessage</code> で渡すため構造化複製（structured clone）が行われます。Vue のリアクティブ Proxy は構造化複製できず <code>DataCloneError</code> になります。</p>
+    <table>
+      <tr><th style="width:260px">渡す値</th><th>構造化複製</th></tr>
+      <tr><td>素のオブジェクト</td><td>成功</td></tr>
+      <tr><td><code>reactive(obj)</code></td><td><b>失敗</b>（DataCloneError）</td></tr>
+      <tr><td><code>ref(obj).value</code></td><td><b>失敗</b>（DataCloneError）</td></tr>
+      <tr><td><code>shallowRef(obj).value</code></td><td>成功</td></tr>
+      <tr><td><code>toRaw(ref(obj).value)</code></td><td>成功</td></tr>
+    </table>
+    <p>対策は2段構えにしています。<code>useRouteGeneration</code> の <code>generatedRoute</code> を <code>shallowRef</code> にし、<code>RouteGeoJsonMap</code> 側でも <code>toRaw()</code> で素の値へ戻してから渡します。あわせて <code>map.on('error', ...)</code> を追加しました。<b>MapLibre の失敗は例外にならずこのイベントへ流れるため、リスナーが無いと無言で描画されないだけになります。</b></p>
+
+    <h3>この機能に固有の注意</h3>
+    <ul>
+      <li><b>座標の順序。</b>GeoJSON は <code>[経度, 緯度]</code>、アプリ内は <code>{ lat, lng }</code> で順序が逆。入れ替えは <code>service.js</code> の1箇所に限定する。</li>
+      <li><b>応答時間。</b>スポット検索 → AI → ルート計算（+超過時の再計算）が直列に並ぶ。API Gateway の統合タイムアウトは29秒が上限で、超える場合は非同期化が必要になり構成が変わる。段階1bで実測する。</li>
+      <li><b>費用。</b>Bedrock と Location Service はユーザー操作1回ごとに課金される。再作成（US-5）で繰り返し呼ばれる点も含めて見積もる。</li>
+      <li><b>ベースマップは段階1aでは出さない。</b>地図タイルの配信には認証が必要で、そのキーはブラウザへ露出する。線とスポットの位置関係の確認だけなら不要。表示する場合の選択肢は下の「未決定事項」を参照。</li>
+      <li><b>文字描画に <code>symbol</code> レイヤーを使わない。</b>MapLibre で <code>text-field</code> を使うにはフォント（glyphs）の配信元が必要になるため、ラベルは DOM マーカーで表示する。</li>
+      <li><b>バンドルサイズ。</b><code>maplibre-gl</code> の導入で <code>index.js</code> が約1.1MB（gzip 302kB）になり、Vite が500kB超の警告を出す。本採用時は地図コンポーネントを動的 <code>import()</code> で分割する余地がある。</li>
+    </ul>
+
+    <h3>後で考慮する事項</h3>
+    <div class="warn">
+      <p><b>立ち寄り順が地理的に最適化されないため、ルートが自己交差します。</b>段階1a では候補配列から順に3件取るだけなので、現在地→スポット1→2→3→現在地を結ぶと線が交差します。<b>段階1bでAIに順序を任せた場合も同じ問題が起きえます。</b>プロンプトで「移動距離が短くなる順に並べる」と指示するか、選定後にプログラム側で並べ替えるかを決める必要があります。距離の計算にも影響するため、段階1bの実測前に方針を決めるのが望ましいです。</p>
+    </div>
+    <div class="warn">
+      <p><b>目標距離を下回るケースがあります。</b>目標3km に対しジャンル「街歩き」で 0.88km になりました。距離調整は超過時にスポットを削る方向にしか働かず、不足時に伸ばす処理がありません。フロー案1どおりの挙動ですが、実用上は下振れの扱いを決める必要があります。</p>
+    </div>
+
+    <h3>未決定事項: ベースマップ</h3>
+    <table>
+      <tr><th style="width:220px">方法</th><th style="width:80px">認証</th><th style="width:130px">詳細度</th><th>備考</th></tr>
+      <tr><td>OpenStreetMap のラスタタイル</td><td>不要</td><td>街路レベル</td><td>第三者サーバへのリクエストが発生。著作権表示が必要。タイル利用ポリシー上、開発時の軽い利用向け</td></tr>
+      <tr><td>MapLibre の公式デモタイル</td><td>不要</td><td>世界地図レベル</td><td>ズーム14では実用にならない</td></tr>
+      <tr><td>Amazon Location Service の地図</td><td>APIキー必要</td><td>街路レベル</td><td>本採用時の想定。キーに利用制限をかける前提</td></tr>
+    </table>
+
+    <h3>既存コードとの関係で確認が必要な点</h3>
+    <div class="warn">
+      <p><b>ルート作成の失敗時に画面から復帰できません。</b>develop の <code>RouteConditionView.vue</code> は <code>useRouteCreation</code> から <code>errorMessage</code> を受け取っておらず、<code>createRoute</code> が失敗しても <code>isCreating</code> が解除されません。結果としてロード画面のまま原因も表示されず、リロード以外に復帰手段がありません。「応答を待ち続ける」意図的な仕様だとしても出口が必要と考えられるため、NZ-1 の担当者への確認事項です。</p>
+    </div>
+    <div class="warn">
+      <p><b><code>getRoute</code> の距離チェックがマスタと不一致です。</b><code>ALLOWED_DISTANCES_KM</code> が <code>[1, 3, 5, 8]</code> の列挙のため、マスタの範囲（1〜10km）で 2km や 4km を選ぶと弾かれます。既存の負債で、新設する <code>generateRoute</code> は最初から 1〜10 の範囲チェックにしてあります。</p>
+    </div>
+    <p class="small">ジャンルの許可値（<code>nature</code> / <code>city</code> / <code>history</code> / <code>gourmet</code>）はマスタの <code>genreId</code> と一致していることが <code>検索条件マスタAPI連携_実装説明書.md</code> で確認済みです。</p>
+
+    <h3>段階1b の着手前に必要なもの</h3>
+    <table>
+      <tr><th style="width:250px">項目</th><th>状態</th></tr>
+      <tr><td>ローカルの AWS 資格情報</td><td><b>設定済み。</b>IAMユーザー <code>kato-run</code>（アカウント <code>961308088333</code>。CDK の <code>bin/iac.ts</code> と同一アカウント）</td></tr>
+      <tr><td>Bedrock の照会</td><td><b>可能。</b><code>bedrock:ListFoundationModels</code> が通り、<code>ap-northeast-1</code> でテキスト生成モデルが多数利用可能</td></tr>
+      <tr><td><code>bedrock:InvokeModel</code> の権限</td><td><b>未確認。</b>照会が通っても呼び出しが通るとは限らない</td></tr>
+      <tr><td><code>geo-places</code> / <code>geo-routes</code> の権限</td><td><b>未確認。</b>確認には実際のAPI呼び出しが必要で、わずかだが課金が発生する</td></tr>
+      <tr><td>使用するモデルの決定</td><td><b>未決定。</b>候補は <code>anthropic.claude-haiku-4-5-20251001-v1:0</code>（軽量・高速）、<code>amazon.nova-2-lite-v1:0</code>（費用比較）、質が足りなければ <code>anthropic.claude-sonnet-4-6</code></td></tr>
+    </table>
+    <p class="small">モデルIDは <code>constants.js</code> で環境変数から受け取り、コードに直接書きません。<code>ap-northeast-1</code> で直接呼べないモデルを選ぶ場合はクロスリージョン推論プロファイルを使うことになり、<b>IAMポリシーに書くARNの形式が変わります</b>（<code>AccessDeniedException</code> の典型的な原因）。</p>
+
+    <h3>用語辞書への追記が必要な語</h3>
+    <p>コードで使う前に承認が必要な語です。<b>まだ辞書には追記していません。</b>方式が確定した時点で <code>docs</code> 種別の独立したPRとして出します。</p>
+    <table>
+      <tr><th style="width:150px">日本語</th><th style="width:150px">英語（コード上）</th><th>説明</th></tr>
+      <tr><td>生成</td><td><code>generate</code></td><td>条件からルートを新しく作り出すこと（DBからの取得＝<code>get</code> と区別する）</td></tr>
+      <tr><td>紹介文</td><td><code>story</code></td><td>AIが生成するコースの紹介文</td></tr>
+      <tr><td>立ち寄り順</td><td><code>visitOrder</code></td><td>何番目に立ち寄るかを表す1始まりの番号</td></tr>
+      <tr><td>検索キーワード</td><td><code>searchKeywords</code></td><td>スポット検索へ渡す英語の検索語</td></tr>
+      <tr><td>GeoJSON</td><td><code>geojson</code></td><td>ルート線・出発地・スポットをまとめた FeatureCollection</td></tr>
+      <tr><td>描画要素の種別</td><td><code>featureKind</code></td><td>GeoJSON の feature が何を表すか（<code>route</code> / <code>spot</code> / <code>origin</code>）</td></tr>
+    </table>
+  </div>
+
+  <h2>更新履歴</h2>
+  <div class="card">
+    <table>
+      <tr><th style="width:120px">日付</th><th>内容</th></tr>
+      <tr><td>2026-09-04</td><td>初版作成</td></tr>
+      <tr><td>2026-09-07</td><td>段階1a の完了を反映 / <code>vite.config.js</code> をファイル構成へ追加 / MapLibre 導入でつまずいた3点を追記 / 後で考慮する事項（立ち寄り順の自己交差・目標距離の下振れ）とベースマップの未決定事項を追加 / 段階1b の着手前に必要なものを追記</td></tr>
+    </table>
+  </div>
+
+  <p class="small" style="margin-top:32px">判断理由・段階分けの背景・申し送り事項の詳細は <code>docs/ルート生成方式検証_実装説明書.md</code> に記載しています。</p>
+
+</div>
+</body>
+</html>

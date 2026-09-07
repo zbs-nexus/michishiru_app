@@ -55,3 +55,39 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
 
   return response.json();
 };
+
+/**
+ * @description 条件と現在地からルートを1件生成する
+ * @param {object} conditions 生成条件
+ * @param {string} conditions.genre ジャンル
+ * @param {number} conditions.distanceKm 目標距離（km）
+ * @param {{lat: number, lng: number}} conditions.origin 現在地
+ * @returns {Promise<object>} 生成したルート（geojsonを含む）
+ * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
+ */
+export const generateRoute = async ({ genre, distanceKm, origin }) => {
+  const response = await fetch(`${API_BASE_PATH}/routes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      genre,
+      // リクエストのキーはkm固定の外部仕様のため、単位を付けない
+      distance: distanceKm,
+      lat: origin.lat,
+      lng: origin.lng
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response));
+  }
+
+  // APIが未配線の環境ではSPAのindex.htmlが200で返るため、解析前に判定する
+  if (!isJsonResponse(response)) {
+    throw new Error(
+      'ルート生成APIに接続できません（JSON以外の応答を受け取りました）'
+    );
+  }
+
+  return response.json();
+};

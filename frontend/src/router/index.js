@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import RouteConditionView from '@/views/RouteConditionView.vue';
 import RouteDetailView from '@/views/RouteDetailView.vue';
+import RouteGenerationSpikeView from '@/views/RouteGenerationSpikeView.vue';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
 import RouteSuggestionView from '@/views/RouteSuggestionView.vue';
 import WalkResultView from '@/views/WalkResultView.vue';
@@ -39,6 +40,12 @@ const routes = [
     name: 'walk-result',
     component: WalkResultView,
     meta: { requiresRoute: true }
+  },
+  {
+    // ルート生成方式の検証用。方式確定後は既存フローへ統合してこの定義を削除する
+    path: '/spike/route-generation',
+    name: 'route-generation-spike',
+    component: RouteGenerationSpikeView
   },
   {
     path: '/:pathMatch(.*)*',

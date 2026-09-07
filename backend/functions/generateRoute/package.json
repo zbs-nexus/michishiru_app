@@ -1,0 +1,9 @@
+{
+  "name": "generate-route",
+  "version": "1.0.0",
+  "description": "条件から散歩ルートを生成して返すLambda関数",
+  "private": true,
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {}
+}

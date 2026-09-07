@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
+import { handler as generateRouteHandler } from '../backend/functions/generateRoute/handler.js';
 
 /**
  * @description ローカル開発用のAPIハーネス。
@@ -15,20 +16,39 @@ const HOST = '127.0.0.1';
 
 /** パスとLambdaハンドラの対応 */
 const ROUTE_HANDLERS = [
-  { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler }
+  { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
+  { method: 'POST', path: '/api/v1/routes', invoke: generateRouteHandler }
 ];
+
+/**
+ * @description リクエストボディを文字列として読み切る。
+ * API Gatewayはボディを文字列で渡すため、ここでも文字列のまま扱う。
+ * @param {import('node:http').IncomingMessage} request 受信したリクエスト
+ * @returns {Promise<string>} 受信したボディ。存在しない場合は空文字
+ */
+const readRequestBody = async (request) => {
+  const chunks = [];
+
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+
+  return Buffer.concat(chunks).toString('utf8');
+};
 
 /**
  * @description Node.jsのリクエストからAPI Gateway相当のイベントを作る
  * @param {import('node:http').IncomingMessage} request 受信したリクエスト
  * @param {URL} requestUrl 解析済みのURL
+ * @param {string} body 受信したリクエストボディ
  * @returns {object} ハンドラへ渡すイベント
  */
-const buildEvent = (request, requestUrl) => ({
+const buildEvent = (request, requestUrl, body) => ({
   httpMethod: request.method,
   path: requestUrl.pathname,
   queryStringParameters: Object.fromEntries(requestUrl.searchParams.entries()),
-  headers: request.headers
+  headers: request.headers,
+  body: body.length > 0 ? body : null
 });
 
 const server = createServer(async (request, response) => {
@@ -47,7 +67,8 @@ const server = createServer(async (request, response) => {
   }
 
   try {
-    const result = await matched.invoke(buildEvent(request, requestUrl));
+    const body = await readRequestBody(request);
+    const result = await matched.invoke(buildEvent(request, requestUrl, body));
 
     response.writeHead(result.statusCode, result.headers);
     response.end(result.body);
@@ -61,5 +82,8 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`ローカルAPIハーネス起動: http://${HOST}:${PORT}/api/v1/routes`);
+  console.log(`ローカルAPIハーネス起動: http://${HOST}:${PORT}`);
+  ROUTE_HANDLERS.forEach(({ method, path }) => {
+    console.log(`  ${method} ${path}`);
+  });
 });
