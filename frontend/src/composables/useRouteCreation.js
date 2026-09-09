@@ -1,7 +1,11 @@
 import { ref } from 'vue';
-import { fetchRoute } from '@/services/routeService';
+// composableが公開する createRoute と名前が衝突するため、API呼び出し側に別名を付ける
+import { createRoute as requestRouteCreation } from '@/services/routeService';
 import { useRouteStore } from '@/stores/routeStore';
-import { MIN_LOADING_DURATION_MS } from '@/constants/routeConditions';
+import {
+  DEFAULT_CURRENT_LOCATION,
+  MIN_LOADING_DURATION_MS
+} from '@/constants/routeConditions';
 
 /**
  * @description 指定時間だけ待機する
@@ -42,9 +46,11 @@ export const useRouteCreation = () => {
     const startedAt = Date.now();
 
     try {
-      const route = await fetchRoute({
-        genre: routeStore.genre,
-        distanceKm: routeStore.distanceKm
+      // 現在地は暫定の固定値。GPS取得を入れる際はこの1行を差し替える
+      const route = await requestRouteCreation({
+        genreName: routeStore.genreName,
+        distanceKm: routeStore.distanceKm,
+        currentLocation: DEFAULT_CURRENT_LOCATION
       });
 
       // 応答が速すぎる場合にローディングが一瞬だけ表示されるのを防ぐ
