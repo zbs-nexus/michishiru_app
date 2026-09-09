@@ -57,10 +57,48 @@ describe('MichishiruStack (バックエンド有効)', () => {
     });
   });
 
-  test('API Gateway と GET メソッドを作成する', () => {
+  test('createRoute の Lambda 関数をバンドルして作成する', () => {
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      // NodejsFunction はバンドル結果を index.mjs / index.js として出力する
+      Handler: 'index.handler',
+      Environment: {
+        Variables: Match.objectLike({
+          BEDROCK_MODEL_ID: 'jp.anthropic.claude-haiku-4-5-20251001-v1:0'
+        })
+      }
+    });
+  });
+
+  test('createRoute に Places / Routes / Bedrock の権限を与える', () => {
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Sid: 'SearchNearbySpots',
+            Action: 'geo-places:SearchNearby',
+            Resource: '*'
+          }),
+          Match.objectLike({
+            Sid: 'CalculateWalkingRoutes',
+            Action: 'geo-routes:CalculateRoutes',
+            Resource: '*'
+          }),
+          Match.objectLike({
+            Sid: 'InvokeBedrockModel',
+            Action: 'bedrock:InvokeModel'
+          })
+        ])
+      }
+    });
+  });
+
+  test('API Gateway と GET / POST メソッドを作成する', () => {
     template.resourceCountIs('AWS::ApiGateway::RestApi', 1);
     template.hasResourceProperties('AWS::ApiGateway::Method', {
       HttpMethod: 'GET'
+    });
+    template.hasResourceProperties('AWS::ApiGateway::Method', {
+      HttpMethod: 'POST'
     });
   });
 });
