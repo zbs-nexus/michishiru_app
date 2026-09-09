@@ -7,7 +7,9 @@
   "main": "handler.js",
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "3.1128.0",
+    "@aws-sdk/client-dynamodb": "3.1118.0",
     "@aws-sdk/client-geo-places": "3.1128.0",
-    "@aws-sdk/client-geo-routes": "3.1128.0"
+    "@aws-sdk/client-geo-routes": "3.1128.0",
+    "@aws-sdk/lib-dynamodb": "3.1118.0"
   }
 }

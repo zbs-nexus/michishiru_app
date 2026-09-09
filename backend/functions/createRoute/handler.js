@@ -88,7 +88,7 @@ export const handler = async (event) => {
   }
 
   logInfo('ルート作成リクエストを受け付けました', {
-    spotCategory: validationResult.value.spotCategory,
+    genreName: validationResult.value.genreName,
     targetDistanceKm: validationResult.value.targetDistanceKm
   });
 
