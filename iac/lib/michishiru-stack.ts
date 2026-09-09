@@ -115,6 +115,22 @@ export class MichishiruStack extends cdk.Stack {
 
       routeTable.grantReadData(getRouteFn);
 
+      // ジャンルマスタ（ジャンル名 → ジャンルID）と
+      // スポットカテゴリマスタ（ジャンルID → Places のカテゴリID）。
+      // どちらも CDK では作成しておらず、コンソールで手動作成済みのため名前で参照する。
+      // TODO: CDK 管理へ移し、命名規則（`PascalCase単数形-<環境>`）へ揃える。
+      //       現在の名前は個人名を含み、dev / prod の分離もされていない。
+      const genreTable = dynamodb.Table.fromTableName(
+        this,
+        'GenreTable',
+        'michishiru_genremaster_akutsu'
+      );
+      const spotCategoryTable = dynamodb.Table.fromTableName(
+        this,
+        'SpotCategoryTable',
+        'michishiru_categorymaster_akutsu'
+      );
+
       // Lambda: createRoute ハンドラ（Places + Bedrock + Routes でルートを生成する）
       // getRoute と違い AWS SDK v3 の geo-places / geo-routes / bedrock-runtime に依存する。
       // これらが Lambda ランタイムに同梱されている保証がないため、esbuild で
@@ -133,7 +149,9 @@ export class MichishiruStack extends cdk.Stack {
         // API Gateway (REST) の統合タイムアウト上限が 29 秒のため、それに合わせる
         timeout: cdk.Duration.seconds(29),
         environment: {
-          BEDROCK_MODEL_ID: bedrockModelId
+          BEDROCK_MODEL_ID: bedrockModelId,
+          GENRE_TABLE_NAME: genreTable.tableName,
+          SPOT_CATEGORY_TABLE_NAME: spotCategoryTable.tableName
         },
         bundling: {
           // 既定では @aws-sdk/* と @smithy/* が外部化される。ランタイム同梱に
@@ -143,6 +161,9 @@ export class MichishiruStack extends cdk.Stack {
           sourceMap: false
         }
       });
+
+      genreTable.grantReadData(createRouteFn);
+      spotCategoryTable.grantReadData(createRouteFn);
 
       // Location Service（Places / Routes）はリソース単位の指定に対応しないため
       // resources は '*' になる。アクションを個別に絞ることで権限を限定する。

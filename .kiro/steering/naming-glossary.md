@@ -58,6 +58,7 @@ inclusion: always
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
 | スポットのカテゴリ | spotCategory | スポット検索に渡す種別（Places のカテゴリ） |
+| スポットのカテゴリID | spotCategoryId | `spotCategory` を識別する値。カテゴリマスタが持つ |
 | スポット数 | spotCount | 立ち寄ったスポットの個数 |
 | スポット種別 | spotType | スポットの種類（`park` / `shrine` / `cafe` / `viewpoint` / `city` / `gourmet`） |
 | 経由点 | waypoint | 経路を構成する座標の点。地図描画用 |
@@ -74,6 +75,8 @@ inclusion: always
 | 検索条件 | condition / conditions | 目的・ジャンル・距離をまとめたもの |
 | 目的 | purpose | 散歩の目的。ユーザーが1つ選ぶ |
 | ジャンル | genre | スポットの種類。ユーザーが1つ選ぶ |
+| ジャンルID | genreId | ジャンルを識別する値（`nature` / `city` / `history` / `gourmet`） |
+| ジャンル名 | genreName | ジャンルの表示名（`自然` / `街歩き` / `歴史` / `グルメ`） |
 | カテゴリ | category | ルートの分類（予約。現在は未使用） |
 
 #### 目的（purpose）の選択値
@@ -220,3 +223,4 @@ inclusion: always
 | 2026/09/02 | CI/CD導入に伴い「環境とデプロイ」の節を追加（stage / dev / prod / deploy）/ `development`・`staging`・`env` を表記揺れとして禁止 |
 | 2026/09/09 | 地図描画（Step 6）の実装に伴い「地図」へ `geometry` / `coordinates` / `bounds` / `mapStyle` を追加 / 「ルートとスポット」へ `spotId` を追加 |
 | 2026/09/09 | `createRoute`（Places + Bedrock + Routes）の実装に伴い「ルートとスポット」へ `routeTitle` / `conceptStory` / `candidateSpots` / `spotCategory`、「地図」へ `position` を追加 |
+| 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
