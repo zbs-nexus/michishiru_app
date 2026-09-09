@@ -51,9 +51,17 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: iac/package-lock.json
+          cache-dependency-path: |
+            iac/package-lock.json
+            backend/package-lock.json
+      # createRoute は esbuild で依存ごとバンドルするため、
+      # synth・test の前に backend の依存を揃えておく
+      - name: backend の依存を取得（Lambda のバンドルに必要）
+        working-directory: backend
+        run: npm ci
       - run: npm ci
       - run: npm run build
       - run: npm test
       # AWS 認証情報が不要な範囲で CloudFormation テンプレートの合成を検証する
-      - run: npx cdk synth
+      - name: CloudFormation テンプレートを合成して検証
+        run: npx cdk synth -c withBackend=true
