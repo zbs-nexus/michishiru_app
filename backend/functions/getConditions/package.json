@@ -1,0 +1,12 @@
+{
+  "name": "get-conditions",
+  "version": "1.0.0",
+  "description": "検索条件マスタ（目的・ジャンル・距離）を返すLambda関数",
+  "private": true,
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1118.0",
+    "@aws-sdk/lib-dynamodb": "3.1118.0"
+  }
+}
