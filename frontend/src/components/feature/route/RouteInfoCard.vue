@@ -14,7 +14,7 @@ defineProps({
     default: ''
   },
   /** 所要時間（分） */
-  duration: {
+  durationMinutes: {
     type: Number,
     required: true
   }
@@ -32,7 +32,7 @@ defineProps({
         {{ description }}
       </p>
       <p class="duration">
-        ⏱️ 約{{ duration }}分
+        ⏱️ 約{{ durationMinutes }}分
       </p>
     </div>
   </div>

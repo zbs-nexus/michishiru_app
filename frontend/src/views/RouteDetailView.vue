@@ -30,13 +30,16 @@ const handleStartNavigation = () => {
         ルート詳細
       </h2>
 
-      <RouteDetailMap :waypoints="routeStore.currentRoute.waypoints" />
+      <RouteDetailMap
+        :geometry="routeStore.currentRoute.geometry"
+        :spots="routeStore.currentRoute.spots"
+      />
 
       <div class="route-summary">
         <span class="shoe-icon">👟</span>
         <span class="label">総距離</span>
         <span class="distance">
-          {{ routeStore.currentRoute.distance.toFixed(1) }}<small>km</small>
+          {{ routeStore.currentRoute.distanceKm.toFixed(1) }}<small>km</small>
         </span>
       </div>
     </div>

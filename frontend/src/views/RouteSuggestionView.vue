@@ -45,12 +45,15 @@ const handleRegenerate = async () => {
         おすすめルート
       </h2>
 
-      <RouteMapPreview :waypoints="routeStore.currentRoute.waypoints" />
+      <RouteMapPreview
+        :geometry="routeStore.currentRoute.geometry"
+        :spots="routeStore.currentRoute.spots"
+      />
 
       <RouteInfoCard
         :route-name="routeStore.currentRoute.routeName"
         :description="routeStore.currentRoute.description"
-        :duration="routeStore.currentRoute.duration"
+        :duration-minutes="routeStore.currentRoute.durationMinutes"
       />
 
       <p
@@ -67,7 +70,7 @@ const handleRegenerate = async () => {
         <div class="distance-display">
           <span class="label">距離</span>
           <span class="value">
-            {{ routeStore.currentRoute.distance.toFixed(1) }}<small>km</small>
+            {{ routeStore.currentRoute.distanceKm.toFixed(1) }}<small>km</small>
           </span>
         </div>
         <div class="action-buttons">

@@ -392,75 +392,25 @@ body {
   margin-bottom: 16px;
 }
 
-.map-placeholder {
-  height: 280px;
-  background: linear-gradient(135deg, #E8F4E8 0%, #D4E8D4 100%);
-  position: relative;
-  background-image: 
-    linear-gradient(rgba(255,255,255,0.3) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.3) 1px, transparent 1px);
-  background-size: 40px 40px;
-}
-
-.map-placeholder.large {
-  height: 380px;
-}
-
-.route-line {
-  position: absolute;
-  top: 20%;
-  left: 25%;
-  width: 50%;
-  height: 60%;
-  border: 3px solid var(--primary-color);
-  border-radius: 20px;
-  border-top-left-radius: 50px;
-}
-
-.waypoint-marker {
-  position: absolute;
+/*
+ * 地図のスポットマーカー。
+ * MapLibre GL がマーカー要素をコンポーネントの外側へ挿入するため、
+ * <style scoped> では届かない。そのためグローバルに定義している。
+ */
+.spot-marker {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  font-size: 10px;
-  color: var(--text-dark);
-}
-
-.waypoint-icon {
-  font-size: 20px;
-  background: var(--white);
-  padding: 4px 8px;
-  border-radius: 8px;
-  box-shadow: var(--shadow);
-}
-
-.waypoint-name {
-  margin-top: 2px;
-  white-space: nowrap;
-}
-
-.origin {
-  position: absolute;
-  width: 16px;
-  height: 16px;
-  background: var(--primary-color);
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  border: 3px solid var(--white);
+  border: 2px solid var(--white);
+  background: var(--accent-green);
+  color: var(--white);
+  font-size: 13px;
+  font-weight: bold;
   box-shadow: var(--shadow);
-}
-
-.waypoint {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  background: var(--white);
-  border: 3px solid var(--primary-color);
-  border-radius: 50%;
-}
-
-.destination {
-  position: absolute;
-  font-size: 24px;
+  cursor: pointer;
 }
 
 /* ルート情報カード */
@@ -589,97 +539,6 @@ body {
 .map-full {
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, #E8F4E8 0%, #D4E8D4 100%);
-  background-image: 
-    linear-gradient(rgba(255,255,255,0.4) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.4) 1px, transparent 1px);
-  background-size: 50px 50px;
-}
-
-.current-location {
-  position: absolute;
-  bottom: 25%;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-  height: 20px;
-  background: #4285F4;
-  border-radius: 50%;
-  border: 4px solid var(--white);
-  box-shadow: 0 0 20px rgba(66,133,244,0.5);
-}
-
-.current-location::after {
-  content: '';
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 12px solid #4285F4;
-}
-
-.nav-route {
-  position: absolute;
-  bottom: 30%;
-  left: 50%;
-  width: 4px;
-  height: 40%;
-  background: repeating-linear-gradient(
-    to bottom,
-    var(--primary-color) 0,
-    var(--primary-color) 8px,
-    transparent 8px,
-    transparent 16px
-  );
-}
-
-.nav-waypoint {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-dark);
-}
-
-.nav-icon {
-  font-size: 16px;
-  background: var(--white);
-  padding: 6px;
-  border-radius: 50%;
-  box-shadow: var(--shadow);
-}
-
-.nav-icon.park { background: #E8F5E9; }
-.nav-icon.cafe { background: #FFF3E0; }
-.nav-icon.shrine { background: #F3E5F5; }
-
-.turn-indicator {
-  position: absolute;
-  top: 30%;
-  left: 55%;
-  width: 36px;
-  height: 36px;
-  background: var(--primary-color);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.turn-icon {
-  color: var(--white);
-  font-size: 20px;
-}
-
-.street-label {
-  position: absolute;
-  top: 45%;
-  right: 15%;
-  font-size: 11px;
-  color: var(--text-gray);
 }
 
 .nav-controls {
