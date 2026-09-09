@@ -38,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # ブランチ or 手動入力からデプロイ先の stage を決める
-      - name: デプロイ先の環境を決定
+      - name: デプロイ先の環境を決定する
         id: vars
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -56,14 +56,14 @@ jobs:
           node-version: 24
 
       # OIDC でデプロイ用 IAM ロールを引き受ける
-      - name: AWS 認証情報を設定（OIDC）
+      - name: AWS認証情報を設定する（OIDC）
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       # フロントエンドをビルドする（dist は cdk deploy で S3 へアップロードされる）
-      - name: フロントエンドをビルド
+      - name: フロントエンドをビルドする
         working-directory: frontend
         run: |
           npm ci
@@ -78,8 +78,8 @@ jobs:
       # 対象環境のスタックをデプロイする。
       # MichishiruStack 内の BucketDeployment が frontend/dist を S3 へ同期し、
       # CloudFront のキャッシュ無効化まで行う。
-      # -c withBackend=true でバックエンド（Lambda + API Gateway + DynamoDB）を含める。
-      - name: インフラをデプロイ（cdk deploy）
+      # withBackend=true でバックエンド（Lambda + API Gateway + DynamoDB）も含めてデプロイする。
+      - name: インフラをデプロイする（cdk deploy）
         working-directory: iac
         run: |
           npm ci
@@ -88,6 +88,6 @@ jobs:
             --require-approval never \
             --outputs-file cdk-outputs.json
 
-      - name: スタックの出力を表示
+      - name: スタックの出力を表示する
         working-directory: iac
         run: cat cdk-outputs.json

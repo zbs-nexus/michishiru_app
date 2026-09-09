@@ -94,15 +94,18 @@ export class MichishiruStack extends cdk.Stack {
         ]
       });
 
-      // Lambda: getRoute ハンドラ
       // backend は素の ESM JavaScript で、依存する AWS SDK v3 は Lambda ランタイムに
       // 同梱されるため、バンドルせず backend ディレクトリをそのままデプロイする。
+      // 複数の関数で同じコード資産を共有する。
+      const backendCode = lambda.Code.fromAsset(backendDir, {
+        exclude: ['node_modules', 'package-lock.json', '**/__tests__/**']
+      });
+
+      // Lambda: getRoute ハンドラ
       const getRouteFn = new lambda.Function(this, 'GetRouteFunction', {
         runtime: lambda.Runtime.NODEJS_LATEST,
         handler: 'functions/getRoute/handler.handler',
-        code: lambda.Code.fromAsset(backendDir, {
-          exclude: ['node_modules', 'package-lock.json', '**/__tests__/**']
-        }),
+        code: backendCode,
         memorySize: 256,
         timeout: cdk.Duration.seconds(10),
         environment: {
@@ -170,8 +173,34 @@ export class MichishiruStack extends cdk.Stack {
         })
       );
 
-      // API Gateway: GET /api/v1/routes（既存ルートの取得）
-      //              POST /api/v1/routes（条件からルートを生成）
+      // 検索条件マスタ（目的・ジャンル・距離）テーブル。
+      // このテーブルは CDK では作成しておらず、コンソールで手動作成済みのため名前で参照する。
+      // TODO: dev / prod でテーブルを分ける場合は名前を stage 別（例: Condition-dev）に切り替える。
+      const conditionTableName = 'michimaster';
+      const conditionTable = dynamodb.Table.fromTableName(
+        this,
+        'ConditionTable',
+        conditionTableName
+      );
+
+      // Lambda: getConditions ハンドラ（検索条件マスタの全項目を返す）
+      const getConditionsFn = new lambda.Function(this, 'GetConditionsFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        handler: 'functions/getConditions/handler.handler',
+        code: backendCode,
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          CONDITION_TABLE_NAME: conditionTable.tableName
+        }
+      });
+
+      conditionTable.grantReadData(getConditionsFn);
+
+      // API Gateway
+      //   GET  /api/v1/routes     既存ルートの取得
+      //   POST /api/v1/routes     条件からルートを生成
+      //   GET  /api/v1/conditions 検索条件マスタの取得
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
         description: 'ミチシル ルート取得 API',
@@ -180,12 +209,19 @@ export class MichishiruStack extends cdk.Stack {
         }
       });
 
-      const routesResource = api.root
-        .addResource('api')
-        .addResource('v1')
-        .addResource('routes');
+      const v1Resource = api.root.addResource('api').addResource('v1');
+
+      // GET /api/v1/routes
+      const routesResource = v1Resource.addResource('routes');
       routesResource.addMethod('GET', new apigateway.LambdaIntegration(getRouteFn));
       routesResource.addMethod('POST', new apigateway.LambdaIntegration(createRouteFn));
+
+      // GET /api/v1/conditions
+      const conditionsResource = v1Resource.addResource('conditions');
+      conditionsResource.addMethod(
+        'GET',
+        new apigateway.LambdaIntegration(getConditionsFn)
+      );
 
       apiOrigin = new origins.RestApiOrigin(api);
 

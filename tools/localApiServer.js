@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { handler as createRouteHandler } from '../backend/functions/createRoute/handler.js';
+import { handler as getConditionsHandler } from '../backend/functions/getConditions/handler.js';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
 
 /**
@@ -21,7 +22,8 @@ const HOST = '127.0.0.1';
  */
 const ROUTE_HANDLERS = [
   { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
-  { method: 'POST', path: '/api/v1/routes', invoke: createRouteHandler }
+  { method: 'POST', path: '/api/v1/routes', invoke: createRouteHandler },
+  { method: 'GET', path: '/api/v1/conditions', invoke: getConditionsHandler }
 ];
 
 /**
