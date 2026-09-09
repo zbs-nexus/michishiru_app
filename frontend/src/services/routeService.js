@@ -55,3 +55,66 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
 
   return response.json();
 };
+
+/**
+ * @description ルート作成APIへ送るリクエストボディを組み立てる。
+ * 変換箇所をこの1関数に閉じ込め、API側のキー名が変わってもここだけの修正で済むようにする。
+ *
+ * キー名と値の形はルート作成Lambdaの受け口に合わせている。
+ * ジャンルは表示名（例: 自然）を送り、Amazon Location ServiceのcategoryIDへの
+ * 変換はLambda側が行う。
+ * @param {object} conditions 検索条件
+ * @param {string} conditions.genreName ジャンルの表示名
+ * @param {number} conditions.distanceKm 希望距離（km）
+ * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
+ * @returns {object} リクエストボディ
+ */
+const buildCreateRouteBody = ({ genreName, distanceKm, currentLocation }) => ({
+  purposeCategory: genreName,
+  targetDistanceKm: distanceKm,
+  currentLocation: {
+    lng: currentLocation.lng,
+    lat: currentLocation.lat
+  }
+});
+
+/**
+ * @description 入力条件を渡してルートを新規生成する。
+ * 生成処理そのものはLambda（Amazon Location Serviceの呼び出し）が担う。
+ *
+ * ここで送るJSONはAPI Gatewayがイベントの`body`へ格納するため、
+ * Lambdaが受け取る形は
+ * `{ "body": { "purposeCategory": ..., "targetDistanceKm": ..., "currentLocation": ... } }`
+ * に相当する。フロント側で`body`キーを付けると二重入れ子になるため付けない。
+ * @param {object} conditions 検索条件
+ * @param {string} conditions.genreName ジャンルの表示名
+ * @param {number} conditions.distanceKm 希望距離（km）
+ * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
+ * @returns {Promise<object>} 生成されたルート情報
+ * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
+ */
+export const createRoute = async ({
+  genreName,
+  distanceKm,
+  currentLocation
+}) => {
+  const response = await fetch(`${API_BASE_PATH}/routes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(
+      buildCreateRouteBody({ genreName, distanceKm, currentLocation })
+    )
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response));
+  }
+
+  if (!isJsonResponse(response)) {
+    throw new Error(
+      'ルート作成APIに接続できません（JSON以外の応答を受け取りました）'
+    );
+  }
+
+  return response.json();
+};

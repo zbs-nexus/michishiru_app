@@ -38,7 +38,7 @@ inclusion: always
 
 | 語 | 何を指すか | 状態 |
 |---|---|---|
-| `genre` | スポットの種類。ユーザーがホーム画面で1つ選ぶ（自然・街歩き・歴史・グルメ） | 使用中 |
+| `genre` | スポットの種類。ユーザーがホーム画面で1つ選ぶ | 使用中 |
 | `category` | ルートの分類 | 予約。現在は未使用 |
 
 `ミチシル_前提条件.md` の「ジャンル」は `genre` を指す。
@@ -71,23 +71,7 @@ inclusion: always
 | ジャンル | genre | スポットの種類。ユーザーが1つ選ぶ |
 | カテゴリ | category | ルートの分類（予約。現在は未使用） |
 
-#### 目的（purpose）の選択値
-
-| 日本語 | 値 |
-|---|---|
-| 気分転換 | refresh |
-| 運動 | exercise |
-| 観光 | sightseeing |
-| カフェ | cafe |
-
-#### ジャンル（genre）の選択値
-
-| 日本語 | 値 |
-|---|---|
-| 自然 | nature |
-| 街歩き | city |
-| 歴史 | history |
-| グルメ | gourmet |
+目的・ジャンルの選択値は暫定だったため本ファイルからは削除した。実際に選べる値は検索条件マスタ（`michimaster` テーブル）が持つ。
 
 ### 画面と操作
 
@@ -208,3 +192,4 @@ inclusion: always
 | - | 初版作成 |
 | 2026/09/02 | `spot` を解禁し `waypoint` と役割を分離 / `genre` を追加し `category` を予約に変更 / 使用中で未登録だった語（purpose, condition, walk, suggestion, navigation, regenerate, loading, spotType, spotCount, totalDistance, 選択値）を追加 / 略語の優先順位を追記 |
 | 2026/09/02 | CI/CD導入に伴い「環境とデプロイ」の節を追加（stage / dev / prod / deploy）/ `development`・`staging`・`env` を表記揺れとして禁止 |
+| 2026/09/09 | 目的（purpose）とジャンル（genre）の選択値の表を削除（暫定だったため）。実際の値は検索条件マスタが持つ |
