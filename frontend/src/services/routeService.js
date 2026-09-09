@@ -101,7 +101,7 @@ const buildCreateRouteBody = ({ genreName, distanceKm, currentLocation }) => ({
  * @param {string} conditions.genreName ジャンルの表示名
  * @param {number} conditions.distanceKm 希望距離（km）
  * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
- * @returns {Promise<object>} 生成されたルート情報
+ * @returns {Promise<object>} 画面で扱う形に変換したルート情報
  * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
  */
 export const createRoute = async ({
@@ -127,5 +127,6 @@ export const createRoute = async ({
     );
   }
 
-  return response.json();
+  // 生成APIのレスポンスはsnake_case・メートル・秒のため、画面で扱う形へ変換する
+  return toRoute(await response.json());
 };
