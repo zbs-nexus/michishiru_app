@@ -55,5 +55,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm test
-      # AWS 認証情報が不要な範囲で CloudFormation テンプレートの合成を検証する
-      - run: npx cdk synth
+      # AWS 認証情報が不要な範囲で CloudFormation テンプレートの合成を検証する。
+      # withBackend=true でバックエンド（Lambda + API Gateway + DynamoDB）の合成まで検証する。
+      - run: npx cdk synth -c withBackend=true
