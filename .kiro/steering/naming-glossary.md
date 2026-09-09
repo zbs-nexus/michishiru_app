@@ -38,7 +38,7 @@ inclusion: always
 
 | 語 | 何を指すか | 状態 |
 |---|---|---|
-| `genre` | スポットの種類。ユーザーがホーム画面で1つ選ぶ | 使用中 |
+| `genre` | スポットの種類。ユーザーがホーム画面で1つ選ぶ（自然・街歩き・歴史・グルメ） | 使用中 |
 | `category` | ルートの分類 | 予約。現在は未使用 |
 
 `ミチシル_前提条件.md` の「ジャンル」は `genre` を指す。
@@ -52,7 +52,12 @@ inclusion: always
 | 日本語 | 英語（コード上） | 説明 |
 |---|---|---|
 | ルート | route | 出発地から目的地までの経路 |
+| ルートタイトル | routeTitle | AIが生成したルートの見出し |
+| 解説文 | conceptStory | AIが生成したルートの見どころの説明 |
 | スポット | spot | ユーザーが立ち寄る場所（公園・神社・カフェ等） |
+| スポットID | spotId | スポットを一意に識別する値 |
+| 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
+| スポットのカテゴリ | spotCategory | スポット検索に渡す種別（Places のカテゴリ） |
 | スポット数 | spotCount | 立ち寄ったスポットの個数 |
 | スポット種別 | spotType | スポットの種類（`park` / `shrine` / `cafe` / `viewpoint` / `city` / `gourmet`） |
 | 経由点 | waypoint | 経路を構成する座標の点。地図描画用 |
@@ -71,7 +76,23 @@ inclusion: always
 | ジャンル | genre | スポットの種類。ユーザーが1つ選ぶ |
 | カテゴリ | category | ルートの分類（予約。現在は未使用） |
 
-目的・ジャンルの選択値は暫定だったため本ファイルからは削除した。実際に選べる値は検索条件マスタ（`michimaster` テーブル）が持つ。
+#### 目的（purpose）の選択値
+
+| 日本語 | 値 |
+|---|---|
+| 気分転換 | refresh |
+| 運動 | exercise |
+| 観光 | sightseeing |
+| カフェ | cafe |
+
+#### ジャンル（genre）の選択値
+
+| 日本語 | 値 |
+|---|---|
+| 自然 | nature |
+| 街歩き | city |
+| 歴史 | history |
+| グルメ | gourmet |
 
 ### 画面と操作
 
@@ -93,6 +114,11 @@ inclusion: always
 | ズーム | zoom | 地図の拡大率 |
 | ピン | pin | 地図上に表示するマーカー |
 | マーカー | marker | 地図上の地点を示すアイコン |
+| 経路形状 | geometry | ルートの線を描くためのGeoJSON。`type` は `LineString` |
+| 座標 | position | 1点の座標。`[経度, 緯度]` の配列。地図APIの入出力形式に合わせている |
+| 座標列 | coordinates | `geometry` が持つ `[経度, 緯度]` の配列。経路上の座標点（= `waypoint`）の集まり |
+| 表示範囲 | bounds | 地図に収める矩形。`[[南西の経度, 緯度], [北東の経度, 緯度]]` |
+| 地図スタイル | mapStyle | 地図の見た目とタイル配信元の定義 |
 
 ### 環境とデプロイ
 
@@ -192,4 +218,5 @@ inclusion: always
 | - | 初版作成 |
 | 2026/09/02 | `spot` を解禁し `waypoint` と役割を分離 / `genre` を追加し `category` を予約に変更 / 使用中で未登録だった語（purpose, condition, walk, suggestion, navigation, regenerate, loading, spotType, spotCount, totalDistance, 選択値）を追加 / 略語の優先順位を追記 |
 | 2026/09/02 | CI/CD導入に伴い「環境とデプロイ」の節を追加（stage / dev / prod / deploy）/ `development`・`staging`・`env` を表記揺れとして禁止 |
-| 2026/09/09 | 目的（purpose）とジャンル（genre）の選択値の表を削除（暫定だったため）。実際の値は検索条件マスタが持つ |
+| 2026/09/09 | 地図描画（Step 6）の実装に伴い「地図」へ `geometry` / `coordinates` / `bounds` / `mapStyle` を追加 / 「ルートとスポット」へ `spotId` を追加 |
+| 2026/09/09 | `createRoute`（Places + Bedrock + Routes）の実装に伴い「ルートとスポット」へ `routeTitle` / `conceptStory` / `candidateSpots` / `spotCategory`、「地図」へ `position` を追加 |
