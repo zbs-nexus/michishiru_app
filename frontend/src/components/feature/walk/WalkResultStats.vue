@@ -4,17 +4,17 @@
  */
 defineProps({
   /** 総距離（km） */
-  distance: {
+  distanceKm: {
     type: Number,
     required: true
   },
-  /** 巡った経由地の数 */
-  waypointCount: {
+  /** 巡ったスポットの数 */
+  spotCount: {
     type: Number,
     required: true
   },
   /** 所要時間（分） */
-  duration: {
+  durationMinutes: {
     type: Number,
     required: true
   }
@@ -25,15 +25,15 @@ defineProps({
   <div class="result-stats">
     <div class="stat-item">
       <span class="stat-label">総距離</span>
-      <span class="stat-value">{{ distance }} km</span>
+      <span class="stat-value">{{ distanceKm.toFixed(1) }} km</span>
     </div>
     <div class="stat-item">
       <span class="stat-label">巡ったスポット</span>
-      <span class="stat-value">{{ waypointCount }} 箇所</span>
+      <span class="stat-value">{{ spotCount }} 箇所</span>
     </div>
     <div class="stat-item">
       <span class="stat-label">所要時間</span>
-      <span class="stat-value">{{ duration }} 分</span>
+      <span class="stat-value">{{ durationMinutes }} 分</span>
     </div>
   </div>
 </template>

@@ -3,7 +3,9 @@ import * as fs from 'node:fs';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as nodejs from 'aws-cdk-lib/aws-lambda-nodejs';
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as cloudfront from 'aws-cdk-lib/aws-cloudfront';
@@ -15,6 +17,12 @@ const backendDir = path.resolve(__dirname, '..', '..', 'backend');
 
 /** フロントエンドのビルド成果物ディレクトリ */
 const frontendDistDir = path.resolve(__dirname, '..', '..', 'frontend', 'dist');
+
+/**
+ * ルート生成に使う Bedrock のモデル ID（クロスリージョン推論プロファイル）。
+ * Lambda 側の既定値と揃えており、環境変数で上書きできるようにするために IaC でも持つ。
+ */
+const bedrockModelId = 'jp.anthropic.claude-haiku-4-5-20251001-v1:0';
 
 /** デプロイ対象の環境（ステージ） */
 export type Stage = 'dev' | 'prod';
@@ -107,6 +115,64 @@ export class MichishiruStack extends cdk.Stack {
 
       routeTable.grantReadData(getRouteFn);
 
+      // Lambda: createRoute ハンドラ（Places + Bedrock + Routes でルートを生成する）
+      // getRoute と違い AWS SDK v3 の geo-places / geo-routes / bedrock-runtime に依存する。
+      // これらが Lambda ランタイムに同梱されている保証がないため、esbuild で
+      // 依存ごと1ファイルにバンドルしてデプロイする。
+      //
+      // バンドルは backend/ を作業ディレクトリとして実行されるため、
+      // synth / deploy の前に backend で `npm ci` を済ませておく必要がある
+      // （依存の解決と esbuild 本体の両方を backend/node_modules から読む）。
+      const createRouteFn = new nodejs.NodejsFunction(this, 'CreateRouteFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        entry: path.join(backendDir, 'functions', 'createRoute', 'handler.js'),
+        handler: 'handler',
+        projectRoot: backendDir,
+        depsLockFilePath: path.join(backendDir, 'package-lock.json'),
+        memorySize: 512,
+        // API Gateway (REST) の統合タイムアウト上限が 29 秒のため、それに合わせる
+        timeout: cdk.Duration.seconds(29),
+        environment: {
+          BEDROCK_MODEL_ID: bedrockModelId
+        },
+        bundling: {
+          // 既定では @aws-sdk/* と @smithy/* が外部化される。ランタイム同梱に
+          // 依存しないよう、明示的に空にしてすべてバンドルへ含める。
+          externalModules: [],
+          minify: true,
+          sourceMap: false
+        }
+      });
+
+      // Location Service（Places / Routes）はリソース単位の指定に対応しないため
+      // resources は '*' になる。アクションを個別に絞ることで権限を限定する。
+      createRouteFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          sid: 'SearchNearbySpots',
+          actions: ['geo-places:SearchNearby'],
+          resources: ['*']
+        })
+      );
+      createRouteFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          sid: 'CalculateWalkingRoutes',
+          actions: ['geo-routes:CalculateRoutes'],
+          resources: ['*']
+        })
+      );
+      // クロスリージョン推論プロファイルは、プロファイル自体と転送先の
+      // 基盤モデルの両方に対する許可が必要になる。
+      createRouteFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          sid: 'InvokeBedrockModel',
+          actions: ['bedrock:InvokeModel'],
+          resources: [
+            `arn:aws:bedrock:${this.region}:${this.account}:inference-profile/${bedrockModelId}`,
+            'arn:aws:bedrock:*::foundation-model/anthropic.*'
+          ]
+        })
+      );
+
       // 検索条件マスタ（目的・ジャンル・距離）テーブル。
       // このテーブルは CDK では作成しておらず、コンソールで手動作成済みのため名前で参照する。
       // TODO: dev / prod でテーブルを分ける場合は名前を stage 別（例: Condition-dev）に切り替える。
@@ -131,7 +197,10 @@ export class MichishiruStack extends cdk.Stack {
 
       conditionTable.grantReadData(getConditionsFn);
 
-      // API Gateway: GET /api/v1/routes
+      // API Gateway
+      //   GET  /api/v1/routes     既存ルートの取得
+      //   POST /api/v1/routes     条件からルートを生成
+      //   GET  /api/v1/conditions 検索条件マスタの取得
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
         description: 'ミチシル ルート取得 API',
@@ -145,6 +214,7 @@ export class MichishiruStack extends cdk.Stack {
       // GET /api/v1/routes
       const routesResource = v1Resource.addResource('routes');
       routesResource.addMethod('GET', new apigateway.LambdaIntegration(getRouteFn));
+      routesResource.addMethod('POST', new apigateway.LambdaIntegration(createRouteFn));
 
       // GET /api/v1/conditions
       const conditionsResource = v1Resource.addResource('conditions');

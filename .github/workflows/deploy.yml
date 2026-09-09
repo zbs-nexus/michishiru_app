@@ -69,6 +69,12 @@ jobs:
           npm ci
           npm run build
 
+      # createRoute の Lambda は esbuild で依存ごとバンドルするため、
+      # cdk deploy の前に backend の依存を揃えておく
+      - name: backend の依存を取得（Lambda のバンドルに必要）
+        working-directory: backend
+        run: npm ci
+
       # 対象環境のスタックをデプロイする。
       # MichishiruStack 内の BucketDeployment が frontend/dist を S3 へ同期し、
       # CloudFront のキャッシュ無効化まで行う。

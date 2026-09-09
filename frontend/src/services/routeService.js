@@ -1,13 +1,24 @@
 import { isJsonResponse } from '@/utils/apiResponse';
+import { toRoute } from '@/utils/routeResponse';
 
 /**
  * @description ルートリソースのAPI通信を担当する。
- * レスポンスのデータ部分のみを返し、失敗時は例外を投げる。
+ * レスポンスを画面で扱う形へ変換して返し、失敗時は例外を投げる。
  * 例外の捕捉はcomposableが行う。
  */
 
 /** APIのベースパス */
 const API_BASE_PATH = '/api/v1';
+
+/**
+ * ルート作成APIのエンドポイント。
+ * 既定はCloudFrontの /api/* 配下（同一オリジン）で、ローカルではViteのプロキシが
+ * APIハーネスへ転送する。ルート生成API（Bedrock + Location Service）を
+ * 別のAPI Gatewayで動かしている間は、`frontend/.env.local` の
+ * VITE_ROUTE_API_URL にそのURLを設定して切り替える。
+ */
+const ROUTE_API_URL =
+  import.meta.env.VITE_ROUTE_API_URL ?? `${API_BASE_PATH}/routes`;
 
 /**
  * @description エラーレスポンスからメッセージを取り出す
@@ -28,7 +39,7 @@ const extractErrorMessage = async (response) => {
  * @param {object} conditions 検索条件
  * @param {string} conditions.genre ジャンル
  * @param {number} conditions.distanceKm 希望距離（km）
- * @returns {Promise<object>} ルート情報
+ * @returns {Promise<object>} 画面で扱う形に変換したルート情報
  * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
  */
 export const fetchRoute = async ({ genre, distanceKm }) => {
@@ -40,7 +51,7 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
     distance: String(distanceKm)
   });
 
-  const response = await fetch(`${API_BASE_PATH}/routes?${query.toString()}`);
+  const response = await fetch(`${ROUTE_API_URL}?${query.toString()}`);
 
   if (!response.ok) {
     throw new Error(await extractErrorMessage(response));
@@ -53,5 +64,5 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
     );
   }
 
-  return response.json();
+  return toRoute(await response.json());
 };
