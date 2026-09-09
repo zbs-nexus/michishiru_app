@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { handler as createRouteHandler } from '../backend/functions/createRoute/handler.js';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
 
 /**
@@ -13,22 +14,46 @@ const PORT = Number(process.env.LOCAL_API_PORT ?? 3001);
 /** ループバックのみで待ち受ける（外部公開はViteのプロキシ経由に限定する） */
 const HOST = '127.0.0.1';
 
-/** パスとLambdaハンドラの対応 */
+/**
+ * パスとLambdaハンドラの対応。
+ * createRoute は Location Service と Bedrock を実際に呼び出すため、
+ * ローカルで叩くにはAWSの認証情報（`AWS_PROFILE` 等）が必要になる。
+ */
 const ROUTE_HANDLERS = [
-  { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler }
+  { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
+  { method: 'POST', path: '/api/v1/routes', invoke: createRouteHandler }
 ];
+
+/**
+ * @description リクエストボディを文字列として読み切る
+ * @param {import('node:http').IncomingMessage} request 受信したリクエスト
+ * @returns {Promise<string|null>} ボディ。空の場合はnull
+ */
+const readRequestBody = async (request) => {
+  const chunks = [];
+
+  for await (const chunk of request) {
+    chunks.push(chunk);
+  }
+
+  const body = Buffer.concat(chunks).toString('utf8');
+
+  return body === '' ? null : body;
+};
 
 /**
  * @description Node.jsのリクエストからAPI Gateway相当のイベントを作る
  * @param {import('node:http').IncomingMessage} request 受信したリクエスト
  * @param {URL} requestUrl 解析済みのURL
+ * @param {string|null} body 読み取り済みのリクエストボディ
  * @returns {object} ハンドラへ渡すイベント
  */
-const buildEvent = (request, requestUrl) => ({
+const buildEvent = (request, requestUrl, body) => ({
   httpMethod: request.method,
   path: requestUrl.pathname,
   queryStringParameters: Object.fromEntries(requestUrl.searchParams.entries()),
-  headers: request.headers
+  headers: request.headers,
+  body
 });
 
 const server = createServer(async (request, response) => {
@@ -47,7 +72,8 @@ const server = createServer(async (request, response) => {
   }
 
   try {
-    const result = await matched.invoke(buildEvent(request, requestUrl));
+    const body = await readRequestBody(request);
+    const result = await matched.invoke(buildEvent(request, requestUrl, body));
 
     response.writeHead(result.statusCode, result.headers);
     response.end(result.body);
@@ -61,5 +87,8 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`ローカルAPIハーネス起動: http://${HOST}:${PORT}/api/v1/routes`);
+  console.log(`ローカルAPIハーネス起動: http://${HOST}:${PORT}`);
+  for (const route of ROUTE_HANDLERS) {
+    console.log(`  ${route.method} ${route.path}`);
+  }
 });
