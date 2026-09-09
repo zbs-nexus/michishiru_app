@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
+import { handler as getConditionsHandler } from '../backend/functions/getConditions/handler.js';
 
 /**
  * @description ローカル開発用のAPIハーネス。
@@ -15,7 +16,8 @@ const HOST = '127.0.0.1';
 
 /** パスとLambdaハンドラの対応 */
 const ROUTE_HANDLERS = [
-  { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler }
+  { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
+  { method: 'GET', path: '/api/v1/conditions', invoke: getConditionsHandler }
 ];
 
 /**
@@ -61,5 +63,8 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log(`ローカルAPIハーネス起動: http://${HOST}:${PORT}/api/v1/routes`);
+  console.log(`ローカルAPIハーネス起動: http://${HOST}:${PORT}`);
+  for (const route of ROUTE_HANDLERS) {
+    console.log(`  ${route.method} ${route.path}`);
+  }
 });

@@ -7,12 +7,12 @@ import { isJsonResponse } from '@/utils/apiResponse';
  */
 
 /**
- * 検索条件マスタAPIのベースURL。
- * TODO: CloudFrontの /api/* 配下へ統合し、同一オリジンで呼び出せるようにする
- * （前提条件書のとおり、統合後はCORS設定が不要になる）
+ * APIのベースパス。
+ * ホスト名を持たない相対パスにすることで、背後のLambda/API Gatewayの
+ * 物理名やURLに依存せず、同一オリジン（本番はCloudFrontの /api/* 転送、
+ * ローカルはViteのプロキシ）で呼び出せる。
  */
-const CONDITION_API_BASE_URL =
-  'https://152wqulx7l.execute-api.ap-northeast-1.amazonaws.com/dev';
+const API_BASE_PATH = '/api/v1';
 
 /** ジャンルの項目を示すキー */
 const GENRE_ITEM_KEY = 'GENRE#ALL';
@@ -57,7 +57,7 @@ const toDistanceRange = (distanceItems) => {
  * @throws {Error} 通信に失敗した場合、またはマスタの項目が不足している場合
  */
 export const fetchConditionOptions = async () => {
-  const response = await fetch(`${CONDITION_API_BASE_URL}/`);
+  const response = await fetch(`${API_BASE_PATH}/conditions`);
 
   if (!response.ok) {
     throw new Error(`検索条件の取得に失敗しました（${response.status}）`);
