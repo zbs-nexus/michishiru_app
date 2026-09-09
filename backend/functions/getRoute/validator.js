@@ -25,7 +25,7 @@ export const validateGetRouteRequest = (query = {}) => {
   const rawDistance = query.distance ?? null;
 
   if (!purpose) {
-    errorMessages.push('デプロイ成功しました');
+    errorMessages.push('purposeは必須です');
   } else if (!ALLOWED_PURPOSES.includes(purpose)) {
     errorMessages.push(`purposeが不正です（許可値: ${ALLOWED_PURPOSES.join(', ')}）`);
   }
