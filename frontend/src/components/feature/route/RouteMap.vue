@@ -1,5 +1,5 @@
 <script setup>
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
 // MapLibre GL v6 は名前付きエクスポートのみを提供する（既定エクスポートは無い）。
 // 地図クラスは組み込みの Map と名前が衝突するため、別名の MapLibreMap を使う。
 import { MapLibreMap, Marker, NavigationControl, Popup } from 'maplibre-gl';
@@ -65,15 +65,30 @@ let map = null;
 let markers = [];
 
 /**
- * @description 座標列をGeoJSONのFeatureへ包む
+ * @description 座標列をGeoJSONのFeatureへ包む。
+ *
+ * MapLibre は geojson のデータをワーカースレッドへ構造化複製で渡す。
+ * Piniaのストア経由で受け取った値はリアクティブなProxyになっており、
+ * そのまま渡すと複製に失敗して線が描かれない。失敗はワーカー側で起きるため
+ * 画面には何も出ず、線だけが静かに欠ける。
+ * ここで素の数値の配列へ作り直してから渡すこと。
  * @param {object|null} geometry 経路の形
  * @returns {object} ソースへ渡すGeoJSON
  */
-const toRouteFeature = (geometry) => ({
-  type: 'Feature',
-  properties: {},
-  geometry: geometry ?? { type: 'LineString', coordinates: [] }
-});
+const toRouteFeature = (geometry) => {
+  const rawGeometry = geometry === null ? null : toRaw(geometry);
+
+  const coordinates = (rawGeometry?.coordinates ?? []).map((position) => [
+    Number(position[0]),
+    Number(position[1])
+  ]);
+
+  return {
+    type: 'Feature',
+    properties: {},
+    geometry: { type: 'LineString', coordinates }
+  };
+};
 
 /**
  * @description スポットの見出し要素を組み立てる。
@@ -119,18 +134,21 @@ const fitToRoute = () => {
  * @returns {void}
  */
 const renderRouteLine = () => {
-  hasNoGeometry.value = props.geometry === null;
+  const routeFeature = toRouteFeature(props.geometry);
+
+  // 1点だけでは線にならないため、実際に線を引ける座標数で判定する
+  hasNoGeometry.value = routeFeature.geometry.coordinates.length < 2;
 
   const source = map.getSource(ROUTE_SOURCE_ID);
 
   if (source) {
-    source.setData(toRouteFeature(props.geometry));
+    source.setData(routeFeature);
     return;
   }
 
   map.addSource(ROUTE_SOURCE_ID, {
     type: 'geojson',
-    data: toRouteFeature(props.geometry)
+    data: routeFeature
   });
 
   // 縁取りを先に敷いてから本体を重ね、地図の背景に紛れないようにする
@@ -182,6 +200,12 @@ onMounted(() => {
     zoom: DEFAULT_ZOOM_LEVEL,
     interactive: props.isInteractive,
     attributionControl: { compact: true }
+  });
+
+  // ソースやタイルの失敗はワーカースレッドで起きるため、
+  // ここで拾わないと画面には何も出ずに描画だけが欠ける
+  map.on('error', (event) => {
+    console.error('地図の描画に失敗しました', event.error ?? event);
   });
 
   if (props.isInteractive) {
