@@ -10,18 +10,19 @@ import { useRouteStore } from '@/stores/routeStore';
 
 /**
  * @description 提案されたルートを確認する画面。
- * 決定で詳細へ進み、再作成で同じ条件のまま作り直す。
+ * 決定で案内へ進み、再作成で同じ条件のまま作り直す。
  */
 const router = useRouter();
 const routeStore = useRouteStore();
 const { isCreating, errorMessage, createRoute } = useRouteCreation();
 
 /**
- * @description 提案を確定して詳細画面へ進む
+ * @description 提案を確定して案内画面へ進む。
+ * 詳細画面は挟まず、決定した時点で案内を開始する。
  * @returns {void}
  */
 const handleConfirm = () => {
-  router.push({ name: 'route-detail' });
+  router.push({ name: 'route-navigation' });
 };
 
 /**
