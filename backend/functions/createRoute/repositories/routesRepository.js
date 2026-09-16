@@ -236,11 +236,41 @@ const estimateMetricsFromCoordinates = (coordinates) => {
 };
 
 /**
+ * @description 各スポットのスナップ後座標と、元座標からの乖離距離（m）を求める。
+ * CalculateRoutes は Waypoint を歩行可能な道路網へスナップして経路を引くため、
+ * スポットが徒歩到達困難だと元座標とスナップ後座標が離れる。
+ * Leg[i]（スポット i へ到着する区間）の座標列の末尾を、スポット i のスナップ後座標とみなす。
+ * 取得できない場合は元座標を使う（乖離0扱い）。
+ * @param {object|null} route Routesが返した経路
+ * @param {object[]} spots 経由するスポットの一覧
+ * @returns {{positions: number[][], strayDistancesM: number[]}} スナップ後座標と乖離距離（spotsと同順）
+ */
+const extractSnappedSpotInfo = (route, spots) => {
+  const legs = route?.Legs ?? [];
+  const positions = [];
+  const strayDistancesM = [];
+
+  spots.forEach((spot, index) => {
+    const lineString = legs[index]?.Geometry?.LineString ?? [];
+    const arrivalPoint = lineString.at(-1);
+    const snapped =
+      Array.isArray(arrivalPoint) && arrivalPoint.length >= 2
+        ? arrivalPoint
+        : spot.position;
+
+    positions.push(snapped);
+    strayDistancesM.push(calculateHaversineDistanceM(spot.position, snapped));
+  });
+
+  return { positions, strayDistancesM };
+};
+
+/**
  * @description スポットを順に巡り、出発地へ戻る徒歩経路を計算する
  * @param {object} conditions 計算条件
  * @param {{lat: number, lng: number}} conditions.currentLocation 出発地かつ目的地となる現在地
  * @param {object[]} conditions.spots 経由するスポットの一覧
- * @returns {Promise<{coordinates: number[][], totalDistanceM: number, totalDurationS: number}>} 経路の座標列と距離・所要時間
+ * @returns {Promise<{coordinates: number[][], totalDistanceM: number, totalDurationS: number, spotSnappedPositions: number[][], spotStrayDistancesM: number[]}>} 経路の座標列・距離・所要時間と、各スポットのスナップ後座標・乖離距離
  * @throws {ApplicationError} 外部サービスへのアクセスに失敗した場合
  */
 export const calculateWalkingRoute = async ({ currentLocation, spots }) => {
@@ -276,10 +306,14 @@ export const calculateWalkingRoute = async ({ currentLocation, spots }) => {
   const metrics =
     summed.totalDistanceM > 0 ? summed : estimateMetricsFromCoordinates(coordinates);
 
+  const snapped = extractSnappedSpotInfo(route, spots);
+
   return {
     // 描画用の座標は形状を保ったまま間引いて、応答サイズと描画コストを抑える
     coordinates: simplifyCoordinates(coordinates),
     totalDistanceM: metrics.totalDistanceM,
-    totalDurationS: metrics.totalDurationS
+    totalDurationS: metrics.totalDurationS,
+    spotSnappedPositions: snapped.positions,
+    spotStrayDistancesM: snapped.strayDistancesM
   };
 };

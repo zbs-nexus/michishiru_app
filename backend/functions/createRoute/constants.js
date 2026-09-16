@@ -157,6 +157,14 @@ export const EARTH_RADIUS_M = 6371000;
  */
 export const SIMPLIFY_TOLERANCE_M = 5;
 
+/**
+ * スポットが経路から外れていると判定するしきい値（m）。
+ * スポットの元座標と、徒歩経路上のスナップ後座標との距離がこれを超える場合、
+ * 一般の歩行者が到達できない地点（例: 皇居内の施設）とみなして経路から除外する。
+ * 通常のスナップ（最寄りの歩道まで）は数十m以内に収まるため、それより大きく取る。
+ */
+export const STRANDED_DISTANCE_THRESHOLD_M = 150;
+
 /** 受け付ける緯度の範囲 */
 export const LATITUDE_RANGE = { min: -90, max: 90 };
 

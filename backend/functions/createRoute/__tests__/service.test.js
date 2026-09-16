@@ -26,6 +26,7 @@ const createSpot = (name) => ({ name, position: [139.703, 35.686] });
  * @param {string[]} [options.failingCategoryIds] 検索が失敗するカテゴリID
  * @param {object[][]} [options.plannedSpotsSequence] 生成が返すスポットの配列（呼び出し順）
  * @param {number[]} [options.distancesM] 経路計算が呼ばれた順に返す総距離（m）
+ * @param {string[]} [options.strandedSpotNames] 経路から大きく外れている（乖離大）とみなすスポット名
  * @returns {{repositories: object, calls: object}} 差し替え用のリポジトリと呼び出し記録
  */
 const createRepositoryStub = ({
@@ -37,7 +38,8 @@ const createRepositoryStub = ({
   },
   failingCategoryIds = [],
   plannedSpotsSequence = [[createSpot('スポット1'), createSpot('スポット2'), createSpot('スポット3')]],
-  distancesM = [3000]
+  distancesM = [3000],
+  strandedSpotNames = []
 } = {}) => {
   const calls = { calculateWalkingRoute: [], searchNearbySpots: [], prompts: [] };
   let callIndex = 0;
@@ -77,7 +79,12 @@ const createRepositoryStub = ({
           [139.704, 35.687]
         ],
         totalDistanceM,
-        totalDurationS: 600
+        totalDurationS: 600,
+        // スナップ後座標は元座標と同一とし、乖離は strandedSpotNames のスポットだけ大きくする
+        spotSnappedPositions: spots.map((spot) => spot.position),
+        spotStrayDistancesM: spots.map((spot) =>
+          strandedSpotNames.includes(spot.name) ? 500 : 0
+        )
       };
     }
   };
@@ -248,5 +255,41 @@ describe('createRoute', () => {
 
     assert.deepEqual(calls.calculateWalkingRoute, [3]);
     assert.equal(result.totalDistanceM, 3500);
+  });
+
+  it('経路から大きく外れたスポット（徒歩到達困難）を除外して再計算する', async () => {
+    // スポット1が経路から500m外れている（例: 皇居内の施設）。除外して残り2スポットで再計算する
+    const { repositories, calls } = createRepositoryStub({
+      plannedSpotsSequence: [
+        [createSpot('スポット1'), createSpot('スポット2'), createSpot('スポット3')]
+      ],
+      strandedSpotNames: ['スポット1'],
+      distancesM: [3000, 3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    // 3スポットで計算 → 乖離スポットを除外 → 2スポットで再計算
+    assert.deepEqual(calls.calculateWalkingRoute, [3, 2]);
+    assert.equal(result.spots.length, 2);
+    assert.deepEqual(
+      result.spots.map((spot) => spot.name),
+      ['スポット2', 'スポット3']
+    );
+  });
+
+  it('乖離スポットを除外すると最小数を下回る場合は除外しない', async () => {
+    // 1スポットだけで、それが乖離大でも、除外すると0件になるため残す
+    const { repositories, calls } = createRepositoryStub({
+      plannedSpotsSequence: [[createSpot('スポット1')]],
+      strandedSpotNames: ['スポット1'],
+      distancesM: [3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    // 除外せず1回のみ計算し、スポットは残る
+    assert.deepEqual(calls.calculateWalkingRoute, [1]);
+    assert.equal(result.spots.length, 1);
   });
 });
