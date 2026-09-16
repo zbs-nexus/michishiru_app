@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ミチシル 地図にルートを描画する（NZ-143 解説）</title>
+<style>
+  :root{
+    --dev:#2e7d32; --prod:#c62828; --ink:#1b2733; --muted:#5b6b7b;
+    --line:#dfe6ee; --bg:#f6f8fb; --card:#fff; --accent:#1565c0; --warn:#b26a00;
+    --route:#1a73e8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI","Hiragino Kaku Gothic ProN",Meiryo,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.75;font-size:15px}
+  .wrap{max-width:960px;margin:0 auto;padding:32px 20px 80px}
+  h1{font-size:26px;margin:0 0 6px}
+  .sub{color:var(--muted);margin:0 0 24px}
+  h2{font-size:20px;margin:40px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--line)}
+  h3{font-size:16px;margin:22px 0 8px}
+  p{margin:8px 0}
+  code{background:#eef2f7;padding:2px 6px;border-radius:5px;font-size:13px;
+    font-family:Consolas,"Courier New",monospace}
+  pre{background:#0f1b2a;color:#e6edf3;padding:14px 16px;border-radius:8px;overflow:auto;font-size:13px}
+  pre code{background:none;color:inherit;padding:0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:14px 0;
+    box-shadow:0 1px 3px rgba(20,40,70,.04)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;background:#fff;font-size:14px}
+  th,td{border:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+  th{background:#eef3f9}
+  .tag{display:inline-block;padding:2px 10px;border-radius:999px;color:#fff;font-size:12px;font-weight:600}
+  .tag.fix{background:var(--prod)} .tag.style{background:#546e7a} .tag.chore{background:var(--warn)}
+  .flow{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:14px 0}
+  .step{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 14px;min-width:110px;text-align:center;font-size:13px}
+  .step b{display:block;font-size:14px}
+  .arrow{font-size:20px;color:var(--muted)}
+  .note{border-left:4px solid var(--accent);background:#eff5fc;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .warn{border-left:4px solid var(--warn);background:#fff7e8;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .danger{border-left:4px solid var(--prod);background:#fdecea;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  .ok{border-left:4px solid var(--dev);background:#eefaf0;padding:12px 16px;border-radius:0 8px 8px 0;margin:12px 0}
+  ul,ol{margin:8px 0 8px 0;padding-left:22px}
+  li{margin:5px 0}
+  .toc{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+  .toc a{color:var(--accent);text-decoration:none}
+  .toc a:hover{text-decoration:underline}
+  .toc ol{margin:6px 0 0 0}
+  .small{font-size:13px;color:var(--muted)}
+  .yes{color:var(--dev);font-weight:700}
+  .no{color:var(--prod);font-weight:700}
+  .miss{background:#fdecea;border:1px solid #f5c6c0;border-radius:10px;padding:14px 18px;margin:14px 0}
+  .miss h3{margin-top:0}
+  .hit{background:#eefaf0;border:1px solid #bfe3c6;border-radius:10px;padding:14px 18px;margin:14px 0}
+  .hit h3{margin-top:0}
+  .linebar{height:6px;background:var(--route);border-radius:3px;margin:18px 0 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>地図にルートを描画する 〜 NZ-143 でやったこと</h1>
+  <p class="sub">はじめての人でも読める版 ／ 対象ブランチ <code>feature/NZ-143</code> ／ 最終更新 2026-09-09</p>
+  <div class="linebar"></div>
+
+  <div class="ok">
+    <b>結論から。</b>「地図は出るのにルートの線だけ出ない」という不具合を直しました。
+    原因は<b>地図ライブラリの部品（ワーカー）が配信されていなかったこと</b>で、
+    プログラムの書き方ではなく<b>ビルドの設定</b>の問題でした。
+    あわせて線の色を緑から青に変えています。
+  </div>
+
+  <div class="toc">
+    <b>目次</b>
+    <ol>
+      <li><a href="#goal">1. そもそも何をしたかったのか</a></li>
+      <li><a href="#words">2. 先に言葉の説明</a></li>
+      <li><a href="#flow">3. データがどう流れているか</a></li>
+      <li><a href="#commits">4. 今回入れた変更の一覧</a></li>
+      <li><a href="#trouble">5. 「線が出ない」の調査記録</a></li>
+      <li><a href="#cause">6. 本当の原因</a></li>
+      <li><a href="#fix">7. どう直したか</a></li>
+      <li><a href="#verify">8. 直ったことの確かめ方</a></li>
+      <li><a href="#lesson">9. ここから学べること</a></li>
+      <li><a href="#todo">10. まだ残っている課題</a></li>
+    </ol>
+  </div>
+
+  <h2 id="goal">1. そもそも何をしたかったのか</h2>
+
+  <p>
+    ミチシルは「散歩の条件を入れると、AI がおすすめコースを作ってくれる」アプリです。
+    その最後の工程が <b>Step 6「地図にルートを表示する」</b>で、ここが今回の担当範囲です。
+  </p>
+
+  <div class="card">
+    <b>やりたかったこと</b>
+    <ul>
+      <li>地図を表示する</li>
+      <li>その上に<b>ルートを示す線</b>を引く</li>
+      <li>立ち寄るスポットに番号付きの印を置く</li>
+      <li>ルート全体がちょうど収まる位置まで地図を寄せる</li>
+    </ul>
+  </div>
+
+  <p>
+    このうち「地図」「スポットの印」「地図の寄せ」はできていたのに、
+    <b>線だけがどうしても出ない</b>という状態が続きました。そこを解決したのが今回です。
+  </p>
+
+  <h2 id="words">2. 先に言葉の説明</h2>
+
+  <p>この先で出てくる用語を、ここでまとめて説明します。分からなくなったら戻ってきてください。</p>
+
+  <table>
+    <tr><th style="width:180px">言葉</th><th>意味</th></tr>
+    <tr>
+      <td><b>MapLibre GL</b></td>
+      <td>地図を表示するための JavaScript ライブラリ。Google マップのような地図を自分のアプリに埋め込めます。今回のバージョンは 6.8.0。</td>
+    </tr>
+    <tr>
+      <td><b>GeoJSON</b></td>
+      <td>地図の図形を表すための JSON の書き方の決まり。「点」「線」「面」などを表現できます。</td>
+    </tr>
+    <tr>
+      <td><b>LineString</b></td>
+      <td>GeoJSON のうち<b>線</b>を表す種類。座標をつなぐ順番に並べたもの。ルートの線はこれで表します。</td>
+    </tr>
+    <tr>
+      <td><b>座標の順番</b></td>
+      <td>GeoJSON も MapLibre も <code>[経度, 緯度]</code> の順。日本人が言う「緯度・経度」と<b>逆</b>なので要注意です。</td>
+    </tr>
+    <tr>
+      <td><b>ワーカー<br>(Web Worker)</b></td>
+      <td>ブラウザで<b>裏側で別に動く処理係</b>。重い計算をこちらに任せると、画面がカクつきません。MapLibre は線や図形の計算をワーカーに任せています。<b>今回の主役です。</b></td>
+    </tr>
+    <tr>
+      <td><b>Vite</b></td>
+      <td>フロントエンドのビルドツール。開発中はサーバーとして動き、公開時は配信用のファイル（<code>dist</code>）を作ります。</td>
+    </tr>
+    <tr>
+      <td><b>SPA</b></td>
+      <td>Single Page Application。ページを切り替えても実際には 1 枚の HTML を使い回す作り。ミチシルもこれです。<b>存在しない URL を頼まれると、代わりに <code>index.html</code> を返す</b>という性質があり、これが今回の症状に関係します。</td>
+    </tr>
+    <tr>
+      <td><b>Pinia</b></td>
+      <td>Vue で画面をまたいでデータを持ち回るための仕組み。作ったルートはここに保存しています。</td>
+    </tr>
+  </table>
+
+  <h2 id="flow">3. データがどう流れているか</h2>
+
+  <p>「ルート作成」ボタンを押してから線が描かれるまでの流れです。</p>
+
+  <div class="flow">
+    <div class="step"><b>① 画面</b>条件を選ぶ</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>② Lambda</b>ルートを作る</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>③ 変換</b>画面用に整える</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>④ 保存</b>Pinia に置く</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>⑤ 地図</b>線を引く</div>
+  </div>
+
+  <h3>② サーバー（Lambda）が返してくるもの</h3>
+
+  <p>
+    Lambda は Amazon Location Service に「この道をこう歩く」という経路を計算させ、
+    その座標を <code>geometry</code> として返します。実際のレスポンスはこんな形です。
+  </p>
+
+<pre><code>{
+  "route_title": "新宿駅周辺ショッピング＆グルメ散歩コース",
+  "concept_story": "新宿駅を起点に、東口の商業施設から…",
+  "summary": { "total_distance_m": 2672, "total_duration_s": 4008 },
+  "waypoints": [
+    { "name": "BicCamera Shinjuku East Exit Store", "lng": 139.703, "lat": 35.69138 }
+  ],
+  "geometry": {
+    "type": "LineString",
+    "coordinates": [
+      [139.703178, 35.686378],
+      [139.702991, 35.687023],
+      ...  ← 全部で 68 点
+    ]
+  }
+}</code></pre>
+
+  <div class="note">
+    <b>ポイント</b>：<code>coordinates</code> が<b>線そのもの</b>です。この 68 個の点を順につなぐと、
+    道なりに曲がるルートの線になります。点が多いほどなめらかな線になります。
+  </div>
+
+  <h3>③ 画面用に整える（変換）</h3>
+
+  <p>
+    サーバーとフロントで書き方の決まりが違うので、境目で 1 か所にまとめて変換しています
+    （<code>frontend/src/utils/routeResponse.js</code>）。
+  </p>
+
+  <table>
+    <tr><th>サーバーが返す形</th><th>画面で使う形</th><th>なぜ変えるか</th></tr>
+    <tr><td><code>route_title</code></td><td><code>routeName</code></td><td>プロジェクトの決まりが camelCase のため</td></tr>
+    <tr><td><code>total_distance_m</code>（メートル）</td><td><code>distanceKm</code>（キロ）</td><td>画面は km で表示するため。名前に単位を入れて取り違えを防ぐ</td></tr>
+    <tr><td><code>total_duration_s</code>（秒）</td><td><code>durationMinutes</code>（分）</td><td>同上</td></tr>
+    <tr><td><code>waypoints</code></td><td><code>spots</code></td><td>「立ち寄る場所」と「線を描くための点」を混同しないため</td></tr>
+  </table>
+
+  <div class="warn">
+    <b>なぜ名前を分けるのか（大事）</b><br>
+    サーバーは立ち寄り先を <code>waypoints</code> という名前で返しますが、
+    ルート上には<b>道の曲がり角の座標</b>も何十個もあります。両方を同じ名前で扱うと、
+    「巡ったスポット数」に曲がり角まで数えて <b>2 のはずが 68</b> と表示される、という不具合が起きます。
+    エラーにならず数字だけが狂うので気付きにくい。だから
+    <b>立ち寄り先は <code>spots</code>、線の点は <code>geometry.coordinates</code></b> と役割で名前を分けています。
+  </div>
+
+  <h3>⑤ 地図に線を引く</h3>
+
+  <p>MapLibre では「データ」と「見た目」を別々に登録します（<code>RouteMap.vue</code>）。</p>
+
+<pre><code>// データを登録する（ソース）
+map.addSource('route', { type: 'geojson', data: routeFeature });
+
+// 見た目を登録する（レイヤー）。白い縁取りの上に青い本体を重ねる
+map.addLayer({ id: 'route-line-outline', type: 'line', source: 'route',
+  paint: { 'line-color': '#FFFFFF', 'line-width': 9 } });
+
+map.addLayer({ id: 'route-line', type: 'line', source: 'route',
+  paint: { 'line-color': '#1A73E8', 'line-width': 5 } });</code></pre>
+
+  <p class="small">
+    白い線を先に太く引いて、その上に青い線を細く重ねています。こうすると地図の道路や公園に紛れず、線がはっきり見えます。
+  </p>
+
+  <h2 id="commits">4. 今回入れた変更の一覧</h2>
+
+  <table>
+    <tr><th style="width:90px">種別</th><th>コミット</th><th>内容</th><th style="width:110px">結果</th></tr>
+    <tr>
+      <td><span class="tag fix">fix</span></td>
+      <td><code>855102b</code></td>
+      <td>Pinia のデータをそのまま地図に渡さず、素のデータに作り直してから渡すようにした</td>
+      <td class="no">原因ではなかった<br><span class="small">（実装としては正しいので残した）</span></td>
+    </tr>
+    <tr>
+      <td><span class="tag style">style</span></td>
+      <td><code>3de1ff1</code></td>
+      <td>線とスポットの印を緑から青（<code>#1A73E8</code>）に変更</td>
+      <td class="yes">完了</td>
+    </tr>
+    <tr>
+      <td><span class="tag chore">chore</span></td>
+      <td><code>ce11141</code></td>
+      <td>原因を突き止めるための調査ログを一時的に追加</td>
+      <td>調査用<br><span class="small">（後で削除）</span></td>
+    </tr>
+    <tr>
+      <td><span class="tag fix">fix</span></td>
+      <td><code>8ea7278</code></td>
+      <td><b>ワーカーの URL を明示的に指定</b>。あわせて調査ログを削除</td>
+      <td class="yes">これが本当の修正</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    見てのとおり、<b>1 回目の修正は原因を読み違えていました</b>。
+    その反省も含めて次の章に調査の流れを残しておきます。同じ回り道をしないためです。
+  </div>
+
+  <h2 id="trouble">5. 「線が出ない」の調査記録</h2>
+
+  <h3>症状</h3>
+  <ul>
+    <li>地図（背景の街の絵）は<b>出る</b></li>
+    <li>スポットの番号付きの印は<b>出る</b></li>
+    <li>ルートの線<b>だけ出ない</b></li>
+    <li>画面にエラーは<b>出ない</b></li>
+  </ul>
+
+  <div class="miss">
+    <h3>外れた見立て① データの渡し方が悪いのでは？</h3>
+    <p>
+      Vue の Pinia に入れたデータは、変更を検知するために「プロキシ」という special な包み紙で包まれます。
+      一方 MapLibre はデータをワーカーへ送るとき<b>構造化複製</b>というコピーを行い、
+      この包み紙付きのデータはコピーに失敗します。
+    </p>
+    <p>実際に試すと、たしかに失敗しました。</p>
+<pre><code>素のオブジェクト     : 成功
+リアクティブなProxy  : 失敗 → DataCloneError: #&lt;Object&gt; could not be cloned.</code></pre>
+    <p>
+      「これだ」と思って素のデータに作り直す修正を入れました（<code>855102b</code>）。
+      <b>しかし線は出ませんでした。</b>現象自体は本物でしたが、今回の原因ではなかったのです。
+    </p>
+  </div>
+
+  <div class="miss">
+    <h3>外れた見立て② 緑で見づらいだけでは？</h3>
+    <p>
+      当初の線は緑（<code>#4A7C59</code>）で、地図の公園や緑地と色が近かったため
+      「細い線が背景に紛れているのでは」とも考えました。青に変えましたが（<code>3de1ff1</code>）、
+      やはり線は出ませんでした。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>方針を変える：推測をやめて、実際の値を見る</h3>
+    <p>
+      2 回外したので、コードを読んで当てにいくのをやめ、<b>実行時の値を出す</b>ことにしました（<code>ce11141</code>）。
+      具体的には次を画面のコンソールに出しました。
+    </p>
+    <ul>
+      <li>座標が何点あるか／全部同じ座標になっていないか</li>
+      <li>地図に登録されたレイヤーの一覧と順番</li>
+      <li>データとレイヤーが本当に存在するか</li>
+      <li>実際に画面へ描かれた線の数</li>
+    </ul>
+  </div>
+
+  <h3>出てきた結果</h3>
+
+<pre><code>[地図診断] 座標数 118
+[地図診断] 座標がすべて同一か false
+[地図診断] スタイルのレイヤー順 ['osm-raster', 'route-line-outline', 'route-line']
+[地図診断] ソース有無 true
+[地図診断] レイヤー有無 true</code></pre>
+
+  <p>
+    データも設定も<b>すべて正常</b>でした。座標は 118 点あり、同じ点の繰り返しでもなく、
+    レイヤーもきちんと地図の一番上に登録されている。それでも線が出ない。
+  </p>
+
+  <div class="hit">
+    <h3>決め手はコンソールの 1 行目</h3>
+    <p>診断ログの<b>すぐ上</b>に、赤いエラーが出ていました。</p>
+<pre><code>Failed to load module script: The server responded with a non-JavaScript
+MIME type of "text/html". Strict MIME type checking is enforced for
+module scripts per HTML spec.
+        /assets/maplibre-gl-worker.mjs</code></pre>
+    <p>
+      日本語にすると「<b>JavaScript を読み込もうとしたら HTML が返ってきたので拒否した</b>」です。
+      読み込もうとしたファイルは <code>maplibre-gl-worker.mjs</code>。
+      つまり<b>地図のワーカーが起動できていなかった</b>のです。
+    </p>
+  </div>
+
+  <h2 id="cause">6. 本当の原因</h2>
+
+  <h3>何が起きていたか</h3>
+
+  <p>順を追うとこうなります。</p>
+
+  <ol>
+    <li>MapLibre がワーカーのファイル <code>/assets/maplibre-gl-worker.mjs</code> を要求する</li>
+    <li>ところが<b>そのファイルはビルド結果に含まれていない</b></li>
+    <li>SPA なので、存在しない URL には代わりに <code>index.html</code>（HTML）が返る</li>
+    <li>ブラウザは「JavaScript を期待したのに HTML が来た」と判断して拒否する</li>
+    <li>ワーカーが起動しない → 線の計算が行われない → <b>線が描かれない</b></li>
+  </ol>
+
+  <p>実際、ビルド結果にワーカーがありませんでした。</p>
+
+<pre><code>修正前の dist/assets/
+├── index-C-RabKC3.js
+├── index-CNTuZ5Bt.css
+└── logo-CyVFzEEQ.png     ← ワーカーのファイルが無い</code></pre>
+
+  <h3>なぜ含まれなかったのか</h3>
+
+  <p>
+    MapLibre のバージョン 6 から、ワーカーが<b>別ファイルに分けられました</b>。
+    そしてその URL を、次のように<b>変数を使って組み立てています</b>。
+  </p>
+
+<pre><code>// MapLibre の内部（読みやすく整えたもの）
+const fileName = 開発版か ? 'maplibre-gl-worker-dev.mjs' : 'maplibre-gl-worker.mjs';
+return new URL('./' + fileName, base).href;</code></pre>
+
+  <div class="danger">
+    <b>ここが落とし穴です。</b>
+    Vite は「どのファイルを配信用にコピーするか」を、コードを<b>読んで</b>判断します。
+    <code>'./maplibre-gl-worker.mjs'</code> と直接書いてあれば気付けますが、
+    上のように<b>変数で組み立てていると読み取れません</b>。
+    結果「使われていないファイル」と見なされ、コピーされませんでした。
+  </div>
+
+  <h3>なぜ地図とスポットの印は出ていたのか</h3>
+
+  <p>これが一番のヒントでした。同じ地図の上なのに、出るものと出ないものがあったのです。</p>
+
+  <table>
+    <tr><th style="width:150px">要素</th><th style="width:110px">結果</th><th>通っている経路</th></tr>
+    <tr>
+      <td>地図の背景</td>
+      <td class="yes">出る</td>
+      <td>ただの画像なので、画面本体のスレッドで読み込む。ワーカー不要</td>
+    </tr>
+    <tr>
+      <td>スポットの印</td>
+      <td class="yes">出る</td>
+      <td>HTML の要素を地図の上にかぶせているだけ。ワーカー不要</td>
+    </tr>
+    <tr>
+      <td><b>ルートの線</b></td>
+      <td class="no">出ない</td>
+      <td><b>座標から線の形を計算する必要があり、その計算をワーカーが担当している</b></td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <b>教訓</b>：「A は動くのに B は動かない」というときは、
+    <b>A と B の違いは何か</b>を考えると原因に近づけます。
+    今回は「ワーカーを使うかどうか」が違いでした。
+  </div>
+
+  <h2 id="fix">7. どう直したか</h2>
+
+  <p>
+    MapLibre には、ワーカーの場所を自分で教えるための <code>setWorkerUrl()</code> という関数が用意されています。
+    そこで「Vite にワーカーを配信用ファイルとして作らせ、その URL を MapLibre に教える」ことにしました。
+  </p>
+
+<pre><code>// frontend/src/components/feature/route/RouteMap.vue
+
+import { MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } from 'maplibre-gl';
+
+// Vite にワーカーとしてバンドルさせ、その URL を受け取る
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&amp;url';
+
+// 地図を作る前に一度だけ設定する
+setWorkerUrl(maplibreWorkerUrl);</code></pre>
+
+  <h3><code>?worker&amp;url</code> という書き方について</h3>
+
+  <p>Vite ではインポート先の末尾に <code>?</code> で指示を付けると、扱い方を変えられます。</p>
+
+  <table>
+    <tr><th style="width:150px">書き方</th><th>意味</th><th>今回使えるか</th></tr>
+    <tr>
+      <td><code>?url</code></td>
+      <td>ファイルをそのままコピーして、その URL を返す</td>
+      <td class="no">×</td>
+    </tr>
+    <tr>
+      <td><code>?worker&amp;url</code></td>
+      <td><b>依存しているファイルもまとめて</b> 1 つのワーカーとして組み立て、その URL を返す</td>
+      <td class="yes">○ これを採用</td>
+    </tr>
+  </table>
+
+  <p>
+    <code>?url</code> が使えないのは、ワーカーのファイルが<b>さらに別のファイルを読み込んでいる</b>からです。
+    単純にコピーしただけでは、その読み込み先が見つからず動きません。
+    <code>?worker&amp;url</code> なら必要なものを全部まとめてくれます。
+  </p>
+
+  <h3>もう 1 つ入れた備え</h3>
+
+  <p>
+    今回の失敗の一番やっかいだった点は、<b>エラーが画面に出なかった</b>ことです。
+    ワーカーの中で起きた問題は、放っておくと何も表示されません。
+    そこで、地図のエラーを受け取って必ず記録するようにしました。
+  </p>
+
+<pre><code>map.on('error', (event) => {
+  console.error('地図の描画に失敗しました', event.error ?? event);
+});</code></pre>
+
+  <p class="small">これは調査用ではなく<b>恒久的に残す</b>コードです。同じ種類の問題が二度と黙って起きないようにするためです。</p>
+
+  <h2 id="verify">8. 直ったことの確かめ方</h2>
+
+  <h3>ファイルが作られるようになった</h3>
+
+<pre><code>修正後の dist/assets/
+├── index-Bv7SyNET.js
+├── index-D_1NH0iR.css
+├── logo-CyVFzEEQ.png
+└── maplibre-gl-worker-CobTyBCT.js   ← 出力されるようになった（486KB）</code></pre>
+
+  <h3>正しく配信されるようになった</h3>
+
+  <table>
+    <tr><th style="width:170px">環境</th><th>結果</th></tr>
+    <tr><td>ビルド（<code>npm run preview</code>）</td><td>200 ／ <code>text/javascript</code> ／ 486KB</td></tr>
+    <tr><td>開発（<code>npm run dev</code>）</td><td>200 ／ <code>text/javascript</code> ／ 132KB</td></tr>
+  </table>
+
+  <p>
+    修正前はここで <code>text/html</code>（＝ <code>index.html</code>）が返っていました。
+    <b><code>text/javascript</code> になったことが、直った証拠</b>です。
+  </p>
+
+  <h3>自分の環境で確かめる手順</h3>
+
+  <ol>
+    <li><code>frontend</code> フォルダで <code>npm run dev</code> を実行</li>
+    <li><b>ホーム画面で</b> <code>Ctrl</code> + <code>Shift</code> + <code>R</code>（ハードリロード）</li>
+    <li>条件を選んで「ルート作成」を押す</li>
+    <li>青い線が道なりに引かれていれば成功</li>
+  </ol>
+
+  <div class="warn">
+    <b>ハードリロードが必要な理由</b><br>
+    開発サーバーはコードの変更を自動で反映しますが、<b>地図を作る処理は最初の 1 回だけ動きます</b>。
+    自動反映では作り直されないため、古い地図が残ることがあります。
+    実際この調査中も、色（CSS）は反映されているのにプログラムは古いまま、という紛らわしい状態が起きました。
+    <br>
+    また、提案画面でリロードするとホーム画面に戻されます（ルート未取得の状態で直接開けない作りのため）。
+    <b>必ずホーム画面でリロード</b>してください。
+  </div>
+
+  <h2 id="lesson">9. ここから学べること</h2>
+
+  <div class="card">
+    <h3>① 「エラーが出ない」は「問題がない」ではない</h3>
+    <p>
+      今回は画面に何も出ませんでしたが、コンソールにはずっとエラーが出ていました。
+      うまく動かないときは、まず <code>F12</code> の <b>Console</b> タブを見る習慣をつけてください。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>② 推測で直すのは 2 回まで</h3>
+    <p>
+      今回は 2 回続けて原因を読み違えました。3 回目は推測をやめ、
+      <b>実際の値を出して確かめる</b>方針に切り替えたことで一気に解決しました。
+      当てにいく修正を重ねるより、状況を観測するコードを一時的に足すほうが早いです。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>③ 動くものと動かないものの「違い」を探す</h3>
+    <p>
+      「地図は出るのに線は出ない」の差分が、そのまま原因（ワーカーを使うかどうか）でした。
+      全部動かないより、一部だけ動かないほうが実は手がかりが多いのです。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>④ 新しいバージョンには落とし穴がある</h3>
+    <p>
+      今回の原因は MapLibre のバージョン 6 で入った変更（ワーカーの分離）でした。
+      ライブラリを最新にするときは、こうした構成の変更が起きていないか気にすると安全です。
+    </p>
+  </div>
+
+  <div class="card">
+    <h3>⑤ SPA は 404 を隠してしまう</h3>
+    <p>
+      通常なら「ファイルが無い」は 404 で分かります。しかし SPA は存在しない URL に
+      <code>index.html</code> を返すため、<b>404 ではなく「中身が違う」という形で問題が現れます</b>。
+      「HTML が返ってきた」というエラーを見たら、ファイルが無いことを疑ってください。
+    </p>
+  </div>
+
+  <h2 id="todo">10. まだ残っている課題</h2>
+
+  <table>
+    <tr><th style="width:190px">課題</th><th>内容</th><th style="width:90px">優先度</th></tr>
+    <tr>
+      <td>総距離が長く出る</td>
+      <td>
+        表示は 2.7km ／ 67 分だったが、実際の経路は往復 1.2km 程度。
+        <code>backend/.../routesRepository.js</code> の <code>sumMetrics</code> が
+        レスポンス内の距離を<b>二重に数えている</b>疑いがある。
+        この値は「目標距離±1km に収める」判定にも使われているため、
+        誤っていると<b>スポットを削る判定も誤作動する</b>。
+      </td>
+      <td>高</td>
+    </tr>
+    <tr>
+      <td>ルートが同じ道の往復</td>
+      <td>座標 68 点のうち異なる点は 34 点で、行きと帰りが同じ道。散歩としては周回のほうが自然。AI への指示の見直しが必要。</td>
+      <td>中</td>
+    </tr>
+    <tr>
+      <td>地図の見た目が仮のまま</td>
+      <td>
+        いまは OpenStreetMap のタイルを使っているが、<b>規約上そのまま本番公開には使えない</b>。
+        Amazon Location Service（Maps）に切り替えるため、
+        <code>VITE_MAP_STYLE_URL</code> の設定と認証方法（API キーか Cognito か）の決定が必要。
+      </td>
+      <td>中</td>
+    </tr>
+    <tr>
+      <td>現在地が固定値</td>
+      <td>いまは決め打ちの座標を送っているため、どこにいても同じ場所のルートになる。ブラウザの位置情報取得への差し替えが必要。</td>
+      <td>中</td>
+    </tr>
+  </table>
+
+  <div class="linebar"></div>
+  <p class="small" style="margin-top:14px">
+    関連ファイル：
+    <code>frontend/src/components/feature/route/RouteMap.vue</code>（地図と線の描画）／
+    <code>frontend/src/constants/mapDefaults.js</code>（色・ズームなどの設定）／
+    <code>frontend/src/utils/routeResponse.js</code>（レスポンスの変換）／
+    <code>frontend/src/utils/geoBounds.js</code>（表示範囲の計算）／
+    <code>backend/functions/createRoute/</code>（ルート生成）
+  </p>
+
+</div>
+</body>
+</html>
