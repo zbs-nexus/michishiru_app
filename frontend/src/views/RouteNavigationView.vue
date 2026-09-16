@@ -48,7 +48,10 @@ const handleConfirmEnd = () => {
     v-if="routeStore.currentRoute"
     :has-content-padding="false"
   >
-    <RouteNavigationMap :waypoints="routeStore.currentRoute.waypoints" />
+    <RouteNavigationMap
+      :geometry="routeStore.currentRoute.geometry"
+      :spots="routeStore.currentRoute.spots"
+    />
 
     <template #footer>
       <BaseButton

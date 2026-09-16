@@ -12,3 +12,13 @@ export const DEFAULT_DISTANCE_KM = 3;
 
 /** ローディング表示の最短時間（ミリ秒）。表示のちらつきを防ぐ */
 export const MIN_LOADING_DURATION_MS = 800;
+
+/**
+ * ルート作成の出発地として送る暫定の現在地（東京駅周辺）。
+ * TODO: Geolocation APIでの現在地取得に置き換える（課題番号は未採番）。
+ * 取得に失敗した場合のフォールバックとしては、置き換え後もこの値を使う。
+ */
+export const DEFAULT_CURRENT_LOCATION = {
+  lng: 139.702973,
+  lat: 35.686338
+};

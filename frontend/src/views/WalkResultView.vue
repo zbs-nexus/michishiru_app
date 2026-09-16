@@ -14,8 +14,11 @@ import { useRouteStore } from '@/stores/routeStore';
 const router = useRouter();
 const routeStore = useRouteStore();
 
-/** 巡った経由地の数 */
-const waypointCount = computed(() => routeStore.currentRoute?.waypoints.length ?? 0);
+/**
+ * 巡ったスポットの数。
+ * 経路の座標点（geometry.coordinates）ではなく立ち寄り先の数を数える。
+ */
+const spotCount = computed(() => routeStore.currentRoute?.spots.length ?? 0);
 
 /**
  * @description 条件をリセットして条件入力画面へ戻る
@@ -48,9 +51,9 @@ const handleReturnHome = () => {
       <h2>お疲れさまでした</h2>
 
       <WalkResultStats
-        :distance="routeStore.currentRoute.distance"
-        :waypoint-count="waypointCount"
-        :duration="routeStore.currentRoute.duration"
+        :distance-km="routeStore.currentRoute.distanceKm"
+        :spot-count="spotCount"
+        :duration-minutes="routeStore.currentRoute.durationMinutes"
       />
     </div>
 

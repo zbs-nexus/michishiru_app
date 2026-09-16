@@ -7,8 +7,14 @@ import { DEFAULT_DISTANCE_KM } from '@/constants/routeConditions';
  * 複数のViewから参照するため、Piniaで一元管理する。
  */
 export const useRouteStore = defineStore('route', () => {
-  /** 選択したジャンル */
+  /** 選択したジャンル（マスタのgenreId） */
   const genre = ref(null);
+
+  /**
+   * 選択したジャンルの表示名（マスタのgenreName）。
+   * ルート作成APIが表示名を受け取る仕様のため、idと合わせて保持する。
+   */
+  const genreName = ref(null);
 
   /** 選択した距離（km） */
   const distanceKm = ref(DEFAULT_DISTANCE_KM);
@@ -24,11 +30,13 @@ export const useRouteStore = defineStore('route', () => {
 
   /**
    * @description ジャンルを選択する
-   * @param {string} value ジャンルの値
+   * @param {string} value ジャンルの値（genreId）
+   * @param {string} name ジャンルの表示名（genreName）
    * @returns {void}
    */
-  const selectGenre = (value) => {
+  const selectGenre = (value, name) => {
     genre.value = value;
+    genreName.value = name;
   };
 
   /**
@@ -55,12 +63,14 @@ export const useRouteStore = defineStore('route', () => {
    */
   const resetConditions = () => {
     genre.value = null;
+    genreName.value = null;
     distanceKm.value = DEFAULT_DISTANCE_KM;
     currentRoute.value = null;
   };
 
   return {
     genre,
+    genreName,
     distanceKm,
     currentRoute,
     hasRequiredConditions,

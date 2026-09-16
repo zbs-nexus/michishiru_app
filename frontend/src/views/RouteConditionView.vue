@@ -17,7 +17,11 @@ import { useRouteStore } from '@/stores/routeStore';
  */
 const router = useRouter();
 const routeStore = useRouteStore();
-const { isCreating, createRoute } = useRouteCreation();
+const {
+  isCreating,
+  errorMessage: creationErrorMessage,
+  createRoute
+} = useRouteCreation();
 const {
   message: toastMessage,
   showMessage,
@@ -36,9 +40,22 @@ const {
 loadConditionOptions();
 
 /**
+ * @description 選択されたジャンルを、表示名と合わせてストアへ保存する。
+ * 表示名はルート作成APIへ送る値のため、選択肢を持つこの画面で引き当てる。
+ * @param {string} value 選択されたジャンルの値（genreId）
+ * @returns {void}
+ */
+const handleSelectGenre = (value) => {
+  const selectedOption = genreOptions.value.find(
+    (option) => option.value === value
+  );
+
+  routeStore.selectGenre(value, selectedOption?.label ?? '');
+};
+
+/**
  * @description 条件を検証してルートを作成し、成功時は提案画面へ進む。
- * 未選択の場合は画面上部のポップアップで知らせる。
- * 作成に失敗した場合は、応答を待ち続ける仕様のためロード画面を表示したままにする。
+ * 未選択の場合、および作成に失敗した場合は画面上部のポップアップで知らせる。
  * @returns {Promise<void>}
  */
 const handleCreateRoute = async () => {
@@ -49,9 +66,12 @@ const handleCreateRoute = async () => {
 
   const isSucceeded = await createRoute();
 
-  if (isSucceeded) {
-    router.push({ name: 'route-suggestion' });
+  if (!isSucceeded) {
+    showMessage(creationErrorMessage.value ?? 'ルートの作成に失敗しました');
+    return;
   }
+
+  router.push({ name: 'route-suggestion' });
 };
 </script>
 
@@ -109,7 +129,7 @@ const handleCreateRoute = async () => {
         :distance-km="routeStore.distanceKm"
         :genre-options="genreOptions"
         :distance-range="distanceRange"
-        @select-genre="routeStore.selectGenre"
+        @select-genre="handleSelectGenre"
         @select-distance="routeStore.selectDistance"
       />
 

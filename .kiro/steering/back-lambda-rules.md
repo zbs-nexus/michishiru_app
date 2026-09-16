@@ -131,11 +131,32 @@ backend/
 | `package.json` の `name` は論理名を kebab-case にしたもの | npm がパッケージ名に大文字を許可しないため。フォルダ `getRoute` に対して `"name": "get-route"` |
 | テストは `__tests__/` に置く | 対象ファイルと同名 + `.test.js` |
 
+### データ元が複数ある場合の Repository
+
+Repository は原則 `repository.js` 1ファイルとする。ただし**外部サービスが複数あり、それぞれ別の SDK・別のエラー扱いになる場合は** `repositories/` ディレクトリに分割してよい。
+
+| 条件 | 配置 | 例 |
+|---|---|---|
+| データ元が1つ | `repository.js` | `functions/getRoute/repository.js`（DynamoDB のみ） |
+| データ元が複数 | `repositories/<対象>Repository.js` | `functions/createRoute/repositories/placesRepository.js` |
+
+ファイル名は camelCase + `Repository` 接尾辞にする（`placesRepository.js` / `bedrockRepository.js` / `routesRepository.js`）。1ファイル = 1外部サービスとし、Repository 同士は呼び出さない（組み合わせは Service 層で行う）。
+
 ### デプロイ単位について
 
-現在の IaC（`iac/lib/michishiru-stack.ts`）は `backend/` ディレクトリ全体を Lambda のコードとしてアップロードする（`node_modules` と `__tests__` を除外）。AWS SDK v3 は Lambda ランタイムに同梱されているためバンドルは行わない。
+Lambda ごとに2通りのデプロイ方法を使い分ける。判断基準は「依存する AWS SDK v3 のクライアントが Lambda ランタイムに同梱されているか」。
 
-したがって関数ごとの `package.json` は、現時点ではデプロイサイズの削減には効いていない。依存関係の記録と、将来の関数単位バンドルへの備えとして維持する。
+| 方法 | 対象 | CDK の書き方 |
+|---|---|---|
+| ディレクトリをそのまま配置 | ランタイム同梱のクライアントのみを使う関数 | `lambda.Function` + `Code.fromAsset(backendDir)` |
+| esbuild でバンドル | 同梱されていないクライアントを使う関数 | `nodejs.NodejsFunction`（`externalModules: []`） |
+
+- `getRoute`: DynamoDB のみ → ディレクトリをそのまま配置（`node_modules` と `__tests__` を除外）
+- `createRoute`: geo-places / geo-routes / bedrock-runtime → バンドル
+
+バンドルは `backend/` を作業ディレクトリとして実行されるため、**`cdk synth` / `cdk deploy` の前に `backend` で `npm ci` が必要**（依存の解決と esbuild 本体の両方を `backend/node_modules` から読む）。CI では `.github/workflows/checks.yml` と `deploy.yml` がこれを行う。
+
+関数ごとの `package.json` は依存関係の記録として維持する。バンドル対象の関数では、実際の解決先は `backend/package.json` の依存になる。
 
 ### レイヤーの責務
 
@@ -220,3 +241,4 @@ Node.js にはアノテーション（Java の `@Override` 等）がないため
 | - | 初版作成 |
 | 2026/09/02 | レイヤーファイル名を役割名固定に統一（`createRoute.js` の記載を削除）/ テストファイル名を `.test` に統一 / `handler` 関数名の例外を明記 / 環境変数の参照先を `constants.js` に明記 / エラーコードの命名規則とテストの節を追加 / Lambda物理名を未決定として整理 |
 | 2026/09/02 | IaC導入を反映。Lambda物理名を「指定しない」に確定 / CDKの論理IDとハンドラ指定の書式を追記 / `package.json` の `name` が kebab-case になる理由（npmの制約）を明記 / デプロイ単位の実態を追記し、関数ごとの `package.json` の目的を「依存関係の記録」に修正 |
+| 2026/09/09 | `createRoute`（Places + Bedrock + Routes）の追加を反映。データ元が複数ある場合の `repositories/` 分割ルールを追加 / デプロイ単位を「ディレクトリ配置」と「esbuildバンドル」の2通りに整理し、バンドル時に `backend` で `npm ci` が必要な点を明記 |

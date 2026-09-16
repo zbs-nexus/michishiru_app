@@ -10,18 +10,19 @@ import { useRouteStore } from '@/stores/routeStore';
 
 /**
  * @description 提案されたルートを確認する画面。
- * 決定で詳細へ進み、再作成で同じ条件のまま作り直す。
+ * 決定で案内へ進み、再作成で同じ条件のまま作り直す。
  */
 const router = useRouter();
 const routeStore = useRouteStore();
 const { isCreating, errorMessage, createRoute } = useRouteCreation();
 
 /**
- * @description 提案を確定して詳細画面へ進む
+ * @description 提案を確定して案内画面へ進む。
+ * 詳細画面は挟まず、決定した時点で案内を開始する。
  * @returns {void}
  */
 const handleConfirm = () => {
-  router.push({ name: 'route-detail' });
+  router.push({ name: 'route-navigation' });
 };
 
 /**
@@ -45,12 +46,15 @@ const handleRegenerate = async () => {
         おすすめルート
       </h2>
 
-      <RouteMapPreview :waypoints="routeStore.currentRoute.waypoints" />
+      <RouteMapPreview
+        :geometry="routeStore.currentRoute.geometry"
+        :spots="routeStore.currentRoute.spots"
+      />
 
       <RouteInfoCard
         :route-name="routeStore.currentRoute.routeName"
         :description="routeStore.currentRoute.description"
-        :duration="routeStore.currentRoute.duration"
+        :duration-minutes="routeStore.currentRoute.durationMinutes"
       />
 
       <p
@@ -67,7 +71,7 @@ const handleRegenerate = async () => {
         <div class="distance-display">
           <span class="label">距離</span>
           <span class="value">
-            {{ routeStore.currentRoute.distance.toFixed(1) }}<small>km</small>
+            {{ routeStore.currentRoute.distanceKm.toFixed(1) }}<small>km</small>
           </span>
         </div>
         <div class="action-buttons">

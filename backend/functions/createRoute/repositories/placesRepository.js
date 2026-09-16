@@ -1,0 +1,66 @@
+import { GeoPlacesClient, SearchNearbyCommand } from '@aws-sdk/client-geo-places';
+import { createDataSourceError } from '../../../shared/utils/errorHandler.js';
+import { AWS_REGION, MAX_SPOT_CANDIDATES } from '../constants.js';
+
+/**
+ * @description Amazon Location Service（Places）から周辺スポットを取得する。
+ * 外部サービスへのアクセスとアプリ形式への変換のみを行い、業務判断は持たない。
+ */
+
+/** クライアントの生成は1度だけ行い、呼び出しごとに作らない */
+let placesClient = null;
+
+/**
+ * @description Placesのクライアントを取得する
+ * @returns {GeoPlacesClient} 生成済みのクライアント
+ */
+const getPlacesClient = () => {
+  if (placesClient === null) {
+    placesClient = new GeoPlacesClient({ region: AWS_REGION });
+  }
+
+  return placesClient;
+};
+
+/**
+ * @description 現在地の周辺から、指定したカテゴリのスポット候補を取得する。
+ * 1回の呼び出しで扱うカテゴリは1つ。複数カテゴリの束ね方はService層が決める。
+ * @param {object} conditions 検索条件
+ * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
+ * @param {string} conditions.spotCategoryId 検索するスポットのカテゴリID
+ * @param {number} [conditions.queryRadiusM] 検索半径（m）。指定時はこの範囲内のみ検索する
+ * @returns {Promise<{name: string, position: number[]}[]>} スポット候補の一覧
+ * @throws {ApplicationError} 外部サービスへのアクセスに失敗した場合
+ */
+export const searchNearbySpots = async ({
+  currentLocation,
+  spotCategoryId,
+  queryRadiusM
+}) => {
+  try {
+    const response = await getPlacesClient().send(
+      new SearchNearbyCommand({
+        QueryPosition: [currentLocation.lng, currentLocation.lat],
+        // 半径が指定された場合のみ、その範囲内に絞る（遠方スポットの除外）
+        ...(typeof queryRadiusM === 'number'
+          ? { QueryRadius: Math.round(queryRadiusM) }
+          : {}),
+        Filter: {
+          IncludeCategories: [spotCategoryId]
+        },
+        MaxResults: MAX_SPOT_CANDIDATES
+      })
+    );
+
+    return (response.ResultItems ?? []).map((item) => ({
+      name: item.Title,
+      // Places は [経度, 緯度] の順で返す。Routes へ渡す形と揃えるためそのまま保持する
+      position: item.Position
+    }));
+  } catch (error) {
+    throw createDataSourceError('周辺スポットの検索に失敗しました', {
+      errorName: error.name,
+      spotCategoryId
+    });
+  }
+};
