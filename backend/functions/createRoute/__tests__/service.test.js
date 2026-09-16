@@ -185,15 +185,27 @@ describe('createRoute', () => {
     assert.equal(result.totalDistanceM, 3500);
   });
 
-  it('スポットが最小数の場合は超過していても再計算しない', async () => {
+  it('スポットが最小数（1個）の場合は超過していても再計算しない', async () => {
     const { repositories, calls } = createRepositoryStub({
-      plannedSpots: [createSpot('スポット1'), createSpot('スポット2')],
+      plannedSpots: [createSpot('スポット1')],
       distancesM: [5000, 3000]
     });
 
     const result = await createRoute(conditions, repositories);
 
-    assert.deepEqual(calls.calculateWalkingRoute, [2]);
+    assert.deepEqual(calls.calculateWalkingRoute, [1]);
     assert.equal(result.totalDistanceM, 5000);
+  });
+
+  it('目標距離の許容範囲（±1km）内の場合は調整しない', async () => {
+    // 目標3km に対して 3.5km（許容範囲内: 2km〜4km）
+    const { repositories, calls } = createRepositoryStub({
+      distancesM: [3500]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.deepEqual(calls.calculateWalkingRoute, [3]);
+    assert.equal(result.totalDistanceM, 3500);
   });
 });
