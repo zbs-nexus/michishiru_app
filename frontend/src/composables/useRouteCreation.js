@@ -2,10 +2,8 @@ import { ref } from 'vue';
 // composableが公開する createRoute と名前が衝突するため、API呼び出し側に別名を付ける
 import { createRoute as requestRouteCreation } from '@/services/routeService';
 import { useRouteStore } from '@/stores/routeStore';
-import {
-  DEFAULT_CURRENT_LOCATION,
-  MIN_LOADING_DURATION_MS
-} from '@/constants/routeConditions';
+import { useGeolocation } from '@/composables/useGeolocation';
+import { MIN_LOADING_DURATION_MS } from '@/constants/routeConditions';
 
 /**
  * @description 指定時間だけ待機する
@@ -27,6 +25,12 @@ const wait = (durationMs) =>
  */
 export const useRouteCreation = () => {
   const routeStore = useRouteStore();
+  const {
+    isLocating,
+    locationWarning,
+    isUsingFallback,
+    fetchCurrentLocation
+  } = useGeolocation();
 
   /** 作成処理中かどうか */
   const isCreating = ref(false);
@@ -37,6 +41,7 @@ export const useRouteCreation = () => {
   /**
    * @description ストアが保持する入力条件でルートを作成し、結果をストアへ保存する。
    * 条件はストアから読むため、初回作成と再作成で同じ値が使われる。
+   * 現在地は Geolocation API から取得し、失敗時はフォールバック値を使用する。
    * @returns {Promise<boolean>} 成功した場合はtrue
    */
   const createRoute = async () => {
@@ -46,11 +51,13 @@ export const useRouteCreation = () => {
     const startedAt = Date.now();
 
     try {
-      // 現在地は暫定の固定値。GPS取得を入れる際はこの1行を差し替える
+      // 現在地を取得（失敗時はフォールバック値が返る）
+      const location = await fetchCurrentLocation();
+
       const route = await requestRouteCreation({
         genreName: routeStore.genreName,
         distanceKm: routeStore.distanceKm,
-        currentLocation: DEFAULT_CURRENT_LOCATION
+        currentLocation: location
       });
 
       routeStore.setCurrentRoute(route);
@@ -73,7 +80,10 @@ export const useRouteCreation = () => {
 
   return {
     isCreating,
+    isLocating,
     errorMessage,
+    locationWarning,
+    isUsingFallback,
     createRoute
   };
 };

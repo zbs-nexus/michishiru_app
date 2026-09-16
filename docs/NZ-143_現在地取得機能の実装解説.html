@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NZ-143 現在地取得機能の実装解説</title>
+  <style>
+    :root {
+      --primary: #1A73E8;
+      --primary-light: #E8F0FE;
+      --success: #34A853;
+      --success-light: #E6F4EA;
+      --warning: #FBBC04;
+      --warning-light: #FEF7E0;
+      --danger: #EA4335;
+      --danger-light: #FCE8E6;
+      --text: #202124;
+      --text-secondary: #5F6368;
+      --border: #DADCE0;
+      --bg: #FFFFFF;
+      --bg-secondary: #F8F9FA;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
+      line-height: 1.8;
+      color: var(--text);
+      background: var(--bg-secondary);
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--bg);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      padding: 48px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-top: 40px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary);
+      color: var(--text);
+    }
+
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 24px;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    p {
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+
+    th {
+      background: var(--bg-secondary);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    tr:hover td {
+      background: var(--bg-secondary);
+    }
+
+    code {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      background: var(--bg-secondary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #D93025;
+    }
+
+    pre {
+      background: #1E1E1E;
+      color: #D4D4D4;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-bottom: 24px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    .keyword { color: #569CD6; }
+    .string { color: #CE9178; }
+    .comment { color: #6A9955; }
+    .function { color: #DCDCAA; }
+    .number { color: #B5CEA8; }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .badge-new {
+      background: var(--success-light);
+      color: var(--success);
+    }
+
+    .badge-modified {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .badge-info {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+    }
+
+    .callout {
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      border-left: 4px solid;
+    }
+
+    .callout-info {
+      background: var(--primary-light);
+      border-color: var(--primary);
+    }
+
+    .callout-warning {
+      background: var(--warning-light);
+      border-color: var(--warning);
+    }
+
+    .callout-danger {
+      background: var(--danger-light);
+      border-color: var(--danger);
+    }
+
+    .callout-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .flow-diagram {
+      background: var(--bg-secondary);
+      padding: 24px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-family: 'Consolas', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .file-tree {
+      background: var(--bg-secondary);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-family: 'Consolas', monospace;
+      font-size: 13px;
+    }
+
+    .file-tree .new {
+      color: var(--success);
+    }
+
+    .file-tree .modified {
+      color: var(--primary);
+    }
+
+    .summary-box {
+      background: linear-gradient(135deg, var(--primary-light) 0%, #F0F4FF 100%);
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 32px;
+    }
+
+    .summary-box h3 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .summary-item {
+      background: var(--bg);
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .summary-item-value {
+      font-size: 24px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .summary-item-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>NZ-143 現在地取得機能の実装解説</h1>
+    <p class="subtitle">ミチシル — ルート作成地図アプリ</p>
+
+    <div class="summary-box">
+      <h3>📍 変更サマリー</h3>
+      <p>ルート作成時の出発地点を、固定座標から実際のユーザー現在地に変更しました。</p>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="summary-item-value">1</div>
+          <div class="summary-item-label">新規ファイル</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-item-value">2</div>
+          <div class="summary-item-label">変更ファイル</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-item-value">PC/スマホ</div>
+          <div class="summary-item-label">対応環境</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 概要 ========== -->
+    <h2>1. 概要</h2>
+    <p>
+      これまでルート作成APIへ送信する出発地点は、新宿駅周辺の固定座標を使用していました。
+      本変更では、ブラウザの <strong>Geolocation API</strong> を使用して実際のユーザー位置を取得し、
+      その座標を出発地点として使用するように改修しました。
+    </p>
+
+    <h3>変更前後の比較</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>項目</th>
+          <th>変更前</th>
+          <th>変更後</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>出発地点</td>
+          <td>固定座標（新宿駅周辺）</td>
+          <td>ユーザーの現在地</td>
+        </tr>
+        <tr>
+          <td>位置情報の取得</td>
+          <td>なし</td>
+          <td>Geolocation API</td>
+        </tr>
+        <tr>
+          <td>取得失敗時</td>
+          <td>—</td>
+          <td>フォールバック（固定座標）を使用</td>
+        </tr>
+        <tr>
+          <td>対応環境</td>
+          <td>—</td>
+          <td>PC / スマートフォン（HTTPS必須）</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ========== 変更ファイル ========== -->
+    <h2>2. 変更ファイル一覧</h2>
+    
+    <div class="file-tree">
+frontend/src/
+├── composables/
+│   ├── <span class="new">useGeolocation.js</span>      ← 新規作成
+│   └── <span class="modified">useRouteCreation.js</span>   ← 変更
+└── constants/
+    └── <span class="modified">routeConditions.js</span>    ← コメント更新
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>ファイル</th>
+          <th>状態</th>
+          <th>変更内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>useGeolocation.js</code></td>
+          <td><span class="badge badge-new">新規</span></td>
+          <td>Geolocation API を使った現在地取得の composable</td>
+        </tr>
+        <tr>
+          <td><code>useRouteCreation.js</code></td>
+          <td><span class="badge badge-modified">変更</span></td>
+          <td>固定値の代わりに useGeolocation を使用</td>
+        </tr>
+        <tr>
+          <td><code>routeConditions.js</code></td>
+          <td><span class="badge badge-modified">変更</span></td>
+          <td>コメントを「フォールバック用」に更新</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ========== 処理フロー ========== -->
+    <h2>3. 処理フロー</h2>
+    
+    <div class="flow-diagram">
+ルート作成ボタン押下
+        │
+        ▼
+┌───────────────────────────────┐
+│  useGeolocation               │
+│  fetchCurrentLocation()       │
+└───────────────────────────────┘
+        │
+        ├─── 成功 ──────────────────┐
+        │                          │
+        ▼                          ▼
+┌─────────────────┐      ┌─────────────────┐
+│ 位置情報拒否    │      │ 実際の座標を    │
+│ or タイムアウト │      │ 取得            │
+└─────────────────┘      └─────────────────┘
+        │                          │
+        ▼                          │
+┌─────────────────┐                │
+│ フォールバック  │                │
+│ (新宿駅周辺)    │                │
+└─────────────────┘                │
+        │                          │
+        └──────────┬───────────────┘
+                   │
+                   ▼
+        ┌─────────────────────┐
+        │ API呼び出し         │
+        │ POST /api/v1/routes │
+        │ currentLocation: {  │
+        │   lng: xxx,         │
+        │   lat: yyy          │
+        │ }                   │
+        └─────────────────────┘
+                   │
+                   ▼
+           ルート生成結果
+    </div>
+
+    <!-- ========== 実装詳細 ========== -->
+    <h2>4. 実装詳細</h2>
+
+    <h3>4.1 useGeolocation.js（新規）</h3>
+    <p>Geolocation API をラップした composable です。以下の機能を提供します。</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>戻り値</th>
+          <th>型</th>
+          <th>説明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>currentLocation</code></td>
+          <td><code>Ref&lt;{lng, lat}&gt;</code></td>
+          <td>取得した座標（またはフォールバック値）</td>
+        </tr>
+        <tr>
+          <td><code>isLocating</code></td>
+          <td><code>Ref&lt;boolean&gt;</code></td>
+          <td>位置情報取得中かどうか</td>
+        </tr>
+        <tr>
+          <td><code>locationWarning</code></td>
+          <td><code>Ref&lt;string|null&gt;</code></td>
+          <td>取得失敗時の警告メッセージ</td>
+        </tr>
+        <tr>
+          <td><code>isUsingFallback</code></td>
+          <td><code>Ref&lt;boolean&gt;</code></td>
+          <td>フォールバック値を使用しているか</td>
+        </tr>
+        <tr>
+          <td><code>fetchCurrentLocation</code></td>
+          <td><code>() =&gt; Promise</code></td>
+          <td>現在地を取得する関数</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>設定値</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>設定</th>
+          <th>値</th>
+          <th>説明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>タイムアウト</td>
+          <td>10秒</td>
+          <td>位置情報取得の最大待ち時間</td>
+        </tr>
+        <tr>
+          <td>キャッシュ有効期間</td>
+          <td>60秒</td>
+          <td>前回取得した位置情報の再利用期間</td>
+        </tr>
+        <tr>
+          <td>高精度モード</td>
+          <td>有効</td>
+          <td>GPS等を使用した高精度取得</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>4.2 エラーハンドリング</h3>
+    <p>Geolocation API のエラーコードに応じて、ユーザー向けメッセージを生成します。</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>エラーコード</th>
+          <th>状況</th>
+          <th>表示メッセージ</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>PERMISSION_DENIED</code></td>
+          <td>ユーザーが許可を拒否</td>
+          <td>位置情報の取得が許可されていません</td>
+        </tr>
+        <tr>
+          <td><code>POSITION_UNAVAILABLE</code></td>
+          <td>位置情報が利用不可</td>
+          <td>位置情報を取得できませんでした</td>
+        </tr>
+        <tr>
+          <td><code>TIMEOUT</code></td>
+          <td>取得がタイムアウト</td>
+          <td>位置情報の取得がタイムアウトしました</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-info">
+      <div class="callout-title">💡 フォールバック動作</div>
+      <p>
+        位置情報の取得に失敗しても、ルート作成は中断されません。
+        フォールバック値（新宿駅周辺: 経度 139.702973, 緯度 35.686338）を使用して処理を続行します。
+      </p>
+    </div>
+
+    <!-- ========== タイムアウトへの影響 ========== -->
+    <h2>5. タイムアウトへの影響</h2>
+
+    <h3>5.1 各処理のタイムアウト設定</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>処理</th>
+          <th>タイムアウト</th>
+          <th>備考</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>位置情報取得</td>
+          <td>10秒</td>
+          <td>フロントエンド（Geolocation API）</td>
+        </tr>
+        <tr>
+          <td>createRoute Lambda</td>
+          <td>29秒</td>
+          <td>API Gateway の上限に合わせている</td>
+        </tr>
+        <tr>
+          <td>fetch（フロント）</td>
+          <td>設定なし</td>
+          <td>ブラウザのデフォルト</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>5.2 ユーザー待ち時間の変化</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ケース</th>
+          <th>位置情報</th>
+          <th>API</th>
+          <th>合計</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>最良ケース</td>
+          <td>1-3秒</td>
+          <td>5秒</td>
+          <td>6-8秒</td>
+        </tr>
+        <tr>
+          <td>通常ケース</td>
+          <td>1-3秒</td>
+          <td>15秒</td>
+          <td>16-18秒</td>
+        </tr>
+        <tr>
+          <td>位置情報タイムアウト</td>
+          <td>10秒</td>
+          <td>15秒</td>
+          <td>25秒</td>
+        </tr>
+        <tr>
+          <td>最悪ケース</td>
+          <td>10秒</td>
+          <td>29秒</td>
+          <td><strong>39秒</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-warning">
+      <div class="callout-title">⚠️ 注意</div>
+      <p>
+        位置情報取得のタイムアウト（最大10秒）が追加されるため、
+        ユーザーの待ち時間が従来より長くなる可能性があります。
+        ただし、位置情報が拒否された場合は即座にフォールバックに切り替わるため、
+        追加の待ち時間は発生しません。
+      </p>
+    </div>
+
+    <!-- ========== 動作環境 ========== -->
+    <h2>6. 動作環境</h2>
+
+    <h3>6.1 必須条件</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>条件</th>
+          <th>詳細</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>HTTPS</td>
+          <td>Geolocation API は HTTPS 環境でのみ動作（localhost は例外）</td>
+        </tr>
+        <tr>
+          <td>ブラウザ対応</td>
+          <td>主要ブラウザはすべて対応（Chrome, Firefox, Safari, Edge）</td>
+        </tr>
+        <tr>
+          <td>ユーザー許可</td>
+          <td>初回アクセス時に位置情報の許可ダイアログが表示される</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>6.2 デバイス別の特性</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>デバイス</th>
+          <th>精度</th>
+          <th>取得速度</th>
+          <th>備考</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>スマートフォン（GPS有効）</td>
+          <td>高</td>
+          <td>速い（1-3秒）</td>
+          <td>最も正確</td>
+        </tr>
+        <tr>
+          <td>スマートフォン（GPS無効）</td>
+          <td>中</td>
+          <td>普通</td>
+          <td>Wi-Fi/基地局から推定</td>
+        </tr>
+        <tr>
+          <td>PC（Wi-Fi）</td>
+          <td>低〜中</td>
+          <td>遅い場合あり</td>
+          <td>IPアドレスやWi-Fi APから推定</td>
+        </tr>
+        <tr>
+          <td>PC（有線LAN）</td>
+          <td>低</td>
+          <td>遅い場合あり</td>
+          <td>IPアドレスから大まかに推定</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ========== 使用例 ========== -->
+    <h2>7. コード例</h2>
+
+    <h3>useGeolocation の使用例</h3>
+    <pre><code><span class="keyword">import</span> { useGeolocation } <span class="keyword">from</span> <span class="string">'@/composables/useGeolocation'</span>;
+
+<span class="keyword">const</span> {
+  currentLocation,
+  isLocating,
+  locationWarning,
+  isUsingFallback,
+  fetchCurrentLocation
+} = <span class="function">useGeolocation</span>();
+
+<span class="comment">// 現在地を取得</span>
+<span class="keyword">const</span> location = <span class="keyword">await</span> <span class="function">fetchCurrentLocation</span>();
+
+<span class="comment">// 取得結果を確認</span>
+console.<span class="function">log</span>(location);  <span class="comment">// { lng: 139.xxx, lat: 35.xxx }</span>
+
+<span class="comment">// フォールバックを使用したかどうか</span>
+<span class="keyword">if</span> (isUsingFallback.value) {
+  console.<span class="function">log</span>(<span class="string">'位置情報が取得できなかったため、既定の場所を使用します'</span>);
+  console.<span class="function">log</span>(locationWarning.value);  <span class="comment">// エラーメッセージ</span>
+}</code></pre>
+
+    <!-- ========== 今後の改善案 ========== -->
+    <h2>8. 今後の改善案</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>案</th>
+          <th>内容</th>
+          <th>効果</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>事前取得</td>
+          <td>ホーム画面表示時に位置情報を取得してキャッシュ</td>
+          <td>ルート作成時の待ち時間を削減</td>
+        </tr>
+        <tr>
+          <td>タイムアウト短縮</td>
+          <td>10秒 → 5秒に変更</td>
+          <td>最悪ケースの待ち時間を削減</td>
+        </tr>
+        <tr>
+          <td>位置情報の表示</td>
+          <td>取得した現在地をホーム画面に表示</td>
+          <td>ユーザーが出発地を確認できる</td>
+        </tr>
+        <tr>
+          <td>手動入力</td>
+          <td>ユーザーが出発地を地図上で選択可能に</td>
+          <td>任意の場所からルート作成が可能</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ========== テスト観点 ========== -->
+    <h2>9. テスト観点</h2>
+
+    <h3>9.1 正常系</h3>
+    <ul>
+      <li>位置情報を許可した場合、実際の座標でルートが作成されること</li>
+      <li>スマートフォンで GPS 有効時に正確な位置が取得されること</li>
+      <li>PC で Wi-Fi 環境下で位置が取得されること</li>
+    </ul>
+
+    <h3>9.2 異常系</h3>
+    <ul>
+      <li>位置情報を拒否した場合、フォールバック座標でルートが作成されること</li>
+      <li>タイムアウトした場合、フォールバック座標でルートが作成されること</li>
+      <li>非対応ブラウザでフォールバック座標が使用されること</li>
+      <li>HTTP 環境で Geolocation API がエラーになり、フォールバックが使用されること</li>
+    </ul>
+
+    <h3>9.3 境界値</h3>
+    <ul>
+      <li>タイムアウト直前（9.9秒）で位置情報が取得された場合</li>
+      <li>キャッシュ有効期間内（60秒以内）に再度取得した場合</li>
+    </ul>
+
+    <div class="callout callout-danger">
+      <div class="callout-title">🔒 セキュリティ注意</div>
+      <p>
+        位置情報はユーザーのプライバシーに関わる機密データです。
+        取得した座標はルート作成 API への送信にのみ使用し、
+        ログへの出力やローカルストレージへの保存は行わないでください。
+      </p>
+    </div>
+
+    <footer>
+      <p>ミチシル開発チーム — 2024年9月作成</p>
+    </footer>
+  </div>
+</body>
+</html>
