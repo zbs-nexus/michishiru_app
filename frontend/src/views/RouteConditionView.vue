@@ -17,7 +17,11 @@ import { useRouteStore } from '@/stores/routeStore';
  */
 const router = useRouter();
 const routeStore = useRouteStore();
-const { isCreating, createRoute } = useRouteCreation();
+const {
+  isCreating,
+  errorMessage: creationErrorMessage,
+  createRoute
+} = useRouteCreation();
 const {
   message: toastMessage,
   showMessage,
@@ -51,8 +55,7 @@ const handleSelectGenre = (value) => {
 
 /**
  * @description 条件を検証してルートを作成し、成功時は提案画面へ進む。
- * 未選択の場合は画面上部のポップアップで知らせる。
- * 作成に失敗した場合は、応答を待ち続ける仕様のためロード画面を表示したままにする。
+ * 未選択の場合、および作成に失敗した場合は画面上部のポップアップで知らせる。
  * @returns {Promise<void>}
  */
 const handleCreateRoute = async () => {
@@ -63,9 +66,12 @@ const handleCreateRoute = async () => {
 
   const isSucceeded = await createRoute();
 
-  if (isSucceeded) {
-    router.push({ name: 'route-suggestion' });
+  if (!isSucceeded) {
+    showMessage(creationErrorMessage.value ?? 'ルートの作成に失敗しました');
+    return;
   }
+
+  router.push({ name: 'route-suggestion' });
 };
 </script>
 

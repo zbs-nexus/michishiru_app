@@ -82,41 +82,21 @@ const extractCoordinates = (route, { originPosition, spots }) => {
 /**
  * @description 応答から距離と所要時間を取り出す。
  *
- * FIXME(NZ未採番): 応答内の distance / duration を再帰的に全探索して合算しているため、
- * 経路の階層（Route.Summary と Legs[].Summary 等）が重複していると二重計上になる。
- * Routes v2 の応答仕様を確認し、参照するフィールドを固定すること。
- * 現状の出力は動作確認済みのため、挙動を変えずに残している。
- * @param {object|null} route Routesが返した経路
- * @returns {{totalDistanceM: number, totalDurationS: number}} 合算した距離と所要時間
+ * 距離・時間は経路全体の集計値である `Route.Summary` のみを参照する。
+ * Routes v2 の応答は Summary（経路全体）・Legs[].*LegDetails（レッグ単位）・
+ * その中の TravelSteps[] / Spans[]（区間単位）と、同じ実測値を複数の階層で
+ * 重複して持つ。過去に応答を再帰探索して全 distance / duration を合算していたため
+ * 二重計上となり、総距離と所要時間の比（歩行速度）が実態から乖離していた。
+ * @param {object|null} route Routesが返した経路（response.Routes[0]）
+ * @returns {{totalDistanceM: number, totalDurationS: number}} 経路全体の距離と所要時間
  */
 const sumMetrics = (route) => {
-  let totalDistanceM = 0;
-  let totalDurationS = 0;
+  const summary = route?.Summary ?? null;
 
-  const walk = (target) => {
-    if (target === null || typeof target !== 'object') {
-      return;
-    }
-
-    for (const [key, value] of Object.entries(target)) {
-      const lowerKey = key.toLowerCase();
-
-      if (lowerKey === 'distance' && typeof value === 'number') {
-        totalDistanceM += value;
-      } else if (
-        (lowerKey === 'duration' || lowerKey === 'durationseconds') &&
-        typeof value === 'number'
-      ) {
-        totalDurationS += value;
-      } else if (typeof value === 'object') {
-        walk(value);
-      }
-    }
+  return {
+    totalDistanceM: typeof summary?.Distance === 'number' ? summary.Distance : 0,
+    totalDurationS: typeof summary?.Duration === 'number' ? summary.Duration : 0
   };
-
-  walk(route);
-
-  return { totalDistanceM, totalDurationS };
 };
 
 /**
