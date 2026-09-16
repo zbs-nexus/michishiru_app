@@ -88,7 +88,6 @@ const handleCreateRoute = async () => {
       :message="toastMessage"
       @close="hideMessage"
     />
-
     <div class="logo-header">
       <div class="logo-icon">
         <img
