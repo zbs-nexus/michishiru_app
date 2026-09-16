@@ -11,10 +11,13 @@ import {
 import {
   DISTANCE_TOLERANCE_KM,
   DISTANCE_TOLERANCE_RATIO,
+  MAX_PROMPT_CANDIDATES,
   MAX_ROUTE_RETRY_COUNT,
   MAX_SPOT_COUNT,
   METERS_PER_KM,
-  MIN_SPOT_COUNT
+  MIN_SPOT_COUNT,
+  SEARCH_RADIUS_RANGE_M,
+  SEARCH_RADIUS_RATIO
 } from './constants.js';
 
 /**
@@ -75,6 +78,22 @@ const isOverTargetDistance = (totalDistanceM, targetDistanceKm) =>
   totalDistanceM > targetDistanceKm * METERS_PER_KM * DISTANCE_TOLERANCE_RATIO;
 
 /**
+ * @description 目標距離から周辺スポット検索の半径（m）を決める。
+ * 出発地へ戻る周回コースでは各スポットは出発地から概ね目標距離の半分より内側に
+ * あるため、その距離を半径にして遠方スポットを検索段階で除外する。
+ * @param {number} targetDistanceKm 目標距離（km）
+ * @returns {number} 検索半径（m）。上下限でクランプする
+ */
+const resolveQueryRadiusM = (targetDistanceKm) => {
+  const rawRadiusM = targetDistanceKm * METERS_PER_KM * SEARCH_RADIUS_RATIO;
+
+  return Math.min(
+    Math.max(rawRadiusM, SEARCH_RADIUS_RANGE_M.min),
+    SEARCH_RADIUS_RANGE_M.max
+  );
+};
+
+/**
  * @description ジャンル名から検索対象のスポットカテゴリIDを引く
  * @param {string} genreName ジャンル名
  * @param {object} repositories データ取得に使うリポジトリ
@@ -113,16 +132,17 @@ const resolveSpotCategoryIds = async (genreName, repositories) => {
  * @param {object} conditions 検索条件
  * @param {string[]} conditions.spotCategoryIds 検索するカテゴリIDの一覧
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
+ * @param {number} conditions.queryRadiusM 周辺検索の半径（m）
  * @param {object} repositories データ取得に使うリポジトリ
  * @returns {Promise<{name: string, position: number[]}[]>} 重複を除いた候補スポット
  */
 const collectCandidateSpots = async (
-  { spotCategoryIds, currentLocation },
+  { spotCategoryIds, currentLocation, queryRadiusM },
   repositories
 ) => {
   const results = await Promise.allSettled(
     spotCategoryIds.map((spotCategoryId) =>
-      repositories.searchNearbySpots({ currentLocation, spotCategoryId })
+      repositories.searchNearbySpots({ currentLocation, spotCategoryId, queryRadiusM })
     )
   );
 
@@ -164,8 +184,10 @@ export const createRoute = async (
 ) => {
   const spotCategoryIds = await resolveSpotCategoryIds(genreName, repositories);
 
+  const queryRadiusM = resolveQueryRadiusM(targetDistanceKm);
+
   const candidateSpots = await collectCandidateSpots(
-    { spotCategoryIds, currentLocation },
+    { spotCategoryIds, currentLocation, queryRadiusM },
     repositories
   );
 
@@ -176,7 +198,14 @@ export const createRoute = async (
     });
   }
 
-  logInfo('候補スポットを取得しました', { candidateSpotCount: candidateSpots.length });
+  // Bedrockへ渡す候補は上限件数までに絞る（トークン削減による生成時間の短縮）
+  const promptCandidateSpots = candidateSpots.slice(0, MAX_PROMPT_CANDIDATES);
+
+  logInfo('候補スポットを取得しました', {
+    candidateSpotCount: candidateSpots.length,
+    promptCandidateSpotCount: promptCandidateSpots.length,
+    queryRadiusM
+  });
 
   let retryCount = 0;
   let spots = [];
@@ -188,7 +217,11 @@ export const createRoute = async (
   while (retryCount < MAX_ROUTE_RETRY_COUNT) {
     // AIにルート案を生成させる
     const plan = await repositories.generateRoutePlan(
-      buildRoutePlanPrompt({ targetDistanceKm, currentLocation, candidateSpots })
+      buildRoutePlanPrompt({
+        targetDistanceKm,
+        currentLocation,
+        candidateSpots: promptCandidateSpots
+      })
     );
 
     routeTitle = plan.routeTitle;
