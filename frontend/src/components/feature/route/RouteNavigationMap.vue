@@ -6,6 +6,7 @@ import { useLocationTracking } from '@/composables/useLocationTracking';
 /**
  * @description 案内中の経路を画面いっぱいの地図に表示する。
  * リアルタイムで現在地を追跡し、Google Maps風のマーカーで表示する。
+ * watchPosition を使用し、位置が変わるたびに自動で更新される。
  */
 defineProps({
   /** 経路の形（GeoJSONのLineString）。未取得の場合はnull */
@@ -20,9 +21,6 @@ defineProps({
   }
 });
 
-/** 位置追跡の更新間隔（ミリ秒） */
-const TRACKING_INTERVAL_MS = 5000;
-
 const {
   currentLocation,
   heading,
@@ -31,7 +29,7 @@ const {
   trackingError,
   startTracking,
   stopTracking
-} = useLocationTracking({ intervalMs: TRACKING_INTERVAL_MS });
+} = useLocationTracking();
 
 onMounted(() => {
   startTracking();
