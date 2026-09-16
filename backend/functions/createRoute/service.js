@@ -160,8 +160,8 @@ export const createRoute = async (
   let spots = plan.spots;
   let route = await repositories.calculateWalkingRoute({ currentLocation, spots });
 
-  // 目標距離を大きく超えた場合は末尾のスポットを削って一度だけ作り直す
-  if (
+  // 目標距離を大きく超えた場合は、許容範囲内になるまで末尾のスポットを削って再計算する
+  while (
     isOverTargetDistance(route.totalDistanceM, targetDistanceKm) &&
     spots.length > MIN_SPOT_COUNT
   ) {

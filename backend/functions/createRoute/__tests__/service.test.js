@@ -165,15 +165,24 @@ describe('createRoute', () => {
     );
   });
 
-  it('目標距離を大きく超えた場合はスポットを1つ削って再計算する', async () => {
-    // 目標3km に対して 1回目は 5km（許容 3.75km 超）、2回目は 3km
-    const { repositories, calls } = createRepositoryStub({ distancesM: [5000, 3000] });
+  it('目標距離を大きく超えた場合は許容範囲内になるまでスポットを削って再計算する', async () => {
+    // 目標3km に対して 1回目は 6km（許容 3.75km 超）、2回目は 5km（超）、3回目は 3.5km（許容範囲内）
+    const { repositories, calls } = createRepositoryStub({
+      plannedSpots: [
+        createSpot('スポット1'),
+        createSpot('スポット2'),
+        createSpot('スポット3'),
+        createSpot('スポット4')
+      ],
+      distancesM: [6000, 5000, 3500]
+    });
 
     const result = await createRoute(conditions, repositories);
 
-    assert.deepEqual(calls.calculateWalkingRoute, [3, 2]);
+    // 3回呼ばれ、4スポット → 3スポット → 2スポットになったことを確認
+    assert.deepEqual(calls.calculateWalkingRoute, [4, 3, 2]);
     assert.equal(result.spots.length, 2);
-    assert.equal(result.totalDistanceM, 3000);
+    assert.equal(result.totalDistanceM, 3500);
   });
 
   it('スポットが最小数の場合は超過していても再計算しない', async () => {
