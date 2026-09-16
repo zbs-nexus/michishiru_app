@@ -51,10 +51,11 @@ const parseGeneratedJson = (rawText) => {
 /**
  * @description ルート案を生成する
  * @param {string} promptText Bedrockへ渡すプロンプト
+ * @param {number} [temperature] 生成のばらつき。未指定なら初回用の既定値を使う
  * @returns {Promise<{routeTitle: string, conceptStory: string, spots: {name: string, position: number[]}[]}>} 生成したルート案
  * @throws {ApplicationError} 外部サービスへのアクセスまたは解析に失敗した場合
  */
-export const generateRoutePlan = async (promptText) => {
+export const generateRoutePlan = async (promptText, temperature = BEDROCK_TEMPERATURE) => {
   let rawText = null;
 
   try {
@@ -63,7 +64,7 @@ export const generateRoutePlan = async (promptText) => {
         modelId: BEDROCK_MODEL_ID,
         messages: [{ role: 'user', content: [{ text: promptText }] }],
         inferenceConfig: {
-          temperature: BEDROCK_TEMPERATURE,
+          temperature,
           maxTokens: BEDROCK_MAX_TOKENS
         }
       })

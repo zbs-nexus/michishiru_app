@@ -115,15 +115,17 @@ export class MichishiruStack extends cdk.Stack {
 
       routeTable.grantReadData(getRouteFn);
 
-      // ジャンルマスタ（ジャンル名 → ジャンルID）と
-      // スポットカテゴリマスタ（ジャンルID → Places のカテゴリID）。
+      // 検索条件マスタ（michimaster）とスポットカテゴリマスタ。
       // どちらも CDK では作成しておらず、コンソールで手動作成済みのため名前で参照する。
+      // createRoute は検索条件マスタのジャンル項目で英語ID（genreId）を数値ジャンルキー
+      // （genre_id）へ変換し、その値でスポットカテゴリマスタを引く。
+      // getConditions も同じ検索条件マスタを参照する（旧 michishiru_genremaster_akutsu は廃止）。
       // TODO: CDK 管理へ移し、命名規則（`PascalCase単数形-<環境>`）へ揃える。
-      //       現在の名前は個人名を含み、dev / prod の分離もされていない。
-      const genreTable = dynamodb.Table.fromTableName(
+      //       スポットカテゴリマスタの名前は個人名を含み、dev / prod の分離もされていない。
+      const conditionTable = dynamodb.Table.fromTableName(
         this,
-        'GenreTable',
-        'michishiru_genremaster_akutsu'
+        'ConditionTable',
+        'michimaster'
       );
       const spotCategoryTable = dynamodb.Table.fromTableName(
         this,
@@ -150,7 +152,7 @@ export class MichishiruStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(29),
         environment: {
           BEDROCK_MODEL_ID: bedrockModelId,
-          GENRE_TABLE_NAME: genreTable.tableName,
+          CONDITION_TABLE_NAME: conditionTable.tableName,
           SPOT_CATEGORY_TABLE_NAME: spotCategoryTable.tableName
         },
         bundling: {
@@ -162,7 +164,7 @@ export class MichishiruStack extends cdk.Stack {
         }
       });
 
-      genreTable.grantReadData(createRouteFn);
+      conditionTable.grantReadData(createRouteFn);
       spotCategoryTable.grantReadData(createRouteFn);
 
       // Location Service（Places / Routes）はリソース単位の指定に対応しないため
@@ -192,16 +194,6 @@ export class MichishiruStack extends cdk.Stack {
             'arn:aws:bedrock:*::foundation-model/anthropic.*'
           ]
         })
-      );
-
-      // 検索条件マスタ（目的・ジャンル・距離）テーブル。
-      // このテーブルは CDK では作成しておらず、コンソールで手動作成済みのため名前で参照する。
-      // TODO: dev / prod でテーブルを分ける場合は名前を stage 別（例: Condition-dev）に切り替える。
-      const conditionTableName = 'michimaster';
-      const conditionTable = dynamodb.Table.fromTableName(
-        this,
-        'ConditionTable',
-        conditionTableName
       );
 
       // Lambda: getConditions ハンドラ（検索条件マスタの全項目を返す）

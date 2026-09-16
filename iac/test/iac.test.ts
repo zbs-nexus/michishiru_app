@@ -64,7 +64,7 @@ describe('MichishiruStack (バックエンド有効)', () => {
       Environment: {
         Variables: Match.objectLike({
           BEDROCK_MODEL_ID: 'jp.anthropic.claude-haiku-4-5-20251001-v1:0',
-          GENRE_TABLE_NAME: 'michishiru_genremaster_akutsu',
+          CONDITION_TABLE_NAME: 'michimaster',
           SPOT_CATEGORY_TABLE_NAME: 'michishiru_categorymaster_akutsu'
         })
       }
@@ -83,7 +83,7 @@ describe('MichishiruStack (バックエンド有効)', () => {
     const policyJson = JSON.stringify(createRoutePolicy?.[1] ?? {});
 
     expect(policyJson).toContain('dynamodb:Scan');
-    expect(policyJson).toContain('michishiru_genremaster_akutsu');
+    expect(policyJson).toContain('michimaster');
     expect(policyJson).toContain('michishiru_categorymaster_akutsu');
   });
 

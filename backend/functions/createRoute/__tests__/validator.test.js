@@ -5,7 +5,7 @@ import { validateCreateRouteRequest } from '../validator.js';
 
 /** 検証を通る最小のリクエスト */
 const validBody = {
-  purposeCategory: '自然',
+  purposeCategory: 'nature',
   targetDistanceKm: 3,
   currentLocation: { lat: 35.6862, lng: 139.7036 }
 };
@@ -16,7 +16,7 @@ describe('validateCreateRouteRequest', () => {
 
     assert.equal(result.isValid, true);
     assert.deepEqual(result.value, {
-      genreName: '自然',
+      genreId: 'nature',
       targetDistanceKm: 3,
       currentLocation: { lat: 35.6862, lng: 139.7036 }
     });
@@ -28,15 +28,15 @@ describe('validateCreateRouteRequest', () => {
     });
 
     assert.equal(result.isValid, true);
-    assert.equal(result.value.genreName, '自然');
+    assert.equal(result.value.genreId, 'nature');
     assert.equal(result.value.targetDistanceKm, 3);
   });
 
   it('現在地が未指定なら既定の座標を補う', () => {
-    const result = validateCreateRouteRequest({ purposeCategory: '歴史' });
+    const result = validateCreateRouteRequest({ purposeCategory: 'history' });
 
     assert.equal(result.isValid, true);
-    assert.equal(result.value.genreName, '歴史');
+    assert.equal(result.value.genreId, 'history');
     assert.deepEqual(result.value.currentLocation, DEFAULT_CURRENT_LOCATION);
   });
 
