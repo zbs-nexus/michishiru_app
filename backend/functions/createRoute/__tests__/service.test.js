@@ -5,7 +5,7 @@ import { createRoute } from '../service.js';
 
 /** 検証を通る最小の作成条件 */
 const conditions = {
-  genreName: '自然',
+  genreId: 'nature',
   targetDistanceKm: 3,
   currentLocation: { lat: 35.6862, lng: 139.7036 }
 };
@@ -20,7 +20,7 @@ const createSpot = (name) => ({ name, position: [139.703, 35.686] });
 /**
  * @description テスト用のリポジトリを作る
  * @param {object} options 各リポジトリの振る舞い
- * @param {string|null} [options.genreId] ジャンルマスタが返すジャンルID
+ * @param {string|null} [options.genreNumber] ジャンルマスタが返す数値ジャンルキー
  * @param {string[]} [options.spotCategoryIds] カテゴリマスタが返すカテゴリID
  * @param {object} [options.spotsByCategoryId] カテゴリIDごとに返す候補スポット
  * @param {string[]} [options.failingCategoryIds] 検索が失敗するカテゴリID
@@ -29,7 +29,7 @@ const createSpot = (name) => ({ name, position: [139.703, 35.686] });
  * @returns {{repositories: object, calls: object}} 差し替え用のリポジトリと呼び出し記録
  */
 const createRepositoryStub = ({
-  genreId = 'g-nature',
+  genreNumber = '2',
   spotCategoryIds = ['park', 'garden'],
   spotsByCategoryId = {
     park: [createSpot('公園A'), createSpot('共通スポット')],
@@ -44,8 +44,8 @@ const createRepositoryStub = ({
   let planCallIndex = 0;
 
   const repositories = {
-    queryGenreIdByName: async () => genreId,
-    querySpotCategoryIdsByGenreId: async () => spotCategoryIds,
+    queryGenreNumberByGenreId: async () => genreNumber,
+    querySpotCategoryIdsByGenreNumber: async () => spotCategoryIds,
     searchNearbySpots: async ({ spotCategoryId }) => {
       calls.searchNearbySpots.push(spotCategoryId);
 
@@ -130,7 +130,7 @@ describe('createRoute', () => {
   });
 
   it('ジャンルがマスタに無い場合はROUTE_NOT_FOUNDを投げる', async () => {
-    const { repositories } = createRepositoryStub({ genreId: null });
+    const { repositories } = createRepositoryStub({ genreNumber: null });
 
     await assert.rejects(
       () => createRoute(conditions, repositories),
@@ -209,8 +209,8 @@ describe('createRoute', () => {
     assert.equal(result.totalDistanceM, 3000);
   });
 
-  it('許容範囲外（±1km）のルートしか作れない場合はROUTE_NOT_FOUNDを投げる', async () => {
-    // スポット1個で5km、削れないし短くもできない
+  it('許容範囲外のルートしか作れない場合はROUTE_NOT_FOUNDを投げる', async () => {
+    // スポット1個で5km（目標3kmの上限4.2km超）、削れないし短くもできない
     const { repositories } = createRepositoryStub({
       plannedSpotsSequence: [[createSpot('スポット1')]],
       distancesM: [5000]
@@ -220,7 +220,7 @@ describe('createRoute', () => {
       () => createRoute(conditions, repositories),
       (error) => {
         assert.equal(error.code, ERROR_CODES.ROUTE_NOT_FOUND);
-        assert.match(error.message, /許容範囲内/);
+        assert.match(error.message, /ジャンルと距離/);
         return true;
       }
     );

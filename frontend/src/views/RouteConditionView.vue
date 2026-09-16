@@ -89,13 +89,6 @@ const handleCreateRoute = async () => {
       @close="hideMessage"
     />
 
-    <div
-      class="deploy-test-banner"
-      style="background:#ffeb3b;color:#111;text-align:center;padding:10px;font-weight:bold;border-radius:8px;margin:8px 0;"
-    >
-      デプロイテスト６
-    </div>
-
     <div class="logo-header">
       <div class="logo-icon">
         <img
