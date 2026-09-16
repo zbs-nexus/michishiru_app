@@ -1,9 +1,11 @@
 <script setup>
+import { onMounted, onBeforeUnmount } from 'vue';
 import RouteMap from '@/components/feature/route/RouteMap.vue';
+import { useLocationTracking } from '@/composables/useLocationTracking';
 
 /**
  * @description 案内中の経路を画面いっぱいの地図に表示する。
- * 現在地の追従は未導入のため、ルート全体を収めた状態で表示する。
+ * リアルタイムで現在地を追跡し、Google Maps風のマーカーで表示する。
  */
 defineProps({
   /** 経路の形（GeoJSONのLineString）。未取得の場合はnull */
@@ -17,6 +19,27 @@ defineProps({
     required: true
   }
 });
+
+/** 位置追跡の更新間隔（ミリ秒） */
+const TRACKING_INTERVAL_MS = 5000;
+
+const {
+  currentLocation,
+  heading,
+  accuracy,
+  isTracking,
+  trackingError,
+  startTracking,
+  stopTracking
+} = useLocationTracking({ intervalMs: TRACKING_INTERVAL_MS });
+
+onMounted(() => {
+  startTracking();
+});
+
+onBeforeUnmount(() => {
+  stopTracking();
+});
 </script>
 
 <template>
@@ -25,7 +48,44 @@ defineProps({
       <RouteMap
         :geometry="geometry"
         :spots="spots"
+        :show-current-location="isTracking"
+        :current-location="currentLocation"
+        :current-heading="heading"
+        :current-accuracy="accuracy"
       />
+    </div>
+    <div
+      v-if="trackingError"
+      class="tracking-error"
+      role="alert"
+    >
+      {{ trackingError }}
     </div>
   </div>
 </template>
+
+<style scoped>
+.navigation-map {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.map-full {
+  width: 100%;
+  height: 100%;
+}
+
+.tracking-error {
+  position: absolute;
+  bottom: 80px;
+  left: 12px;
+  right: 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(234, 67, 53, 0.9);
+  color: white;
+  font-size: 12px;
+  text-align: center;
+}
+</style>

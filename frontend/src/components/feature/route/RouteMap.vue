@@ -48,6 +48,26 @@ const props = defineProps({
   isInteractive: {
     type: Boolean,
     default: true
+  },
+  /** 現在地を表示するかどうか（案内中のみ有効） */
+  showCurrentLocation: {
+    type: Boolean,
+    default: false
+  },
+  /** 現在地の座標 { lng, lat } */
+  currentLocation: {
+    type: Object,
+    default: null
+  },
+  /** 現在地の方向（度、北を0度として時計回り） */
+  currentHeading: {
+    type: Number,
+    default: null
+  },
+  /** 現在地の精度（メートル） */
+  currentAccuracy: {
+    type: Number,
+    default: null
   }
 });
 
@@ -73,6 +93,7 @@ const hasNoGeometry = ref(false);
  */
 let map = null;
 let markers = [];
+let currentLocationMarker = null;
 
 /**
  * @description 座標列をGeoJSONのFeatureへ包む。
@@ -112,6 +133,91 @@ const createSpotMarkerElement = (order) => {
   element.className = 'spot-marker';
   element.textContent = String(order);
   return element;
+};
+
+/**
+ * @description 現在地マーカーのDOM要素を作成する。
+ * Google Maps風の青い円と方向を示す矢印で構成される。
+ * @returns {HTMLElement} 現在地マーカー要素
+ */
+const createCurrentLocationElement = () => {
+  const container = document.createElement('div');
+  container.className = 'current-location-marker';
+
+  // 外側の円（精度を示す）
+  const accuracyCircle = document.createElement('div');
+  accuracyCircle.className = 'current-location-accuracy';
+  container.appendChild(accuracyCircle);
+
+  // 内側の青い円
+  const innerCircle = document.createElement('div');
+  innerCircle.className = 'current-location-dot';
+  container.appendChild(innerCircle);
+
+  // 方向を示す矢印
+  const arrow = document.createElement('div');
+  arrow.className = 'current-location-arrow';
+  container.appendChild(arrow);
+
+  return container;
+};
+
+/**
+ * @description 現在地マーカーの方向を更新する
+ * @param {number|null} heading 方向（度）
+ * @returns {void}
+ */
+const updateCurrentLocationHeading = (heading) => {
+  if (currentLocationMarker === null) {
+    return;
+  }
+
+  const element = currentLocationMarker.getElement();
+  const arrow = element.querySelector('.current-location-arrow');
+
+  if (arrow === null) {
+    return;
+  }
+
+  if (heading === null) {
+    arrow.style.display = 'none';
+  } else {
+    arrow.style.display = 'block';
+    arrow.style.transform = `rotate(${heading}deg)`;
+  }
+};
+
+/**
+ * @description 現在地マーカーを描画または更新する
+ * @returns {void}
+ */
+const renderCurrentLocationMarker = () => {
+  if (!props.showCurrentLocation || props.currentLocation === null) {
+    // 現在地表示が無効または座標がない場合は削除
+    if (currentLocationMarker !== null) {
+      currentLocationMarker.remove();
+      currentLocationMarker = null;
+    }
+    return;
+  }
+
+  const lngLat = [props.currentLocation.lng, props.currentLocation.lat];
+
+  if (currentLocationMarker === null) {
+    // 初回作成
+    currentLocationMarker = new Marker({
+      element: createCurrentLocationElement(),
+      anchor: 'center'
+    })
+      .setLngLat(lngLat)
+      .addTo(map);
+  } else {
+    // 位置のみ更新
+    currentLocationMarker.setLngLat(lngLat);
+  }
+
+  // 方向を更新
+  updateCurrentLocationHeading(props.currentHeading);
 };
 
 /**
@@ -226,6 +332,7 @@ onMounted(() => {
   map.on('load', () => {
     renderRouteLine();
     renderSpotMarkers();
+    renderCurrentLocationMarker();
     fitToRoute();
   });
 });
@@ -244,9 +351,26 @@ watch(
   }
 );
 
+// 現在地が更新されたらマーカーを更新する
+watch(
+  () => [props.currentLocation, props.currentHeading, props.showCurrentLocation],
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    renderCurrentLocationMarker();
+  },
+  { deep: true }
+);
+
 onBeforeUnmount(() => {
   markers.forEach((marker) => marker.remove());
   markers = [];
+  if (currentLocationMarker !== null) {
+    currentLocationMarker.remove();
+    currentLocationMarker = null;
+  }
   map?.remove();
   map = null;
 });

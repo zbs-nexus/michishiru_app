@@ -279,14 +279,14 @@
 
     <div class="summary-box">
       <h3>📍 変更サマリー</h3>
-      <p>ルート作成時の出発地点を、固定座標から実際のユーザー現在地に変更しました。</p>
+      <p>ルート作成時の出発地点を実際のユーザー現在地に変更し、案内画面でリアルタイム現在地表示を追加しました。</p>
       <div class="summary-grid">
         <div class="summary-item">
-          <div class="summary-item-value">1</div>
+          <div class="summary-item-value">2</div>
           <div class="summary-item-label">新規ファイル</div>
         </div>
         <div class="summary-item">
-          <div class="summary-item-value">2</div>
+          <div class="summary-item-value">5</div>
           <div class="summary-item-label">変更ファイル</div>
         </div>
         <div class="summary-item">
@@ -732,8 +732,174 @@ console.<span class="function">log</span>(location);  <span class="comment">// {
       </tbody>
     </table>
 
+    <!-- ========== リアルタイム現在地表示 ========== -->
+    <h2>9. リアルタイム現在地表示（案内画面）</h2>
+
+    <p>
+      ルート案内画面では、ユーザーの現在地をリアルタイムで追跡し、
+      Google Maps風のマーカーで表示します。
+    </p>
+
+    <h3>9.1 追加ファイル</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ファイル</th>
+          <th>状態</th>
+          <th>内容</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>useLocationTracking.js</code></td>
+          <td><span class="badge badge-new">新規</span></td>
+          <td>リアルタイム位置追跡用の composable</td>
+        </tr>
+        <tr>
+          <td><code>RouteMap.vue</code></td>
+          <td><span class="badge badge-modified">変更</span></td>
+          <td>現在地マーカーの表示機能を追加</td>
+        </tr>
+        <tr>
+          <td><code>RouteNavigationMap.vue</code></td>
+          <td><span class="badge badge-modified">変更</span></td>
+          <td>位置追跡を統合</td>
+        </tr>
+        <tr>
+          <td><code>global.css</code></td>
+          <td><span class="badge badge-modified">変更</span></td>
+          <td>現在地マーカーのスタイルを追加</td>
+        </tr>
+        <tr>
+          <td><code>mapDefaults.js</code></td>
+          <td><span class="badge badge-modified">変更</span></td>
+          <td>現在地マーカー関連の定数を追加</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>9.2 マーカーのデザイン</h3>
+    <div style="display: flex; align-items: center; gap: 24px; margin: 16px 0;">
+      <div style="position: relative; width: 80px; height: 80px; background: #F0F0F0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+        <!-- 精度円 -->
+        <div style="position: absolute; width: 48px; height: 48px; background: rgba(66, 133, 244, 0.15); border-radius: 50%;"></div>
+        <!-- 中心の青い円 -->
+        <div style="position: absolute; width: 16px; height: 16px; background: #4285F4; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
+        <!-- 方向矢印 -->
+        <div style="position: absolute; top: 8px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 16px solid #4285F4;"></div>
+      </div>
+      <div>
+        <p style="margin: 0;"><strong>Google Maps風の現在地マーカー</strong></p>
+        <ul style="margin: 8px 0 0 0; padding-left: 20px; font-size: 14px;">
+          <li>青い円（中心）: 現在位置</li>
+          <li>半透明の円（外側）: 精度範囲</li>
+          <li>三角の矢印: 向いている方向</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>9.3 useLocationTracking の仕様</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>戻り値</th>
+          <th>型</th>
+          <th>説明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>currentLocation</code></td>
+          <td><code>Ref&lt;{lng, lat}&gt;</code></td>
+          <td>現在地の座標</td>
+        </tr>
+        <tr>
+          <td><code>heading</code></td>
+          <td><code>Ref&lt;number|null&gt;</code></td>
+          <td>方向（度、北を0度として時計回り）</td>
+        </tr>
+        <tr>
+          <td><code>accuracy</code></td>
+          <td><code>Ref&lt;number|null&gt;</code></td>
+          <td>精度（メートル）</td>
+        </tr>
+        <tr>
+          <td><code>isTracking</code></td>
+          <td><code>Ref&lt;boolean&gt;</code></td>
+          <td>追跡中かどうか</td>
+        </tr>
+        <tr>
+          <td><code>trackingError</code></td>
+          <td><code>Ref&lt;string|null&gt;</code></td>
+          <td>エラーメッセージ</td>
+        </tr>
+        <tr>
+          <td><code>startTracking</code></td>
+          <td><code>() =&gt; Promise</code></td>
+          <td>追跡を開始</td>
+        </tr>
+        <tr>
+          <td><code>stopTracking</code></td>
+          <td><code>() =&gt; void</code></td>
+          <td>追跡を停止</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>9.4 設定値</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>設定</th>
+          <th>値</th>
+          <th>説明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>更新間隔</td>
+          <td>5秒</td>
+          <td>位置情報の取得間隔</td>
+        </tr>
+        <tr>
+          <td>タイムアウト</td>
+          <td>10秒</td>
+          <td>1回の取得の最大待ち時間</td>
+        </tr>
+        <tr>
+          <td>キャッシュ</td>
+          <td>0秒</td>
+          <td>常に最新の位置を取得</td>
+        </tr>
+        <tr>
+          <td>高精度モード</td>
+          <td>有効</td>
+          <td>GPS等を使用</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>9.5 方向の計算</h3>
+    <p>
+      方向（heading）は以下の優先順位で決定されます：
+    </p>
+    <ol>
+      <li><strong>Geolocation API の heading</strong>: デバイスが移動中の場合に取得できる</li>
+      <li><strong>前回位置からの計算</strong>: 約10m以上移動した場合、2点間の方位角を計算</li>
+      <li><strong>null</strong>: 上記いずれも取得できない場合（矢印は非表示）</li>
+    </ol>
+
+    <div class="callout callout-info">
+      <div class="callout-title">💡 バッテリー消費について</div>
+      <p>
+        <code>watchPosition</code> ではなく <code>setInterval</code> + <code>getCurrentPosition</code> を
+        使用しているため、更新間隔を明示的に制御でき、バッテリー消費を抑えやすくなっています。
+        必要に応じて更新間隔を10秒に変更することも可能です。
+      </p>
+    </div>
+
     <!-- ========== テスト観点 ========== -->
-    <h2>9. テスト観点</h2>
+    <h2>10. テスト観点</h2>
 
     <h3>9.1 正常系</h3>
     <ul>
