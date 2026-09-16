@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import RouteConditionView from '@/views/RouteConditionView.vue';
-import RouteDetailView from '@/views/RouteDetailView.vue';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
 import RouteSuggestionView from '@/views/RouteSuggestionView.vue';
 import WalkResultView from '@/views/WalkResultView.vue';
@@ -20,12 +19,6 @@ const routes = [
     path: '/suggestion',
     name: 'route-suggestion',
     component: RouteSuggestionView,
-    meta: { requiresRoute: true }
-  },
-  {
-    path: '/detail',
-    name: 'route-detail',
-    component: RouteDetailView,
     meta: { requiresRoute: true }
   },
   {
