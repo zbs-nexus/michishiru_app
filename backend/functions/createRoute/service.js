@@ -20,7 +20,8 @@ import {
   METERS_PER_KM,
   MIN_SPOT_COUNT,
   SEARCH_RADIUS_RANGE_M,
-  SEARCH_RADIUS_RATIO
+  SEARCH_RADIUS_RATIO,
+  STRANDED_DISTANCE_THRESHOLD_M
 } from './constants.js';
 
 /**
@@ -274,6 +275,24 @@ export const createRoute = async (
     // 次の再生成に備えて、今回の総距離を控える
     previousDistanceM = route.totalDistanceM;
 
+    // 経路から大きく外れたスポット（徒歩到達困難）を除外して再計算する。
+    // 除外すると最小スポット数を下回る場合はそのまま残す。
+    const reachableSpots = spots.filter(
+      (_, index) =>
+        (route.spotStrayDistancesM[index] ?? 0) <= STRANDED_DISTANCE_THRESHOLD_M
+    );
+
+    if (reachableSpots.length !== spots.length && reachableSpots.length >= MIN_SPOT_COUNT) {
+      logInfo('経路から外れたスポットを除外して再計算します', {
+        beforeSpotCount: spots.length,
+        afterSpotCount: reachableSpots.length
+      });
+
+      spots = reachableSpots;
+      route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+      previousDistanceM = route.totalDistanceM;
+    }
+
     // 1. 許容範囲内ならそのまま採用
     if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
       logInfo('目標距離の許容範囲内のルートを作成しました', {
@@ -362,11 +381,16 @@ export const createRoute = async (
     conceptStory,
     totalDistanceM: route.totalDistanceM,
     totalDurationS: route.totalDurationS,
-    spots: spots.map((spot) => ({
-      name: spot.name,
-      lng: spot.position[0],
-      lat: spot.position[1]
-    })),
+    // マーカーは経路上のスナップ後座標に合わせ、線とマーカーの乖離（飛び地）を防ぐ
+    spots: spots.map((spot, index) => {
+      const snappedPosition = route.spotSnappedPositions[index] ?? spot.position;
+
+      return {
+        name: spot.name,
+        lng: snappedPosition[0],
+        lat: snappedPosition[1]
+      };
+    }),
     coordinates: route.coordinates
   };
 };
