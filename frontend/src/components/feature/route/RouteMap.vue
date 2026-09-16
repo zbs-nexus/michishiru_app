@@ -173,6 +173,42 @@ const renderRouteLine = () => {
       'line-width': ROUTE_LINE_WIDTH_PX
     }
   });
+
+  // TODO(削除): 線が描かれない原因を切り分けるための一時的な診断ログ。
+  // 原因が判明したら、この logRouteLineDiagnostics ごと削除する。
+  logRouteLineDiagnostics(routeFeature);
+};
+
+/**
+ * @description 線が描かれない原因を切り分けるための情報を出す。
+ * TODO(削除): 原因が判明したら削除する。
+ * @param {object} routeFeature ソースへ渡したGeoJSON
+ * @returns {void}
+ */
+const logRouteLineDiagnostics = (routeFeature) => {
+  const coordinates = routeFeature.geometry.coordinates;
+
+  console.log('[地図診断] 座標数', coordinates.length);
+  console.log('[地図診断] 先頭/末尾', coordinates.at(0), coordinates.at(-1));
+  console.log(
+    '[地図診断] 座標がすべて同一か',
+    coordinates.every(
+      (position) => position[0] === coordinates[0][0] && position[1] === coordinates[0][1]
+    )
+  );
+  console.log('[地図診断] スタイルのレイヤー順', map.getStyle().layers.map((layer) => layer.id));
+  console.log('[地図診断] ソース有無', Boolean(map.getSource(ROUTE_SOURCE_ID)));
+  console.log('[地図診断] レイヤー有無', Boolean(map.getLayer(ROUTE_LINE_LAYER_ID)));
+
+  // 描画が落ち着いた時点で、実際に画面へ出 している地物の数を数える
+  map.once('idle', () => {
+    console.log(
+      '[地図診断] 描画された線の数',
+      map.queryRenderedFeatures({ layers: [ROUTE_LINE_LAYER_ID] }).length
+    );
+    console.log('[地図診断] 表示範囲', map.getBounds().toArray());
+    console.log('[地図診断] ズーム', map.getZoom());
+  });
 };
 
 /**
