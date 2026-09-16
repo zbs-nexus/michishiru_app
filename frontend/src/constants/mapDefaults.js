@@ -34,6 +34,18 @@ export const ROUTE_LINE_OUTLINE_COLOR = '#FFFFFF';
 /** ルートを示す線の縁取りを含めた太さ（ピクセル） */
 export const ROUTE_LINE_OUTLINE_WIDTH_PX = 9;
 
+/** 現在地マーカーの外円のサイズ（ピクセル） */
+export const CURRENT_LOCATION_MARKER_SIZE_PX = 24;
+
+/** 現在地マーカーの色（Google Maps風の青） */
+export const CURRENT_LOCATION_COLOR = '#4285F4';
+
+/** 現在地マーカーの精度円の色（半透明） */
+export const CURRENT_LOCATION_ACCURACY_COLOR = 'rgba(66, 133, 244, 0.15)';
+
+/** 案内中のズームレベル（現在地追従時） */
+export const NAVIGATION_ZOOM_LEVEL = 17;
+
 /**
  * 地図スタイルのURL。
  * Location Service（Maps）を使う場合は、スタイルディスクリプタのURLを

@@ -93,16 +93,16 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
  * 変換箇所をこの1関数に閉じ込め、API側のキー名が変わってもここだけの修正で済むようにする。
  *
  * キー名と値の形はルート作成Lambdaの受け口に合わせている。
- * ジャンルは表示名（例: 自然）を送り、Amazon Location ServiceのcategoryIDへの
- * 変換はLambda側が行う。
+ * ジャンルは英語のジャンルID（genreId。例: nature）を送り、スポットカテゴリへの
+ * 変換はLambda側が行う。表示名（例: 自然）ではマスタと一致しないため送らない。
  * @param {object} conditions 検索条件
- * @param {string} conditions.genreName ジャンルの表示名
+ * @param {string} conditions.genreId ジャンルID（英語。例: nature）
  * @param {number} conditions.distanceKm 希望距離（km）
  * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
  * @returns {object} リクエストボディ
  */
-const buildCreateRouteBody = ({ genreName, distanceKm, currentLocation }) => ({
-  purposeCategory: genreName,
+const buildCreateRouteBody = ({ genreId, distanceKm, currentLocation }) => ({
+  purposeCategory: genreId,
   targetDistanceKm: distanceKm,
   currentLocation: {
     lng: currentLocation.lng,
@@ -119,14 +119,14 @@ const buildCreateRouteBody = ({ genreName, distanceKm, currentLocation }) => ({
  * `{ "body": { "purposeCategory": ..., "targetDistanceKm": ..., "currentLocation": ... } }`
  * に相当する。フロント側で`body`キーを付けると二重入れ子になるため付けない。
  * @param {object} conditions 検索条件
- * @param {string} conditions.genreName ジャンルの表示名
+ * @param {string} conditions.genreId ジャンルID（英語。例: nature）
  * @param {number} conditions.distanceKm 希望距離（km）
  * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
  * @returns {Promise<object>} 画面で扱う形に変換したルート情報
  * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
  */
 export const createRoute = async ({
-  genreName,
+  genreId,
   distanceKm,
   currentLocation
 }) => {
@@ -134,7 +134,7 @@ export const createRoute = async ({
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(
-      buildCreateRouteBody({ genreName, distanceKm, currentLocation })
+      buildCreateRouteBody({ genreId, distanceKm, currentLocation })
     )
   });
 

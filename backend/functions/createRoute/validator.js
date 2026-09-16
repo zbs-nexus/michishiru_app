@@ -1,6 +1,6 @@
 import {
   DEFAULT_CURRENT_LOCATION,
-  DEFAULT_GENRE_NAME,
+  DEFAULT_GENRE_ID,
   DEFAULT_TARGET_DISTANCE_KM,
   LATITUDE_RANGE,
   LONGITUDE_RANGE,
@@ -63,11 +63,12 @@ const validateCurrentLocation = (currentLocation, errorMessages) => {
 /**
  * @description ルート作成リクエストを検証する。
  *
- * リクエストのキー名は既存の外部仕様に合わせている。
- * TODO(NZ未採番): `purposeCategory` を用語辞書に沿った `genre` へ改名する
+ * リクエストのキー名は既存の外部仕様に合わせている。値はフロントが送る
+ * 英語のジャンルID（genreId。例: food / nature）を受け取る。
+ * TODO(NZ未採番): `purposeCategory` を用語辞書に沿った `genreId` へ改名する
  * （`naming-conventions.md` の未決定事項 #1）。フロントとの同時変更が必要。
  * @param {object} body リクエストボディ
- * @param {string} [body.purposeCategory] ジャンル名（例: 自然）。未指定なら既定値
+ * @param {string} [body.purposeCategory] ジャンルID（英語。例: nature）。未指定なら既定値
  * @param {number} [body.targetDistanceKm] 目標距離（km）。未指定なら既定値
  * @param {{lat: number, lng: number}} [body.currentLocation] 現在地。未指定なら既定値
  * @returns {{isValid: boolean, errorMessages: string[], value: object|null}} 検証結果と正規化した値
@@ -75,9 +76,9 @@ const validateCurrentLocation = (currentLocation, errorMessages) => {
 export const validateCreateRouteRequest = (body = {}) => {
   const errorMessages = [];
 
-  const genreName = body.purposeCategory || DEFAULT_GENRE_NAME;
+  const genreId = body.purposeCategory || DEFAULT_GENRE_ID;
 
-  if (typeof genreName !== 'string') {
+  if (typeof genreId !== 'string') {
     errorMessages.push('purposeCategoryは文字列で指定してください');
   }
 
@@ -97,6 +98,6 @@ export const validateCreateRouteRequest = (body = {}) => {
   return {
     isValid,
     errorMessages,
-    value: isValid ? { genreName, targetDistanceKm, currentLocation } : null
+    value: isValid ? { genreId, targetDistanceKm, currentLocation } : null
   };
 };

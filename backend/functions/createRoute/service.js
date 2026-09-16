@@ -5,12 +5,14 @@ import { searchNearbySpots } from './repositories/placesRepository.js';
 import { generateRoutePlan } from './repositories/bedrockRepository.js';
 import { calculateWalkingRoute } from './repositories/routesRepository.js';
 import {
-  queryGenreIdByName,
-  querySpotCategoryIdsByGenreId
+  queryGenreNumberByGenreId,
+  querySpotCategoryIdsByGenreNumber
 } from './repositories/spotCategoryRepository.js';
 import {
-  DISTANCE_TOLERANCE_KM,
-  DISTANCE_TOLERANCE_RATIO,
+  BEDROCK_RETRY_TEMPERATURE,
+  BEDROCK_TEMPERATURE,
+  DISTANCE_LOWER_RATIO,
+  DISTANCE_UPPER_RATIO,
   MAX_PROMPT_CANDIDATES,
   MAX_ROUTE_RETRY_COUNT,
   MAX_SEARCH_CATEGORIES,
@@ -18,7 +20,8 @@ import {
   METERS_PER_KM,
   MIN_SPOT_COUNT,
   SEARCH_RADIUS_RANGE_M,
-  SEARCH_RADIUS_RATIO
+  SEARCH_RADIUS_RATIO,
+  STRANDED_DISTANCE_THRESHOLD_M
 } from './constants.js';
 
 /**
@@ -26,7 +29,7 @@ import {
  * HTTPには依存せず、プレーンなオブジェクトを受け取って返す。
  *
  * 処理の流れ（仕様書 Step 2〜5）:
- * 1. ジャンル名から検索対象のスポットカテゴリを引く（マスタ）
+ * 1. ジャンルIDから検索対象のスポットカテゴリを引く（マスタ）
  * 2. カテゴリごとに現在地の周辺スポットを検索し、重複を除いて候補にする（Places）
  * 3. 候補から巡るスポットとストーリーを選定させる（Bedrock）
  * 4. 選定したスポットを結ぶ徒歩経路を計算する（Routes）
@@ -35,25 +38,25 @@ import {
 
 /** 既定で使うリポジトリ。テスト時は差し替える */
 const defaultRepositories = {
-  queryGenreIdByName,
-  querySpotCategoryIdsByGenreId,
+  queryGenreNumberByGenreId,
+  querySpotCategoryIdsByGenreNumber,
   searchNearbySpots,
   generateRoutePlan,
   calculateWalkingRoute
 };
 
 /**
- * @description 目標距離の許容範囲内かどうかを判定する
+ * @description 目標距離の許容範囲内かどうかを判定する。
+ * 許容範囲は目標距離に対する割合（下限×0.6〜上限×1.4）で決める。
  * @param {number} totalDistanceM 算出された総距離（m）
  * @param {number} targetDistanceKm 目標距離（km）
- * @returns {boolean} 許容範囲内（目標±1km）の場合はtrue
+ * @returns {boolean} 許容範囲内の場合はtrue
  */
 const isWithinTargetRange = (totalDistanceM, targetDistanceKm) => {
   const targetDistanceM = targetDistanceKm * METERS_PER_KM;
-  const toleranceM = DISTANCE_TOLERANCE_KM * METERS_PER_KM;
   return (
-    totalDistanceM >= targetDistanceM - toleranceM &&
-    totalDistanceM <= targetDistanceM + toleranceM
+    totalDistanceM >= targetDistanceM * DISTANCE_LOWER_RATIO &&
+    totalDistanceM <= targetDistanceM * DISTANCE_UPPER_RATIO
   );
 };
 
@@ -61,22 +64,19 @@ const isWithinTargetRange = (totalDistanceM, targetDistanceKm) => {
  * @description 目標距離より大幅に短いかどうかを判定する
  * @param {number} totalDistanceM 算出された総距離（m）
  * @param {number} targetDistanceKm 目標距離（km）
- * @returns {boolean} 目標距離-1km未満の場合はtrue
+ * @returns {boolean} 目標距離の下限割合を下回る場合はtrue
  */
-const isTooShort = (totalDistanceM, targetDistanceKm) => {
-  const targetDistanceM = targetDistanceKm * METERS_PER_KM;
-  const toleranceM = DISTANCE_TOLERANCE_KM * METERS_PER_KM;
-  return totalDistanceM < targetDistanceM - toleranceM;
-};
+const isTooShort = (totalDistanceM, targetDistanceKm) =>
+  totalDistanceM < targetDistanceKm * METERS_PER_KM * DISTANCE_LOWER_RATIO;
 
 /**
  * @description 目標距離を許容範囲より超えているかどうかを判定する
  * @param {number} totalDistanceM 算出された総距離（m）
  * @param {number} targetDistanceKm 目標距離（km）
- * @returns {boolean} 超過している場合はtrue
+ * @returns {boolean} 目標距離の上限割合を上回る場合はtrue
  */
 const isOverTargetDistance = (totalDistanceM, targetDistanceKm) =>
-  totalDistanceM > targetDistanceKm * METERS_PER_KM * DISTANCE_TOLERANCE_RATIO;
+  totalDistanceM > targetDistanceKm * METERS_PER_KM * DISTANCE_UPPER_RATIO;
 
 /**
  * @description 目標距離から周辺スポット検索の半径（m）を決める。
@@ -95,32 +95,34 @@ const resolveQueryRadiusM = (targetDistanceKm) => {
 };
 
 /**
- * @description ジャンル名から検索対象のスポットカテゴリIDを引く
- * @param {string} genreName ジャンル名
+ * @description 英語のジャンルID（genreId）から検索対象のスポットカテゴリIDを引く。
+ * ジャンルマスタで英語IDを数値ジャンルキーへ変換し、その値でカテゴリマスタを引く。
+ * @param {string} genreId ジャンルID（英語。例: food / nature）
  * @param {object} repositories データ取得に使うリポジトリ
  * @returns {Promise<string[]>} カテゴリIDの一覧
  * @throws {ApplicationError} ジャンルまたはカテゴリがマスタに存在しない場合
  */
-const resolveSpotCategoryIds = async (genreName, repositories) => {
-  const genreId = await repositories.queryGenreIdByName(genreName);
+const resolveSpotCategoryIds = async (genreId, repositories) => {
+  const genreNumber = await repositories.queryGenreNumberByGenreId(genreId);
 
-  if (genreId === null) {
+  if (genreNumber === null) {
     throw createNotFoundError(
-      `指定されたジャンル（${genreName}）がマスタに登録されていません`,
-      { genreName }
+      `指定されたジャンル（${genreId}）がマスタに登録されていません`,
+      { genreId }
     );
   }
 
-  const spotCategoryIds = await repositories.querySpotCategoryIdsByGenreId(genreId);
+  const spotCategoryIds =
+    await repositories.querySpotCategoryIdsByGenreNumber(genreNumber);
 
   if (spotCategoryIds.length === 0) {
     throw createNotFoundError(
-      `指定されたジャンル（${genreName}）に紐づくカテゴリ情報が見つかりませんでした`,
-      { genreName, genreId }
+      `指定されたジャンル（${genreId}）に紐づくカテゴリ情報が見つかりませんでした`,
+      { genreId, genreNumber }
     );
   }
 
-  logInfo('検索対象のカテゴリを決定しました', { genreName, genreId, spotCategoryIds });
+  logInfo('検索対象のカテゴリを決定しました', { genreId, genreNumber, spotCategoryIds });
 
   return spotCategoryIds;
 };
@@ -196,7 +198,7 @@ const collectCandidateSpots = async (
 /**
  * @description 条件に合う散歩ルートを作成する
  * @param {object} conditions 作成条件
- * @param {string} conditions.genreName ジャンル名（例: 自然）
+ * @param {string} conditions.genreId ジャンルID（英語。例: food / nature）
  * @param {number} conditions.targetDistanceKm 目標距離（km）
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
  * @param {object} [repositories] 外部サービスへのアクセス（テスト時に差し替える）
@@ -204,11 +206,11 @@ const collectCandidateSpots = async (
  * @throws {ApplicationError} マスタやスポットが見つからない、または外部サービスが失敗した場合
  */
 export const createRoute = async (
-  { genreName, targetDistanceKm, currentLocation },
+  { genreId, targetDistanceKm, currentLocation },
   repositories = defaultRepositories
 ) => {
   const spotCategoryIds = limitSearchCategories(
-    await resolveSpotCategoryIds(genreName, repositories)
+    await resolveSpotCategoryIds(genreId, repositories)
   );
 
   const queryRadiusM = resolveQueryRadiusM(targetDistanceKm);
@@ -219,10 +221,10 @@ export const createRoute = async (
   );
 
   if (candidateSpots.length === 0) {
-    throw createNotFoundError('周辺に該当するスポットが見つかりませんでした', {
-      genreName,
-      spotCategoryIds
-    });
+    throw createNotFoundError(
+      '周辺にスポットが見つかりません。ジャンルと距離を変更して再検索してください',
+      { genreId, spotCategoryIds }
+    );
   }
 
   // Bedrockへ渡す候補は上限件数までに絞る（トークン削減による生成時間の短縮）
@@ -235,20 +237,27 @@ export const createRoute = async (
   });
 
   let retryCount = 0;
+  let previousDistanceM = null;
   let spots = [];
   let route = null;
   let routeTitle = '';
   let conceptStory = '';
 
-  // 目標距離±1kmの許容範囲内になるまで調整を試みる
+  // 目標距離の許容範囲内になるまで調整を試みる
   while (retryCount < MAX_ROUTE_RETRY_COUNT) {
+    // 再生成時は temperature を上げ、前回の距離を伝えて別の組み合わせを選び直させる
+    const temperature =
+      retryCount === 0 ? BEDROCK_TEMPERATURE : BEDROCK_RETRY_TEMPERATURE;
+
     // AIにルート案を生成させる
     const plan = await repositories.generateRoutePlan(
       buildRoutePlanPrompt({
         targetDistanceKm,
         currentLocation,
-        candidateSpots: promptCandidateSpots
-      })
+        candidateSpots: promptCandidateSpots,
+        previousDistanceM
+      }),
+      temperature
     );
 
     routeTitle = plan.routeTitle;
@@ -262,6 +271,27 @@ export const createRoute = async (
 
     spots = plan.spots;
     route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+
+    // 次の再生成に備えて、今回の総距離を控える
+    previousDistanceM = route.totalDistanceM;
+
+    // 経路から大きく外れたスポット（徒歩到達困難）を除外して再計算する。
+    // 除外すると最小スポット数を下回る場合はそのまま残す。
+    const reachableSpots = spots.filter(
+      (_, index) =>
+        (route.spotStrayDistancesM[index] ?? 0) <= STRANDED_DISTANCE_THRESHOLD_M
+    );
+
+    if (reachableSpots.length !== spots.length && reachableSpots.length >= MIN_SPOT_COUNT) {
+      logInfo('経路から外れたスポットを除外して再計算します', {
+        beforeSpotCount: spots.length,
+        afterSpotCount: reachableSpots.length
+      });
+
+      spots = reachableSpots;
+      route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+      previousDistanceM = route.totalDistanceM;
+    }
 
     // 1. 許容範囲内ならそのまま採用
     if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
@@ -337,12 +367,11 @@ export const createRoute = async (
   // 最終確認：許容範囲外ならエラー
   if (!isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
     throw createNotFoundError(
-      '目標距離の許容範囲内（±1km）のルートを作成できませんでした',
+      '目標距離に近いルートを作成できませんでした。ジャンルと距離を変更して再検索してください',
       {
         totalDistanceM: route.totalDistanceM,
         targetDistanceKm,
-        spotCount: spots.length,
-        toleranceKm: DISTANCE_TOLERANCE_KM
+        spotCount: spots.length
       }
     );
   }
@@ -352,11 +381,16 @@ export const createRoute = async (
     conceptStory,
     totalDistanceM: route.totalDistanceM,
     totalDurationS: route.totalDurationS,
-    spots: spots.map((spot) => ({
-      name: spot.name,
-      lng: spot.position[0],
-      lat: spot.position[1]
-    })),
+    // マーカーは経路上のスナップ後座標に合わせ、線とマーカーの乖離（飛び地）を防ぐ
+    spots: spots.map((spot, index) => {
+      const snappedPosition = route.spotSnappedPositions[index] ?? spot.position;
+
+      return {
+        name: spot.name,
+        lng: snappedPosition[0],
+        lat: snappedPosition[1]
+      };
+    }),
     coordinates: route.coordinates
   };
 };

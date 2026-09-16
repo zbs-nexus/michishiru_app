@@ -17,28 +17,46 @@ export const BEDROCK_MODEL_ID =
 /** Bedrockの生成のばらつき。低くして候補リストからの逸脱を抑える */
 export const BEDROCK_TEMPERATURE = 0.2;
 
+/**
+ * 再生成時に使うBedrockの生成のばらつき。
+ * 初回より高くして、前回と同じスポットの組み合わせを繰り返すのを防ぎ、
+ * 距離が目標に届かないときに別の候補を選び直させる。
+ */
+export const BEDROCK_RETRY_TEMPERATURE = 0.5;
+
 /** Bedrockが生成する最大トークン数 */
 export const BEDROCK_MAX_TOKENS = 1000;
 
 /**
- * ジャンルマスタのテーブル名（ジャンル名 → ジャンルID）。
+ * 検索条件マスタ（michimaster）のテーブル名。
+ * ジャンル項目から英語ID（genreId）→ 数値ジャンルキー（genre_id）の変換に使う。
+ * getConditions と同じテーブルを参照する。
  * TODO(NZ未採番): コンソールで手動作成されたテーブルを参照している。
  * CDK管理へ移し、命名規則（`PascalCase単数形-<環境>`）へ揃える。
  */
-export const GENRE_TABLE_NAME = process.env.GENRE_TABLE_NAME ?? '';
+export const CONDITION_TABLE_NAME = process.env.CONDITION_TABLE_NAME ?? '';
 
-/** スポットカテゴリマスタのテーブル名（ジャンルID → PlacesのカテゴリID） */
+/** スポットカテゴリマスタのテーブル名（数値ジャンルキー → PlacesのカテゴリID） */
 export const SPOT_CATEGORY_TABLE_NAME = process.env.SPOT_CATEGORY_TABLE_NAME ?? '';
+
+/** 検索条件マスタでジャンル項目を引くパーティションキー（pk）の値 */
+export const GENRE_CONDITION_PK = 'GENRE#ALL';
+
+/** 検索条件マスタのジャンル項目のソートキー（sk）の接頭辞（例: METADATA#food） */
+export const GENRE_CONDITION_SK_PREFIX = 'METADATA#';
 
 /**
  * マスタテーブルの属性名。
- * 手動作成されたテーブルのため属性名が日本語・snake_case で、
+ * 手動作成されたテーブルのため属性名が snake_case で、
  * `back-data-access.md` の camelCase 規則から外れている。
  * TODO(NZ未採番): CDK管理へ移すときに属性名も camelCase へ揃える。
  */
-export const GENRE_NAME_ATTRIBUTE = 'ジャンル名称';
 
-/** ジャンルマスタ・カテゴリマスタが持つジャンルIDの属性名 */
+/**
+ * 検索条件マスタ・カテゴリマスタが持つ、両者を紐づける数値ジャンルキーの属性名。
+ * 検索条件マスタで英語ID（genreId）からこの値（例: 2 / 4）を得て、カテゴリマスタをこの値で引く。
+ * 英語のジャンルID（genreId）とは別物なので注意する。
+ */
 export const GENRE_ID_ATTRIBUTE = 'genre_id';
 
 /** カテゴリマスタが持つカテゴリIDの属性名 */
@@ -81,10 +99,10 @@ export const SEARCH_RADIUS_RANGE_M = { min: 500, max: 5000 };
 export const DEFAULT_TARGET_DISTANCE_KM = 3;
 
 /**
- * 指定が無い場合に使うジャンル名。
- * ジャンルマスタは日本語のジャンル名で引くため、既定値も日本語で持つ。
+ * 指定が無い場合に使うジャンルID（英語）。
+ * ジャンルマスタは英語のジャンルIDで引くため、既定値も英語IDで持つ。
  */
-export const DEFAULT_GENRE_NAME = '自然';
+export const DEFAULT_GENRE_ID = 'nature';
 
 /**
  * 現在地が渡されなかった場合に使う座標（新宿）。
@@ -93,11 +111,17 @@ export const DEFAULT_GENRE_NAME = '自然';
  */
 export const DEFAULT_CURRENT_LOCATION = { lng: 139.702973, lat: 35.686338 };
 
-/** 目標距離に対して許容する超過の倍率。これを超えたらスポットを削って再計算する */
-export const DISTANCE_TOLERANCE_RATIO = 1.25;
+/**
+ * 目標距離に対して許容する下限の割合。総距離がこれを下回ると「短すぎ」とみなす。
+ * 固定±1kmだと短距離目標に対して厳しすぎたため、目標距離に対する割合で判定する。
+ */
+export const DISTANCE_LOWER_RATIO = 0.6;
 
-/** 目標距離に対して許容する誤差（km）。この範囲内なら目標達成とみなす */
-export const DISTANCE_TOLERANCE_KM = 1;
+/**
+ * 目標距離に対して許容する上限の割合。総距離がこれを上回ると「超過」とみなし、
+ * スポットを削って再計算する。
+ */
+export const DISTANCE_UPPER_RATIO = 1.4;
 
 /** スポットを削るときに残す最小のスポット数 */
 export const MIN_SPOT_COUNT = 1;
@@ -132,6 +156,14 @@ export const EARTH_RADIUS_M = 6371000;
  * 描画コストを抑える。小さいほど元の形に忠実で点が多く残る。
  */
 export const SIMPLIFY_TOLERANCE_M = 5;
+
+/**
+ * スポットが経路から外れていると判定するしきい値（m）。
+ * スポットの元座標と、徒歩経路上のスナップ後座標との距離がこれを超える場合、
+ * 一般の歩行者が到達できない地点（例: 皇居内の施設）とみなして経路から除外する。
+ * 通常のスナップ（最寄りの歩道まで）は数十m以内に収まるため、それより大きく取る。
+ */
+export const STRANDED_DISTANCE_THRESHOLD_M = 150;
 
 /** 受け付ける緯度の範囲 */
 export const LATITUDE_RANGE = { min: -90, max: 90 };
