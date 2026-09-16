@@ -72,11 +72,20 @@ export const DISTANCE_TOLERANCE_KM = 1;
 /** スポットを削るときに残す最小のスポット数 */
 export const MIN_SPOT_COUNT = 1;
 
+/** スポットを増やすときの最大のスポット数 */
+export const MAX_SPOT_COUNT = 5;
+
+/** ルート再作成の最大試行回数 */
+export const MAX_ROUTE_RETRY_COUNT = 3;
+
 /** 1kmあたりのメートル数 */
 export const METERS_PER_KM = 1000;
 
-/** 徒歩の平均速度（m/秒）。所要時間がAPIから取得できない場合の概算に使う */
-export const WALKING_METERS_PER_SECOND = 1.33;
+/**
+ * 徒歩の平均速度（m/秒）。大人の標準的な歩行速度（時速4km）。
+ * 所要時間がAPIから取得できない場合の概算に使う。
+ */
+export const WALKING_METERS_PER_SECOND = 1.11;
 
 /** 地球の半径（m）。2点間の距離計算に使う */
 export const EARTH_RADIUS_M = 6371000;
