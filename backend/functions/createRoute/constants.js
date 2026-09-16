@@ -48,6 +48,15 @@ export const SPOT_CATEGORY_ID_ATTRIBUTE = 'category_id';
 export const MAX_SPOT_CANDIDATES = 15;
 
 /**
+ * 1回のルート生成で周辺検索を行うスポットカテゴリの最大数。
+ * ジャンルに紐づくカテゴリが多い（例: 食べ歩きは20件超）と、その数だけ
+ * SearchNearby を並列に呼ぶことになり、生成時間が伸びてゲートウェイの
+ * タイムアウト（29秒）に達する。これを超える場合は毎回ランダムに
+ * 選び直し、生成時間を抑えつつ再作成のたびに違うカテゴリを試す。
+ */
+export const MAX_SEARCH_CATEGORIES = 8;
+
+/**
  * プロンプトへ渡す候補スポットの最大件数。
  * 候補が多いほどBedrockへ渡すトークンが増えて生成が遅くなるため、
  * 現在地に近い順から上限件数に絞ってから渡す。
@@ -115,6 +124,14 @@ export const WALKING_METERS_PER_SECOND = 1.11;
 
 /** 地球の半径（m）。2点間の距離計算に使う */
 export const EARTH_RADIUS_M = 6371000;
+
+/**
+ * 経路座標を間引くときの許容誤差（m）。
+ * Ramer–Douglas–Peucker で、元の線からこの距離以内に収まる点は省く。
+ * 徒歩ルートの見た目を保てる範囲でできるだけ点を減らし、応答サイズと
+ * 描画コストを抑える。小さいほど元の形に忠実で点が多く残る。
+ */
+export const SIMPLIFY_TOLERANCE_M = 5;
 
 /** 受け付ける緯度の範囲 */
 export const LATITUDE_RANGE = { min: -90, max: 90 };

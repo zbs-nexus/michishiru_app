@@ -34,6 +34,36 @@ const extractErrorMessage = async (response) => {
   }
 };
 
+/** ゲートウェイのタイムアウト・過負荷を表すステータス */
+const GATEWAY_ERROR_STATUSES = [502, 503, 504];
+
+/**
+ * @description レスポンスが利用可能（成功かつJSON）であることを保証する。
+ * 失敗時は原因に応じたメッセージで例外を投げ、呼び出し側で表示できるようにする。
+ * @param {Response} response fetchのレスポンス
+ * @returns {Promise<void>}
+ * @throws {Error} 応答がエラー、またはJSON以外の場合
+ */
+const ensureUsableResponse = async (response) => {
+  if (!response.ok) {
+    // 502/503/504 は生成に時間がかかりすぎたか、一時的に混み合っている可能性が高い
+    if (GATEWAY_ERROR_STATUSES.includes(response.status)) {
+      throw new Error(
+        '一時的に混み合っています。時間を置いて、再試行してください。'
+      );
+    }
+
+    throw new Error(await extractErrorMessage(response));
+  }
+
+  // APIが未配線の環境ではSPAのindex.html（HTML）が200で返るため、解析前に判定する
+  if (!isJsonResponse(response)) {
+    throw new Error(
+      'ルート作成に失敗しました。'
+    );
+  }
+};
+
 /**
  * @description 条件に合うルートを1件取得する
  * @param {object} conditions 検索条件
@@ -53,16 +83,7 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
 
   const response = await fetch(`${ROUTE_API_URL}?${query.toString()}`);
 
-  if (!response.ok) {
-    throw new Error(await extractErrorMessage(response));
-  }
-
-  // APIが未配線の環境ではSPAのindex.htmlが200で返るため、解析前に判定する
-  if (!isJsonResponse(response)) {
-    throw new Error(
-      'ルート作成APIに接続できません（JSON以外の応答を受け取りました）'
-    );
-  }
+  await ensureUsableResponse(response);
 
   return toRoute(await response.json());
 };
@@ -117,15 +138,7 @@ export const createRoute = async ({
     )
   });
 
-  if (!response.ok) {
-    throw new Error(await extractErrorMessage(response));
-  }
-
-  if (!isJsonResponse(response)) {
-    throw new Error(
-      'ルート作成APIに接続できません（JSON以外の応答を受け取りました）'
-    );
-  }
+  await ensureUsableResponse(response);
 
   // 生成APIのレスポンスはsnake_case・メートル・秒のため、画面で扱う形へ変換する
   return toRoute(await response.json());

@@ -13,6 +13,7 @@ import {
   DISTANCE_TOLERANCE_RATIO,
   MAX_PROMPT_CANDIDATES,
   MAX_ROUTE_RETRY_COUNT,
+  MAX_SEARCH_CATEGORIES,
   MAX_SPOT_COUNT,
   METERS_PER_KM,
   MIN_SPOT_COUNT,
@@ -125,6 +126,30 @@ const resolveSpotCategoryIds = async (genreName, repositories) => {
 };
 
 /**
+ * @description 周辺検索を行うカテゴリを上限数まで絞る。
+ * ジャンルに紐づくカテゴリが多いと、その数だけ SearchNearby を並列に呼ぶことになり
+ * 生成時間が伸びる。上限を超える場合は毎回ランダムに選び直すことで、生成時間を
+ * 抑えつつ、再作成のたびに異なるカテゴリの組み合わせを試せるようにする。
+ * @param {string[]} spotCategoryIds ジャンルに紐づく全カテゴリID
+ * @returns {string[]} 上限数までのカテゴリID（元が上限以下ならそのまま返す）
+ */
+const limitSearchCategories = (spotCategoryIds) => {
+  if (spotCategoryIds.length <= MAX_SEARCH_CATEGORIES) {
+    return spotCategoryIds;
+  }
+
+  // Fisher-Yates でシャッフルしてから先頭を採用する
+  const shuffled = [...spotCategoryIds];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled.slice(0, MAX_SEARCH_CATEGORIES);
+};
+
+/**
  * @description カテゴリごとに周辺スポットを検索し、重複を除いた候補にまとめる。
  *
  * 一部のカテゴリで検索が失敗しても、残りの候補でルートを作れるため処理を続ける。
@@ -182,7 +207,9 @@ export const createRoute = async (
   { genreName, targetDistanceKm, currentLocation },
   repositories = defaultRepositories
 ) => {
-  const spotCategoryIds = await resolveSpotCategoryIds(genreName, repositories);
+  const spotCategoryIds = limitSearchCategories(
+    await resolveSpotCategoryIds(genreName, repositories)
+  );
 
   const queryRadiusM = resolveQueryRadiusM(targetDistanceKm);
 
