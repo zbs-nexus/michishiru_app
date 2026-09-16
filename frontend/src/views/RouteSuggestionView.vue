@@ -1,11 +1,13 @@
 <script setup>
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
+import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
 import { useRouteCreation } from '@/composables/useRouteCreation';
+import { useToastMessage } from '@/composables/useToastMessage';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
@@ -14,7 +16,16 @@ import { useRouteStore } from '@/stores/routeStore';
  */
 const router = useRouter();
 const routeStore = useRouteStore();
-const { isCreating, errorMessage, createRoute } = useRouteCreation();
+const {
+  isCreating,
+  errorMessage: creationErrorMessage,
+  createRoute
+} = useRouteCreation();
+const {
+  message: toastMessage,
+  showMessage,
+  hideMessage
+} = useToastMessage();
 
 /**
  * @description 提案を確定して案内画面へ進む。
@@ -26,11 +37,20 @@ const handleConfirm = () => {
 };
 
 /**
- * @description 同じ条件でルートを作り直す
+ * @description 同じ条件でルートを作り直す。
+ * 失敗した場合はホーム画面と同じく画面上部のポップアップで知らせ、
+ * 直前に提案していたルートはそのまま表示し続ける。
  * @returns {Promise<void>}
  */
 const handleRegenerate = async () => {
-  await createRoute();
+  // 前回の失敗メッセージが残ったままロード表示へ入らないように消す
+  hideMessage();
+
+  const isSucceeded = await createRoute();
+
+  if (!isSucceeded) {
+    showMessage(creationErrorMessage.value ?? 'ルートの再作成に失敗しました');
+  }
 };
 </script>
 
@@ -41,6 +61,12 @@ const handleRegenerate = async () => {
     v-else-if="routeStore.currentRoute"
     :has-content-padding="false"
   >
+    <BaseToast
+      v-if="toastMessage"
+      :message="toastMessage"
+      @close="hideMessage"
+    />
+
     <div class="content">
       <h2 class="page-title">
         おすすめルート
@@ -56,14 +82,6 @@ const handleRegenerate = async () => {
         :description="routeStore.currentRoute.description"
         :duration-minutes="routeStore.currentRoute.durationMinutes"
       />
-
-      <p
-        v-if="errorMessage"
-        class="hint"
-        role="alert"
-      >
-        {{ errorMessage }}
-      </p>
     </div>
 
     <template #footer>
