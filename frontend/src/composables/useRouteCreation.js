@@ -54,8 +54,9 @@ export const useRouteCreation = () => {
       // 現在地を取得（失敗時はフォールバック値が返る）
       const location = await fetchCurrentLocation();
 
+      // ジャンルは英語のジャンルID（genre）を送る。表示名（genreName）ではマスタと一致しない
       const route = await requestRouteCreation({
-        genreName: routeStore.genreName,
+        genreId: routeStore.genre,
         distanceKm: routeStore.distanceKm,
         currentLocation: location
       });
