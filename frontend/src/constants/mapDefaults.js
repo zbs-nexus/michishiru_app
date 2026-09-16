@@ -18,8 +18,12 @@ export const MAX_FIT_ZOOM_LEVEL = 17;
 /** ルート全体を収めるときに確保する余白（ピクセル） */
 export const MAP_FIT_PADDING_PX = 40;
 
-/** ルートを示す線の色（--accent-green と同色） */
-export const ROUTE_LINE_COLOR = '#4A7C59';
+/**
+ * ルートを示す線の色（--route-blue と同色）。
+ * 地図の下地（緑の公園・灰色の道路）と競合しない青にしている。
+ * global.css の `.spot-marker` と揃えているため、変更時は両方直す。
+ */
+export const ROUTE_LINE_COLOR = '#1A73E8';
 
 /** ルートを示す線の太さ（ピクセル） */
 export const ROUTE_LINE_WIDTH_PX = 5;
