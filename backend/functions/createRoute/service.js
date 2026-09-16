@@ -11,6 +11,8 @@ import {
 import {
   DISTANCE_TOLERANCE_KM,
   DISTANCE_TOLERANCE_RATIO,
+  MAX_ROUTE_RETRY_COUNT,
+  MAX_SPOT_COUNT,
   METERS_PER_KM,
   MIN_SPOT_COUNT
 } from './constants.js';
@@ -49,6 +51,18 @@ const isWithinTargetRange = (totalDistanceM, targetDistanceKm) => {
     totalDistanceM >= targetDistanceM - toleranceM &&
     totalDistanceM <= targetDistanceM + toleranceM
   );
+};
+
+/**
+ * @description 目標距離より大幅に短いかどうかを判定する
+ * @param {number} totalDistanceM 算出された総距離（m）
+ * @param {number} targetDistanceKm 目標距離（km）
+ * @returns {boolean} 目標距離-1km未満の場合はtrue
+ */
+const isTooShort = (totalDistanceM, targetDistanceKm) => {
+  const targetDistanceM = targetDistanceKm * METERS_PER_KM;
+  const toleranceM = DISTANCE_TOLERANCE_KM * METERS_PER_KM;
+  return totalDistanceM < targetDistanceM - toleranceM;
 };
 
 /**
@@ -164,54 +178,118 @@ export const createRoute = async (
 
   logInfo('候補スポットを取得しました', { candidateSpotCount: candidateSpots.length });
 
-  const plan = await repositories.generateRoutePlan(
-    buildRoutePlanPrompt({ targetDistanceKm, currentLocation, candidateSpots })
-  );
+  let retryCount = 0;
+  let spots = [];
+  let route = null;
+  let routeTitle = '';
+  let conceptStory = '';
 
-  logInfo('ルート案を生成しました', {
-    routeTitle: plan.routeTitle,
-    spotCount: plan.spots.length
-  });
+  // 目標距離±1kmの許容範囲内になるまで調整を試みる
+  while (retryCount < MAX_ROUTE_RETRY_COUNT) {
+    // AIにルート案を生成させる
+    const plan = await repositories.generateRoutePlan(
+      buildRoutePlanPrompt({ targetDistanceKm, currentLocation, candidateSpots })
+    );
 
-  let spots = plan.spots;
-  let route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+    routeTitle = plan.routeTitle;
+    conceptStory = plan.conceptStory;
 
-  // 目標距離±1kmの許容範囲内に収めるため、スポットを調整する
-  // 1. 大きく超過している場合は、許容範囲内になるまでスポットを削る
-  // 2. 最低1スポットは残す
-  while (
-    isOverTargetDistance(route.totalDistanceM, targetDistanceKm) &&
-    spots.length > MIN_SPOT_COUNT
-  ) {
-    logInfo('目標距離を超えたためスポットを削って再計算します', {
+    logInfo('ルート案を生成しました', {
+      routeTitle: plan.routeTitle,
+      spotCount: plan.spots.length,
+      retryCount
+    });
+
+    spots = plan.spots;
+    route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+
+    // 1. 許容範囲内ならそのまま採用
+    if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+      logInfo('目標距離の許容範囲内のルートを作成しました', {
+        totalDistanceM: route.totalDistanceM,
+        targetDistanceKm,
+        spotCount: spots.length
+      });
+      break;
+    }
+
+    // 2. 大きく超過している場合はスポットを削って調整
+    while (
+      isOverTargetDistance(route.totalDistanceM, targetDistanceKm) &&
+      spots.length > MIN_SPOT_COUNT
+    ) {
+      logInfo('目標距離を超えたためスポットを削って再計算します', {
+        totalDistanceM: route.totalDistanceM,
+        targetDistanceKm,
+        spotCount: spots.length
+      });
+
+      spots = spots.slice(0, -1);
+      route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+
+      // 削った結果、許容範囲内に収まったらループ終了
+      if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+        logInfo('スポット削減により許容範囲内のルートを作成しました', {
+          totalDistanceM: route.totalDistanceM,
+          targetDistanceKm,
+          spotCount: spots.length
+        });
+        break;
+      }
+    }
+
+    // 許容範囲内に収まったらメインループも終了
+    if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+      break;
+    }
+
+    // 3. 距離が短すぎる場合はスポットを追加して再生成
+    if (isTooShort(route.totalDistanceM, targetDistanceKm)) {
+      if (spots.length >= MAX_SPOT_COUNT) {
+        logWarn('スポット数が最大のため、これ以上追加できません', {
+          totalDistanceM: route.totalDistanceM,
+          targetDistanceKm,
+          spotCount: spots.length
+        });
+        break;
+      }
+
+      logInfo('目標距離より短いため、スポットを増やして再生成します', {
+        totalDistanceM: route.totalDistanceM,
+        targetDistanceKm,
+        spotCount: spots.length,
+        retryCount
+      });
+
+      retryCount += 1;
+      continue;
+    }
+
+    // 4. その他の場合（スポットが最小数で調整不可など）
+    logWarn('許容範囲外ですが、これ以上の調整ができません', {
       totalDistanceM: route.totalDistanceM,
       targetDistanceKm,
       spotCount: spots.length
     });
-
-    spots = spots.slice(0, -1);
-    route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+    break;
   }
 
-  // 許容範囲内に収まったか、最終確認
-  if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
-    logInfo('目標距離の許容範囲内のルートを作成しました', {
-      totalDistanceM: route.totalDistanceM,
-      targetDistanceKm,
-      spotCount: spots.length
-    });
-  } else {
-    logWarn('目標距離の許容範囲外ですが、これ以上の調整ができません', {
-      totalDistanceM: route.totalDistanceM,
-      targetDistanceKm,
-      spotCount: spots.length,
-      toleranceKm: DISTANCE_TOLERANCE_KM
-    });
+  // 最終確認：許容範囲外ならエラー
+  if (!isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+    throw createNotFoundError(
+      '目標距離の許容範囲内（±1km）のルートを作成できませんでした',
+      {
+        totalDistanceM: route.totalDistanceM,
+        targetDistanceKm,
+        spotCount: spots.length,
+        toleranceKm: DISTANCE_TOLERANCE_KM
+      }
+    );
   }
 
   return {
-    routeTitle: plan.routeTitle,
-    conceptStory: plan.conceptStory,
+    routeTitle,
+    conceptStory,
     totalDistanceM: route.totalDistanceM,
     totalDurationS: route.totalDurationS,
     spots: spots.map((spot) => ({
