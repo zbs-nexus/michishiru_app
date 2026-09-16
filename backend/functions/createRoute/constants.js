@@ -66,8 +66,11 @@ export const DEFAULT_CURRENT_LOCATION = { lng: 139.702973, lat: 35.686338 };
 /** 目標距離に対して許容する超過の倍率。これを超えたらスポットを削って再計算する */
 export const DISTANCE_TOLERANCE_RATIO = 1.25;
 
+/** 目標距離に対して許容する誤差（km）。この範囲内なら目標達成とみなす */
+export const DISTANCE_TOLERANCE_KM = 1;
+
 /** スポットを削るときに残す最小のスポット数 */
-export const MIN_SPOT_COUNT = 2;
+export const MIN_SPOT_COUNT = 1;
 
 /** 1kmあたりのメートル数 */
 export const METERS_PER_KM = 1000;

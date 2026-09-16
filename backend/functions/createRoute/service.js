@@ -9,6 +9,7 @@ import {
   querySpotCategoryIdsByGenreId
 } from './repositories/spotCategoryRepository.js';
 import {
+  DISTANCE_TOLERANCE_KM,
   DISTANCE_TOLERANCE_RATIO,
   METERS_PER_KM,
   MIN_SPOT_COUNT
@@ -33,6 +34,21 @@ const defaultRepositories = {
   searchNearbySpots,
   generateRoutePlan,
   calculateWalkingRoute
+};
+
+/**
+ * @description 目標距離の許容範囲内かどうかを判定する
+ * @param {number} totalDistanceM 算出された総距離（m）
+ * @param {number} targetDistanceKm 目標距離（km）
+ * @returns {boolean} 許容範囲内（目標±1km）の場合はtrue
+ */
+const isWithinTargetRange = (totalDistanceM, targetDistanceKm) => {
+  const targetDistanceM = targetDistanceKm * METERS_PER_KM;
+  const toleranceM = DISTANCE_TOLERANCE_KM * METERS_PER_KM;
+  return (
+    totalDistanceM >= targetDistanceM - toleranceM &&
+    totalDistanceM <= targetDistanceM + toleranceM
+  );
 };
 
 /**
@@ -160,7 +176,9 @@ export const createRoute = async (
   let spots = plan.spots;
   let route = await repositories.calculateWalkingRoute({ currentLocation, spots });
 
-  // 目標距離を大きく超えた場合は、許容範囲内になるまで末尾のスポットを削って再計算する
+  // 目標距離±1kmの許容範囲内に収めるため、スポットを調整する
+  // 1. 大きく超過している場合は、許容範囲内になるまでスポットを削る
+  // 2. 最低1スポットは残す
   while (
     isOverTargetDistance(route.totalDistanceM, targetDistanceKm) &&
     spots.length > MIN_SPOT_COUNT
@@ -173,6 +191,22 @@ export const createRoute = async (
 
     spots = spots.slice(0, -1);
     route = await repositories.calculateWalkingRoute({ currentLocation, spots });
+  }
+
+  // 許容範囲内に収まったか、最終確認
+  if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+    logInfo('目標距離の許容範囲内のルートを作成しました', {
+      totalDistanceM: route.totalDistanceM,
+      targetDistanceKm,
+      spotCount: spots.length
+    });
+  } else {
+    logWarn('目標距離の許容範囲外ですが、これ以上の調整ができません', {
+      totalDistanceM: route.totalDistanceM,
+      targetDistanceKm,
+      spotCount: spots.length,
+      toleranceKm: DISTANCE_TOLERANCE_KM
+    });
   }
 
   return {
