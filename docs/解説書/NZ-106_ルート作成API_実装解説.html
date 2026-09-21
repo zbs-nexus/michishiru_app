@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-106 ルート作成API - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 25px;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            margin: 15px 0;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 20px;
+            margin: 15px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 20px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .success {
+            background-color: #e8f8f5;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+            line-height: 2;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .architecture-diagram {
+            background-color: #fafafa;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-family: 'Consolas', monospace;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .emoji {
+            font-size: 1.2em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🗺️ NZ-106 ルート作成API - 実装解説</h1>
+        
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026年9月9日<br>
+            <strong>🌿 ブランチ:</strong> feature/NZ-106<br>
+            <strong>📝 課題番号:</strong> NZ-106<br>
+            <strong>👤 対象読者:</strong> 開発初心者向け
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            この機能は、<strong>ミチシルアプリの中核となるルート作成機能</strong>です。
+            ユーザーが「自然が好き」「3km歩きたい」と条件を入力すると、AIが現在地の周辺から面白いスポットを選んで、散歩ルートを自動で作ってくれます。
+        </p>
+        <p>
+            イメージとしては、「散歩のガイドさん」が周辺の公園やカフェを知っていて、あなたの希望に合わせてちょうど良い散歩コースを組んでくれる、そんな機能です。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            散歩をしたいけど、以下のような悩みを持っている人は多いです：
+        </p>
+        <ul>
+            <li>近所にどんな場所があるか知らない</li>
+            <li>いつも同じ道を歩いてしまって飽きる</li>
+            <li>ちょうど良い距離のコースが分からない</li>
+            <li>行きたいジャンル（自然、カフェなど）に合った場所を探すのが面倒</li>
+        </ul>
+        <p>
+            この機能は、そんな悩みを解決するために、<strong>AIと地図サービスを組み合わせて、一人ひとりに合った散歩ルートを自動で作ります</strong>。
+        </p>
+
+        <h2>🔄 処理の流れ（全体像）</h2>
+        <div class="architecture-diagram">
+ユーザー → フロントエンド → API Gateway → Lambda(createRoute)
+                                                   ↓
+                                    【Step 1】DynamoDBからマスタデータを取得
+                                    「自然」→ 公園、展望台などのカテゴリ
+                                                   ↓
+                                    【Step 2】Amazon Location Service (Places)
+                                    現在地から半径内の公園や展望台を検索
+                                                   ↓
+                                    【Step 3】Amazon Bedrock (AI)
+                                    候補スポットから、ちょうど良いルートを選定
+                                                   ↓
+                                    【Step 4】Amazon Location Service (Routes)
+                                    選ばれたスポットを繋ぐ徒歩経路を計算
+                                                   ↓
+                                    【Step 5】距離の調整
+                                    長すぎたらスポットを減らす
+                                                   ↓
+                                    完成したルート → フロントエンドへ返す
+        </div>
+
+        <h2>📝 詳しい処理の流れ</h2>
+
+        <div class="flow-step">
+            <strong>Step 0: リクエストを受け取る（handler.js）</strong>
+            <p>
+                フロントエンドから送られてきたリクエスト（JSON形式）を受け取ります。
+            </p>
+            <div class="code-block">
+// リクエストの例
+{
+  "genreId": "nature",        // ジャンル（自然）
+  "targetDistanceKm": 3,      // 希望距離（3km）
+  "currentLocation": {
+    "lat": 35.6812,           // 現在地の緯度
+    "lng": 139.7671           // 現在地の経度
+  }
+}
+            </div>
+            <p>
+                <strong>やっていること：</strong>
+            </p>
+            <ul>
+                <li>JSONを解析できるかチェック</li>
+                <li>必須項目（ジャンル、距離、現在地）が入っているかチェック</li>
+                <li>問題なければService層（ビジネスロジック）に処理を渡す</li>
+            </ul>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 1: ジャンルから検索カテゴリを決める（service.js + spotCategoryRepository.js）</strong>
+            <p>
+                ユーザーが選んだジャンル（例：「自然」）から、実際に地図サービスで検索するカテゴリ（例：「公園」「展望台」）を決めます。
+            </p>
+            <p>
+                <strong>なぜ変換が必要？</strong><br>
+                ユーザーには「自然」という分かりやすい言葉で選んでもらいますが、地図サービスは「park」「viewpoint」のような細かいカテゴリで場所を管理しているためです。
+            </p>
+            <p>
+                <strong>具体的な流れ：</strong>
+            </p>
+            <ol>
+                <li>ジャンルマスタから「nature」→「1」という数字に変換</li>
+                <li>カテゴリマスタから「1」→「park, viewpoint, ...」のリストに変換</li>
+                <li>カテゴリが多すぎる場合はランダムで上限数まで絞る（生成時間短縮のため）</li>
+            </ol>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 2: 周辺のスポットを検索する（placesRepository.js）</strong>
+            <p>
+                Amazon Location Service（地図サービス）に、現在地の周辺からスポットを探してもらいます。
+            </p>
+            <p>
+                <strong>検索範囲の決め方：</strong><br>
+                希望距離が3kmなら、出発地から概ね1.5km以内のスポットを探します。
+                なぜなら、周回コースなので各スポットは希望距離の半分より内側にあることが多いからです。
+            </p>
+            <div class="code-block">
+// 検索の例
+現在地: 東京駅
+半径: 1500m
+カテゴリ: 「公園」
+
+→ 結果: 皇居外苑、日比谷公園、丸の内仲通り など
+            </div>
+            <p>
+                <strong>重複の除外：</strong><br>
+                複数のカテゴリで検索すると、同じ場所が何回も出てくることがあります。
+                例えば「皇居外苑」は「公園」でも「展望スポット」でも出てくるので、名前で重複を除いて1つにまとめます。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 3: AIにルート案を作ってもらう（bedrockRepository.js）</strong>
+            <p>
+                Amazon Bedrock（AI）に、候補スポットの中から「どこを巡るか」と「どんなルートにするか」を考えてもらいます。
+            </p>
+            <p>
+                <strong>AIに伝える情報：</strong>
+            </p>
+            <ul>
+                <li>現在地</li>
+                <li>希望距離（3km）</li>
+                <li>候補スポットのリスト（名前と座標）</li>
+                <li>（再生成の場合）前回の距離と調整の方向</li>
+            </ul>
+            <div class="code-block">
+// AIが返してくる内容
+{
+  "route_title": "緑豊かな都会のオアシス散歩",
+  "concept_story": "皇居外苑から...",
+  "selected_waypoints": [
+    { "name": "皇居外苑", "position": [139.7571, 35.6838] },
+    { "name": "日比谷公園", "position": [139.7544, 35.6742] }
+  ]
+}
+            </div>
+            <p>
+                <strong>ポイント：</strong><br>
+                AIは「ただ近い場所を選ぶ」だけでなく、「このルートの魅力」を文章で説明してくれます。
+                これがユーザーに表示される「コンセプトストーリー」になります。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 4: 徒歩経路を計算する（routesRepository.js）</strong>
+            <p>
+                AIが選んだスポットを、実際の道路で繋いだ徒歩経路を計算します。
+            </p>
+            <p>
+                <strong>計算するもの：</strong>
+            </p>
+            <ul>
+                <li>各スポット間の道なり距離</li>
+                <li>各スポット間の所要時間</li>
+                <li>地図に描くための座標の点（経路の線）</li>
+            </ul>
+            <div class="code-block">
+// 経路計算の例
+出発地 → 皇居外苑 → 日比谷公園 → 出発地
+
+結果:
+総距離: 2800m
+総所要時間: 40分
+経路の座標: [[139.7671, 35.6812], [139.7670, 35.6813], ...]
+            </div>
+            <p>
+                <strong>「スナップ」とは？</strong><br>
+                AIが選んだスポットの座標が、実際の道路から少しずれていることがあります。
+                経路計算サービスは、スポットを「最も近い道路上の点」に移動（スナップ）して、正確な経路を作ります。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 5: 距離を調整する（service.js）</strong>
+            <p>
+                計算した総距離が、希望距離と大きくずれていたら調整します。
+            </p>
+            <p>
+                <strong>調整方法：</strong>
+            </p>
+            <table>
+                <tr>
+                    <th>状況</th>
+                    <th>対処</th>
+                </tr>
+                <tr>
+                    <td>距離が長すぎる（目標の1.4倍以上）</td>
+                    <td>スポットを1つずつ減らして再計算</td>
+                </tr>
+                <tr>
+                    <td>距離が短すぎる（目標の0.6倍以下）</td>
+                    <td>AIに「もっと長くして」と再生成を依頼</td>
+                </tr>
+                <tr>
+                    <td>許容範囲内（0.6倍〜1.4倍）</td>
+                    <td>そのまま採用</td>
+                </tr>
+            </table>
+            <p>
+                <strong>なぜ完全に一致しないの？</strong><br>
+                スポットの配置や道路の形によって、ちょうど3.0kmにするのは難しいです。
+                そのため、2.0km〜4.2kmの範囲を「許容範囲」として、その中に収まれば良しとしています。
+            </p>
+        </div>
+
+        <h2>💻 主要なコードの解説</h2>
+
+        <h3>1. handler.js（入口）</h3>
+        <p>
+            Lambda関数の入口です。リクエストを受け取って、レスポンスを返すだけのシンプルな役割です。
+        </p>
+        <div class="code-block">
+export const handler = async (event) => {
+  // 1. JSONをパース（解析）
+  const body = parseRequestBody(event);
+  
+  // 2. バリデーション（必須項目のチェック）
+  const validationResult = validateCreateRouteRequest(body);
+  
+  // 3. Service層にルート作成を依頼
+  const route = await createRoute(validationResult.value);
+  
+  // 4. 結果を整えて返す
+  return buildSuccessResponse(toResponseBody(route));
+};
+        </div>
+        <p>
+            <strong>ポイント：</strong> handler.js にはビジネスロジック（どんなルートを作るか）は書きません。
+            それは全てService層（service.js）に任せます。
+        </p>
+
+        <h3>2. service.js（ルート作成の司令塔）</h3>
+        <p>
+            ルート作成の全体的な流れを制御します。各Repositoryを呼び出して、結果を組み合わせます。
+        </p>
+        <div class="code-block">
+export const createRoute = async ({ genreId, targetDistanceKm, currentLocation }) => {
+  // Step 1: ジャンル→カテゴリの変換
+  const spotCategoryIds = await resolveSpotCategoryIds(genreId, repositories);
+  
+  // Step 2: 周辺スポットの検索
+  const candidateSpots = await collectCandidateSpots(...);
+  
+  // Step 3〜5: AIで選定 → 経路計算 → 調整
+  while (retryCount < MAX_ROUTE_RETRY_COUNT) {
+    const plan = await repositories.generateRoutePlan(...);
+    const route = await repositories.calculateWalkingRoute(...);
+    
+    // 許容範囲内ならループを抜ける
+    if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+      break;
+    }
+    
+    // 長すぎたらスポットを削る
+    // 短すぎたら再生成
+  }
+  
+  return { routeTitle, conceptStory, totalDistanceM, ... };
+};
+        </div>
+        <p>
+            <strong>ポイント：</strong> この関数がルート作成の「脳」です。
+            各Repositoryは「手足」として、外部サービスにアクセスするだけです。
+        </p>
+
+        <h3>3. placesRepository.js（スポット検索）</h3>
+        <p>
+            Amazon Location Serviceとやり取りして、周辺スポットを取得します。
+        </p>
+        <div class="code-block">
+export const searchNearbySpots = async ({ currentLocation, spotCategoryId, queryRadiusM }) => {
+  const response = await getPlacesClient().send(
+    new SearchNearbyCommand({
+      QueryPosition: [currentLocation.lng, currentLocation.lat],
+      QueryRadius: Math.round(queryRadiusM),
+      Filter: { IncludeCategories: [spotCategoryId] },
+      MaxResults: MAX_SPOT_CANDIDATES
+    })
+  );
+  
+  return response.ResultItems.map(item => ({
+    name: item.Title,
+    position: item.Position
+  }));
+};
+        </div>
+        <p>
+            <strong>ポイント：</strong> Repository層は、外部サービス固有の書き方（ここではAWS SDKの使い方）を知っている唯一の場所です。
+            他の層は、この関数を呼ぶだけで、AWS SDKの詳細を知る必要がありません。
+        </p>
+
+        <h3>4. bedrockRepository.js（AIでルート案を生成）</h3>
+        <p>
+            Amazon BedrockのAIに、候補スポットからルート案を選んでもらいます。
+        </p>
+        <div class="code-block">
+export const generateRoutePlan = async (promptText, temperature) => {
+  const response = await getBedrockClient().send(
+    new ConverseCommand({
+      modelId: BEDROCK_MODEL_ID,
+      messages: [{ role: 'user', content: [{ text: promptText }] }],
+      inferenceConfig: { temperature, maxTokens: BEDROCK_MAX_TOKENS }
+    })
+  );
+  
+  const rawText = response.output.message.content[0].text;
+  const generated = parseGeneratedJson(rawText);
+  
+  return {
+    routeTitle: generated.route_title,
+    conceptStory: generated.concept_story,
+    spots: generated.selected_waypoints.map(...)
+  };
+};
+        </div>
+        <p>
+            <strong>「temperature」とは？</strong><br>
+            AIの生成結果のばらつきを制御するパラメータです。
+            低い（0.3）と毎回似た結果、高い（0.7）と毎回違う結果になります。
+            初回は0.3で、再生成時は0.7にして、違う組み合わせを試すようにしています。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>1. spotとwaypointの使い分け</h3>
+            <p>
+                コード内で「spot」と「waypoint」という似た言葉が出てきますが、意味が違います：
+            </p>
+            <ul>
+                <li><strong>spot（スポット）</strong>: ユーザーが立ち寄る場所（公園、カフェなど）</li>
+                <li><strong>waypoint（経由点）</strong>: 経路を描くための座標の点（道の曲がり角など）</li>
+            </ul>
+            <p>
+                混同すると、「巡ったスポット数」に道の折れ点まで数えて、おかしな数字が表示されます。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>2. 座標の順序 [経度, 緯度]</h3>
+            <p>
+                Amazon Location Serviceは、座標を <strong>[経度, 緯度]</strong> の順で扱います。
+                これは一般的な「緯度、経度」とは逆なので注意してください。
+            </p>
+            <div class="code-block">
+// AWS Location Service
+position: [139.7671, 35.6812]  // [経度, 緯度]
+
+// 一般的な表記
+(35.6812, 139.7671)  // (緯度, 経度)
+            </div>
+        </div>
+
+        <div class="important">
+            <h3>3. レイヤーの責務を守る</h3>
+            <p>
+                このプロジェクトでは、以下のレイヤー構成を守ります：
+            </p>
+            <ul>
+                <li><strong>Handler</strong>: リクエストの受付とレスポンスの返却だけ</li>
+                <li><strong>Service</strong>: ビジネスロジック（どんなルートを作るか）</li>
+                <li><strong>Repository</strong>: 外部サービスへのアクセスだけ</li>
+            </ul>
+            <p>
+                例えば、Repositoryにビジネスロジックを書いたり、Handlerで直接DBにアクセスしたりしてはいけません。
+            </p>
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+
+        <h3>ローカルでの確認手順</h3>
+        <ol>
+            <li>
+                <strong>バックエンドとフロントを同時起動</strong>
+                <div class="code-block">
+# プロジェクトルートで実行
+npm run dev
+                </div>
+                <p>これで、ローカルAPIサーバー（http://localhost:3001）とフロントエンド（http://localhost:5173）が起動します。</p>
+            </li>
+            <li>
+                <strong>フロントエンドからルート作成を試す</strong>
+                <ul>
+                    <li>ブラウザで http://localhost:5173 を開く</li>
+                    <li>ジャンル（自然など）と距離（3kmなど）を入力</li>
+                    <li>「ルート作成」ボタンをクリック</li>
+                    <li>地図上にルートが表示されればOK</li>
+                </ul>
+            </li>
+            <li>
+                <strong>ログで内容を確認</strong>
+                <p>バックエンドのターミナルに、各Stepのログが出力されます：</p>
+                <div class="code-block">
+検索対象のカテゴリを決定しました
+候補スポットを取得しました
+ルート案を生成しました
+目標距離の許容範囲内のルートを作成しました
+                </div>
+            </li>
+        </ol>
+
+        <h3>テストの実行</h3>
+        <div class="code-block">
+# backendディレクトリで実行
+cd backend
+npm test
+        </div>
+        <p>
+            主要な関数（service.jsやvalidator.js）のテストが実行されます。
+            すべてのテストが通ることを確認してください。
+        </p>
+
+        <h2>📁 関連ファイル一覧</h2>
+
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/handler.js</code></td>
+                    <td>Lambda関数の入口。リクエストを受け取ってレスポンスを返す</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/service.js</code></td>
+                    <td>ルート作成の全体的な流れを制御する（ビジネスロジック）</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/validator.js</code></td>
+                    <td>リクエストの入力チェック</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/repositories/spotCategoryRepository.js</code></td>
+                    <td>ジャンルからスポットカテゴリを引くマスタアクセス</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/repositories/placesRepository.js</code></td>
+                    <td>Amazon Location Service (Places) で周辺スポットを検索</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/repositories/bedrockRepository.js</code></td>
+                    <td>Amazon Bedrock (AI) でルート案を生成</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/repositories/routesRepository.js</code></td>
+                    <td>Amazon Location Service (Routes) で徒歩経路を計算</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/prompt.js</code></td>
+                    <td>AIに渡すプロンプト（指示文）を組み立てる</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/constants.js</code></td>
+                    <td>定数定義（距離の許容範囲、再試行回数など）</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/__tests__/service.test.js</code></td>
+                    <td>service.jsのテストコード</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createRoute/__tests__/validator.test.js</code></td>
+                    <td>validator.jsのテストコード</td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>🚀 次に学ぶこと</h2>
+
+        <div class="success">
+            <h3>さらに理解を深めるために</h3>
+            <ul>
+                <li>
+                    <strong>Promiseとasync/awaitの仕組み</strong><br>
+                    このコードでは非同期処理が多用されています。Promiseの基本を学ぶと、コードの流れが理解しやすくなります。
+                </li>
+                <li>
+                    <strong>AWS SDKの使い方</strong><br>
+                    各RepositoryでAWS SDKを使っています。公式ドキュメントを見ながら、他のAWSサービスも試してみましょう。
+                </li>
+                <li>
+                    <strong>レイヤードアーキテクチャ</strong><br>
+                    Handler → Service → Repository という構造は、多くのWebアプリで使われています。
+                    この設計パターンを理解すると、他のプロジェクトも読みやすくなります。
+                </li>
+            </ul>
+        </div>
+
+        <h2>📚 参考資料</h2>
+        <ul>
+            <li><code>.kiro/steering/ミチシル_前提条件.md</code> - プロジェクト全体の前提条件</li>
+            <li><code>.kiro/steering/naming-glossary.md</code> - ドメイン用語辞書（spotとwaypointの違いなど）</li>
+            <li><code>.kiro/steering/back-layer-architecture.md</code> - レイヤー構成ルール</li>
+            <li><code>docs/設計書.md</code> - API設計書</li>
+        </ul>
+
+        <hr style="margin: 40px 0; border: none; border-top: 1px solid #ddd;">
+
+        <p style="text-align: center; color: #888; font-size: 0.9em;">
+            📅 作成日: 2026年9月17日 | 💡 開発初心者向け解説書
+        </p>
+    </div>
+</body>
+</html>
