@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-58 開発規約整備 - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            border-left: 4px solid #3498db;
+            padding-left: 15px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 25px;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 20px;
+            margin: 25px 0;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .success {
+            background-color: #e8f8f5;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .warning {
+            background-color: #fff4e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+            line-height: 2;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📐 NZ-58 開発規約整備 - 実装解説</h1>
+        
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026年9月2日<br>
+            <strong>🌿 ブランチ:</strong> feature/NZ-58-naming-conventions<br>
+            <strong>📝 課題番号:</strong> NZ-58<br>
+            <strong>👤 対象読者:</strong> 開発初心者向け
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            この作業は、<strong>チーム全員が同じルールでコードを書けるようにするための「開発規約」を整備</strong>したものです。
+        </p>
+        <p>
+            プログラミングでは、同じことを実現するにもいろいろな書き方があります。
+            例えば、変数名を「routeName」にするか「route_name」にするか、ファイル名を「RouteService.js」にするか「route-service.js」にするか、などです。
+        </p>
+        <p>
+            チームで開発する場合、各自が好き勝手に書くと：
+        </p>
+        <ul>
+            <li>コードが読みにくくなる</li>
+            <li>ファイルを探すのに時間がかかる</li>
+            <li>間違いに気づきにくくなる</li>
+        </ul>
+        <p>
+            そこで、<strong>「うちのプロジェクトではこう書こう」というルールを決めて、ドキュメント化した</strong>のがこのNZ-58の作業です。
+        </p>
+
+        <h2>🎯 なぜこの規約が必要？</h2>
+
+        <h3>1. コードの一貫性</h3>
+        <p>
+            同じ概念には同じ名前を使うと、チーム全員が同じ理解で開発できます。
+            例えば、「立ち寄り先」を指す言葉が「spot」「waypoint」「place」「location」とバラバラだと、どれが正しいか分からなくなります。
+        </p>
+
+        <h3>2. レビューの効率化</h3>
+        <p>
+            規約があると、レビュー時に「この書き方は規約と違う」と指摘しやすくなります。
+            規約がないと、レビュアーごとに基準が違って混乱します。
+        </p>
+
+        <h3>3. 新しいメンバーの教育</h3>
+        <p>
+            新しくプロジェクトに参加した人が、「このプロジェクトではどう書けばいいの？」と迷ったとき、規約ドキュメントを見れば分かります。
+        </p>
+
+        <h2>📝 作成した規約ファイル一覧</h2>
+
+        <table>
+            <tr>
+                <th>ファイル名</th>
+                <th>内容</th>
+            </tr>
+            <tr>
+                <td><code>ミチシル_前提条件.md</code></td>
+                <td>プロジェクト全体の前提条件（システム構成、ユーザーストーリーなど）</td>
+            </tr>
+            <tr>
+                <td><code>naming-conventions.md</code></td>
+                <td>命名規則（変数名、ファイル名などの書き方のルール）</td>
+            </tr>
+            <tr>
+                <td><code>naming-glossary.md</code></td>
+                <td>ドメイン用語辞書（プロジェクト固有の用語の定義）</td>
+            </tr>
+            <tr>
+                <td><code>back-lambda-rules.md</code></td>
+                <td>バックエンド（Lambda）の開発ルール</td>
+            </tr>
+            <tr>
+                <td><code>back-layer-architecture.md</code></td>
+                <td>レイヤー構成ルール（Handler/Service/Repositoryの役割分担）</td>
+            </tr>
+            <tr>
+                <td><code>back-data-access.md</code></td>
+                <td>データアクセスルール（DynamoDBの扱い方）</td>
+            </tr>
+            <tr>
+                <td><code>component-design.md</code></td>
+                <td>Vueコンポーネントの設計ルール</td>
+            </tr>
+            <tr>
+                <td><code>directory-structure.md</code></td>
+                <td>ディレクトリ構造のルール</td>
+            </tr>
+            <tr>
+                <td><code>git-workflow.md</code></td>
+                <td>Gitブランチ戦略とコミットメッセージの規約</td>
+            </tr>
+            <tr>
+                <td><code>iac-rules.md</code></td>
+                <td>インフラコード（AWS CDK）の書き方</td>
+            </tr>
+            <tr>
+                <td><code>prompt-templates.md</code></td>
+                <td>AIに指示を出すときのテンプレート</td>
+            </tr>
+        </table>
+
+        <h2>🔍 主要な規約の詳細解説</h2>
+
+        <h3>1. 命名規則（naming-conventions.md）</h3>
+
+        <div class="warning">
+            <h4>なぜ命名規則が大切？</h4>
+            <p>
+                プログラミングでは、「名前を付ける」ことが非常に多いです（変数、関数、ファイル、クラスなど）。
+                名前が統一されていないと、コードを読むときに毎回「これは何だろう？」と考える必要があります。
+            </p>
+        </div>
+
+        <h4>基本的な書き方</h4>
+        <table>
+            <tr>
+                <th>対象</th>
+                <th>規則</th>
+                <th>例</th>
+            </tr>
+            <tr>
+                <td>変数・関数</td>
+                <td>camelCase（最初は小文字、以降は大文字で単語を区切る）</td>
+                <td>routeName, getUserById</td>
+            </tr>
+            <tr>
+                <td>定数</td>
+                <td>UPPER_SNAKE_CASE（全て大文字、アンダースコアで区切る）</td>
+                <td>MAX_SPOTS, API_BASE_URL</td>
+            </tr>
+            <tr>
+                <td>クラス・コンポーネント</td>
+                <td>PascalCase（最初も大文字）</td>
+                <td>RouteService, RouteMap</td>
+            </tr>
+            <tr>
+                <td>ファイル名</td>
+                <td>種類によって使い分け</td>
+                <td>後述</td>
+            </tr>
+        </table>
+
+        <h4>Boolean（真偽値）の命名</h4>
+        <p>
+            「はい/いいえ」で答えられる変数は、<strong>is/has/can/shouldで始める</strong>と分かりやすいです。
+        </p>
+        <div class="code-block">
+// 良い例
+isLoading    // 読み込み中？
+hasRoute     // ルートを持っている？
+canEdit      // 編集できる？
+shouldRefresh // 再読み込みすべき？
+
+// 悪い例
+loading      // 何をしているのか不明瞭
+route        // 有無なのかデータ自体なのか分からない
+        </div>
+
+        <h3>2. 用語辞書（naming-glossary.md）</h3>
+
+        <div class="warning">
+            <h4>なぜ用語辞書が必要？</h4>
+            <p>
+                同じ概念を指す言葉が複数あると、コードが混乱します。
+                例えば、「立ち寄り先」を指すのに「spot」「waypoint」「place」が混在すると、それぞれが別のものなのか同じものなのか分からなくなります。
+            </p>
+        </div>
+
+        <h4>特に重要な2組の用語</h4>
+
+        <table>
+            <tr>
+                <th>用語</th>
+                <th>意味</th>
+                <th>具体例</th>
+            </tr>
+            <tr>
+                <td><strong>spot</strong></td>
+                <td>ユーザーが立ち寄る場所</td>
+                <td>公園、カフェ、神社（1ルートに2〜5個）</td>
+            </tr>
+            <tr>
+                <td><strong>waypoint</strong></td>
+                <td>経路を描くための座標の点</td>
+                <td>交差点、道の折れ点（1ルートに数十個）</td>
+            </tr>
+        </table>
+
+        <div class="important">
+            <h4>混同すると何が起きる？</h4>
+            <p>
+                「巡ったスポット数」を表示する機能で、waypointを数えてしまうと：
+            </p>
+            <div class="code-block">
+// 間違い
+スポット数: 37個  ← 道の折れ点まで数えている
+
+// 正しい
+スポット数: 4個   ← 実際に立ち寄った場所だけ
+            </div>
+        </div>
+
+        <h3>3. レイヤー構成（back-layer-architecture.md）</h3>
+
+        <div class="warning">
+            <h4>なぜレイヤーに分けるの？</h4>
+            <p>
+                1つのファイルにすべての処理を書くと、コードが長くなりすぎて読めなくなります。
+                また、1箇所を変更したときに、他の部分に影響が出やすくなります。
+            </p>
+            <p>
+                レイヤーに分けると、<strong>「この層はこれだけをする」と決まる</strong>ので、役割が明確になります。
+            </p>
+        </div>
+
+        <h4>3層の役割分担</h4>
+        <div class="code-block">
+Handler (入口)
+  ↓
+  リクエストを受け取って、レスポンスを返すだけ
+  
+Service (脳)
+  ↓
+  ビジネスロジック（どんなルートを作るか）を決める
+  
+Repository (手足)
+  ↓
+  データベースや外部サービスにアクセスする
+        </div>
+
+        <table>
+            <tr>
+                <th>レイヤー</th>
+                <th>やって良いこと</th>
+                <th>やってはいけないこと</th>
+            </tr>
+            <tr>
+                <td>Handler</td>
+                <td>
+                    <ul>
+                        <li>JSONを解析する</li>
+                        <li>バリデーション（入力チェック）を呼ぶ</li>
+                        <li>レスポンスを整形する</li>
+                    </ul>
+                </td>
+                <td>
+                    <ul>
+                        <li>ビジネスロジックを書く</li>
+                        <li>DBに直接アクセスする</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>Service</td>
+                <td>
+                    <ul>
+                        <li>データを加工する</li>
+                        <li>条件分岐を書く</li>
+                        <li>複数のRepositoryを組み合わせる</li>
+                    </ul>
+                </td>
+                <td>
+                    <ul>
+                        <li>HTTPレスポンスを作る</li>
+                        <li>DBに直接アクセスする</li>
+                    </ul>
+                </td>
+            </tr>
+            <tr>
+                <td>Repository</td>
+                <td>
+                    <ul>
+                        <li>DBクエリを実行する</li>
+                        <li>外部APIを呼ぶ</li>
+                        <li>データの形を変換する</li>
+                    </ul>
+                </td>
+                <td>
+                    <ul>
+                        <li>ビジネスロジックを書く</li>
+                        <li>バリデーションする</li>
+                    </ul>
+                </td>
+            </tr>
+        </table>
+
+        <h3>4. Gitワークフロー（git-workflow.md）</h3>
+
+        <div class="warning">
+            <h4>なぜブランチ戦略が必要？</h4>
+            <p>
+                チームで同時に開発すると、それぞれが異なる機能を作ります。
+                全員が同じブランチで作業すると、他の人の変更と衝突（コンフリクト）が頻繁に起きます。
+            </p>
+            <p>
+                ブランチを分けて、完成したものから順にマージしていくと、衝突を減らせます。
+            </p>
+        </div>
+
+        <h4>ブランチの種類</h4>
+        <table>
+            <tr>
+                <th>ブランチ</th>
+                <th>役割</th>
+                <th>直接プッシュ</th>
+            </tr>
+            <tr>
+                <td><code>main</code></td>
+                <td>本番環境（ユーザーが使うもの）</td>
+                <td>禁止（PRのみ）</td>
+            </tr>
+            <tr>
+                <td><code>develop</code></td>
+                <td>開発中の統合（みんなの変更を集める場所）</td>
+                <td>禁止（PRのみ）</td>
+            </tr>
+            <tr>
+                <td><code>feature/NZ-X-xxx</code></td>
+                <td>機能開発（レビュー対象）</td>
+                <td>禁止（PRのみ）</td>
+            </tr>
+            <tr>
+                <td><code>test/NZ-X</code></td>
+                <td>作業用（試行錯誤する場所）</td>
+                <td>可</td>
+            </tr>
+        </table>
+
+        <h4>コミットメッセージの書き方</h4>
+        <p>
+            コミットメッセージには、<strong>「何をしたか」だけでなく「種別」も入れる</strong>と、履歴が見やすくなります。
+        </p>
+        <div class="code-block">
+// 良い例
+feat(NZ-106): ルート作成APIを追加
+fix(NZ-58): 命名規則のtypoを修正
+docs: READMEを更新
+
+// 悪い例（種別がない）
+ルート作成APIを追加  ← 何の変更か分からない
+修正                 ← 何を修正したのか不明
+        </div>
+
+        <table>
+            <tr>
+                <th>種別</th>
+                <th>用途</th>
+            </tr>
+            <tr>
+                <td><code>feat</code></td>
+                <td>新機能</td>
+            </tr>
+            <tr>
+                <td><code>fix</code></td>
+                <td>バグ修正</td>
+            </tr>
+            <tr>
+                <td><code>docs</code></td>
+                <td>ドキュメント・規約</td>
+            </tr>
+            <tr>
+                <td><code>refactor</code></td>
+                <td>リファクタリング（動作を変えずにコードを整理）</td>
+            </tr>
+            <tr>
+                <td><code>test</code></td>
+                <td>テスト</td>
+            </tr>
+            <tr>
+                <td><code>ci</code></td>
+                <td>CI/CD の設定変更</td>
+            </tr>
+        </table>
+
+        <h2>⚠️ 規約を守らないとどうなる？</h2>
+
+        <div class="important">
+            <h3>1. レビューで差し戻される</h3>
+            <p>
+                規約に違反しているコードは、レビューで指摘されて修正が必要になります。
+                最初から規約に沿って書く方が、結果的に早く終わります。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>2. バグが見つけにくくなる</h3>
+            <p>
+                例えば、「spot」と「waypoint」を混同していると、「スポット数が37個」という明らかにおかしい値が表示されても、
+                「仕様通り」に見えてしまい、バグに気づけません。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>3. 他のメンバーが理解できない</h3>
+            <p>
+                自分だけのルールで書いたコードは、他のメンバーが読むときに時間がかかります。
+                チーム開発では、「自分以外の人が読めるコード」を書くことが大切です。
+            </p>
+        </div>
+
+        <h2>✅ 規約の使い方</h2>
+
+        <h3>1. 新しい機能を作るとき</h3>
+        <ol>
+            <li><code>.kiro/steering/</code> の該当ファイルを開く</li>
+            <li>命名規則を確認してから、変数名やファイル名を決める</li>
+            <li>用語辞書を確認して、正しい用語を使う</li>
+            <li>レイヤー構成ルールに従って、ファイルを配置する</li>
+        </ol>
+
+        <h3>2. レビューするとき</h3>
+        <ol>
+            <li>規約に違反していないかチェックする</li>
+            <li>違反があれば、該当する規約ファイルのセクションを示して指摘する</li>
+            <li>「例外一覧」に載っているものは指摘しない</li>
+        </ol>
+
+        <h3>3. 迷ったとき</h3>
+        <ol>
+            <li>まず規約ファイルを検索する</li>
+            <li>見つからなければ、チームで相談する</li>
+            <li>決まったら、規約ファイルに追記する</li>
+        </ol>
+
+        <h2>📁 規約ファイルの場所</h2>
+
+        <p>
+            すべての規約ファイルは、<strong><code>.kiro/steering/</code></strong> ディレクトリにあります。
+        </p>
+
+        <div class="code-block">
+.kiro/steering/
+├── ミチシル_前提条件.md          ← プロジェクト全体の前提
+├── naming-conventions.md         ← 命名規則
+├── naming-glossary.md            ← 用語辞書
+├── back-lambda-rules.md          ← バックエンドのルール
+├── back-layer-architecture.md    ← レイヤー構成
+├── back-data-access.md           ← データアクセスルール
+├── component-design.md           ← コンポーネント設計
+├── directory-structure.md        ← ディレクトリ構造
+├── git-workflow.md               ← Git運用
+├── iac-rules.md                  ← インフラコード
+└── prompt-templates.md           ← AIプロンプト
+        </div>
+
+        <h2>🚀 次に学ぶこと</h2>
+
+        <div class="success">
+            <h3>規約を身につけるために</h3>
+            <ul>
+                <li>
+                    <strong>既存のコードを読む</strong><br>
+                    すでに規約に沿って書かれたコードを読むと、「こう書けばいいんだ」と実例で理解できます。
+                </li>
+                <li>
+                    <strong>レビューを積極的に受ける</strong><br>
+                    自分が書いたコードをレビューしてもらうと、どこが規約と違うか気づけます。
+                </li>
+                <li>
+                    <strong>レビューをする</strong><br>
+                    他の人のコードをレビューすると、「自分だったらこう書く」という視点が身につきます。
+                </li>
+            </ul>
+        </div>
+
+        <h2>📚 まとめ</h2>
+
+        <p>
+            NZ-58で整備した開発規約は、<strong>チーム全員が同じルールでコードを書くための「共通言語」</strong>です。
+        </p>
+        <p>
+            最初は覚えることが多くて大変かもしれませんが、慣れてくると：
+        </p>
+        <ul>
+            <li>「この名前はこう書く」と迷わなくなる</li>
+            <li>「このファイルはここに置く」と即座に判断できる</li>
+            <li>他の人のコードもすぐに理解できる</li>
+        </ul>
+        <p>
+            規約は「縛り」ではなく、<strong>チームで効率よく開発するための「道具」</strong>です。
+            ぜひ活用してください！
+        </p>
+
+        <hr style="margin: 40px 0; border: none; border-top: 1px solid #ddd;">
+
+        <p style="text-align: center; color: #888; font-size: 0.9em;">
+            📅 作成日: 2026年9月17日 | 💡 開発初心者向け解説書
+        </p>
+    </div>
+</body>
+</html>
