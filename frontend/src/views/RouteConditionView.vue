@@ -4,11 +4,13 @@ import logoImage from '@/assets/images/logo.png';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import SignOutMenu from '@/components/feature/auth/SignOutMenu.vue';
 import RouteConditionForm from '@/components/feature/route/RouteConditionForm.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import { useRouteConditionOptions } from '@/composables/useRouteConditionOptions';
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
+import { useAuthStore } from '@/stores/authStore';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
@@ -16,6 +18,7 @@ import { useRouteStore } from '@/stores/routeStore';
  * 選択肢の取得と作成処理はcomposableへ委譲し、入力値はストアへ保存する。
  */
 const router = useRouter();
+const authStore = useAuthStore();
 const routeStore = useRouteStore();
 const {
   isCreating,
@@ -73,6 +76,18 @@ const handleCreateRoute = async () => {
 
   router.push({ name: 'route-suggestion' });
 };
+
+/**
+ * @description ログアウトしてログイン画面へ戻る。
+ * 次に使う人へ前の利用者の入力条件が残らないよう、ストアも初期化する。
+ * @returns {Promise<void>}
+ */
+const handleSignOut = async () => {
+  await authStore.signOut();
+  routeStore.resetConditions();
+
+  router.push({ name: 'login' });
+};
 </script>
 
 <template>
@@ -101,6 +116,11 @@ const handleCreateRoute = async () => {
         <h1>ミチシル</h1>
         <p>ルート提案型お散歩アプリ</p>
       </div>
+
+      <SignOutMenu
+        class="header-menu"
+        @sign-out="handleSignOut"
+      />
     </div>
 
     <h2 class="section-title">
@@ -149,3 +169,10 @@ const handleCreateRoute = async () => {
     </template>
   </DefaultLayout>
 </template>
+
+<style scoped>
+/* ロゴの右側の余白へ寄せ、ヘッダーの右上に置く */
+.header-menu {
+  margin-left: auto;
+}
+</style>
