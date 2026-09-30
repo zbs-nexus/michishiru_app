@@ -42,6 +42,9 @@ export const SPOT_CATEGORY_TABLE_NAME = process.env.SPOT_CATEGORY_TABLE_NAME ?? 
 /** 検索条件マスタでジャンル項目を引くパーティションキー（pk）の値 */
 export const GENRE_CONDITION_PK = 'GENRE#ALL';
 
+/** 検索条件マスタの距離項目のパーティションキー（pk）の値。おまかせの距離範囲に使う */
+export const DISTANCE_CONDITION_PK = 'DISTANCE#ALL';
+
 /** 検索条件マスタのジャンル項目のソートキー（sk）の接頭辞（例: METADATA#food） */
 export const GENRE_CONDITION_SK_PREFIX = 'METADATA#';
 

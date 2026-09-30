@@ -1,4 +1,4 @@
-<script setup>
+﻿<script setup>
 import { computed } from 'vue';
 import BaseSlider from '@/components/base/BaseSlider.vue';
 
@@ -18,6 +18,16 @@ const props = defineProps({
     type: Number,
     required: true
   },
+  /** ジャンルのおまかせ機能が有効か */
+  isGenreRandom: {
+    type: Boolean,
+    required: true
+  },
+  /** 距離のおまかせ機能が有効か */
+  isDistanceRandom: {
+    type: Boolean,
+    required: true
+  },
   /** ジャンルの選択肢 */
   genreOptions: {
     type: Array,
@@ -30,7 +40,7 @@ const props = defineProps({
   }
 });
 
-defineEmits(['selectGenre', 'selectDistance']);
+defineEmits(['selectGenre', 'selectDistance', 'toggleGenreRandom', 'toggleDistanceRandom']);
 
 /** 距離スライダーの目盛り。下限と上限のラベルを表示する */
 const distanceScaleLabels = computed(() => [
@@ -56,14 +66,37 @@ const distanceScaleLabels = computed(() => [
           <span class="btn-icon">{{ option.icon }}</span>
           <span>{{ option.label }}</span>
         </button>
+        <button
+          class="select-btn random-btn"
+          :class="{ selected: isGenreRandom }"
+          type="button"
+          :aria-pressed="isGenreRandom"
+          aria-label="ジャンルをおまかせで選ぶ"
+          @click="$emit('toggleGenreRandom')"
+        >
+          <span class="btn-icon">？</span>
+        </button>
       </div>
     </div>
 
     <div class="input-section">
-      <h3 id="distance-label">
-        距離
-      </h3>
+      <div class="section-header">
+        <h3 id="distance-label">
+          距離
+        </h3>
+        <button
+          class="random-icon-btn"
+          :class="{ selected: isDistanceRandom }"
+          type="button"
+          :aria-pressed="isDistanceRandom"
+          aria-label="距離をおまかせで選ぶ"
+          @click="$emit('toggleDistanceRandom')"
+        >
+          ？
+        </button>
+      </div>
       <BaseSlider
+        v-if="!isDistanceRandom"
         :model-value="distanceKm"
         :min-value="distanceRange.minKm"
         :max-value="distanceRange.maxKm"
@@ -72,9 +105,56 @@ const distanceScaleLabels = computed(() => [
         labelled-by="distance-label"
         @update:model-value="$emit('selectDistance', $event)"
       />
-      <p class="hint">
+      <p
+        v-if="!isDistanceRandom"
+        class="hint"
+      >
         {{ distanceRange.minLabel }} 〜 {{ distanceRange.maxLabel }} の範囲で選べます
+      </p>
+      <p
+        v-else
+        class="hint random-message"
+      >
+        おまかせで距離を選択します
       </p>
     </div>
   </div>
 </template>
+
+<style scoped>
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.random-icon-btn {
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid #ddd;
+  border-radius: 50%;
+  background-color: white;
+  color: #666;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.random-icon-btn:hover {
+  border-color: #999;
+  background-color: #f5f5f5;
+}
+
+.random-icon-btn.selected {
+  border-color: #1f5fa8;
+  background-color: #1f5fa8;
+  color: white;
+}
+
+.random-message {
+  color: #1f5fa8;
+  font-weight: bold;
+}
+</style>

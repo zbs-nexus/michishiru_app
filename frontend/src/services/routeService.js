@@ -95,15 +95,26 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
  * キー名と値の形はルート作成Lambdaの受け口に合わせている。
  * ジャンルは英語のジャンルID（genreId。例: nature）を送り、スポットカテゴリへの
  * 変換はLambda側が行う。表示名（例: 自然）ではマスタと一致しないため送らない。
+ * おまかせ機能が有効な場合は、対応する値を undefined にして送る。
  * @param {object} conditions 検索条件
- * @param {string} conditions.genreId ジャンルID（英語。例: nature）
- * @param {number} conditions.distanceKm 希望距離（km）
+ * @param {string} [conditions.genreId] ジャンルID（英語。例: nature）。おまかせ時はundefined
+ * @param {number} [conditions.distanceKm] 希望距離（km）。おまかせ時はundefined
+ * @param {boolean} [conditions.isGenreRandom] ジャンルをおまかせで選ぶか
+ * @param {boolean} [conditions.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
  * @returns {object} リクエストボディ
  */
-const buildCreateRouteBody = ({ genreId, distanceKm, currentLocation }) => ({
+const buildCreateRouteBody = ({
+  genreId,
+  distanceKm,
+  isGenreRandom,
+  isDistanceRandom,
+  currentLocation
+}) => ({
   purposeCategory: genreId,
   targetDistanceKm: distanceKm,
+  isGenreRandom: Boolean(isGenreRandom),
+  isDistanceRandom: Boolean(isDistanceRandom),
   currentLocation: {
     lng: currentLocation.lng,
     lat: currentLocation.lat
@@ -119,8 +130,10 @@ const buildCreateRouteBody = ({ genreId, distanceKm, currentLocation }) => ({
  * `{ "body": { "purposeCategory": ..., "targetDistanceKm": ..., "currentLocation": ... } }`
  * に相当する。フロント側で`body`キーを付けると二重入れ子になるため付けない。
  * @param {object} conditions 検索条件
- * @param {string} conditions.genreId ジャンルID（英語。例: nature）
- * @param {number} conditions.distanceKm 希望距離（km）
+ * @param {string} [conditions.genreId] ジャンルID（英語。例: nature）。おまかせ時はundefined
+ * @param {number} [conditions.distanceKm] 希望距離（km）。おまかせ時はundefined
+ * @param {boolean} [conditions.isGenreRandom] ジャンルをおまかせで選ぶか
+ * @param {boolean} [conditions.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
  * @returns {Promise<object>} 画面で扱う形に変換したルート情報
  * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
@@ -128,13 +141,21 @@ const buildCreateRouteBody = ({ genreId, distanceKm, currentLocation }) => ({
 export const createRoute = async ({
   genreId,
   distanceKm,
+  isGenreRandom,
+  isDistanceRandom,
   currentLocation
 }) => {
   const response = await fetch(`${API_BASE_PATH}/routes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(
-      buildCreateRouteBody({ genreId, distanceKm, currentLocation })
+      buildCreateRouteBody({
+        genreId,
+        distanceKm,
+        isGenreRandom,
+        isDistanceRandom,
+        currentLocation
+      })
     )
   });
 

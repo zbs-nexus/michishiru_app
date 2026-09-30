@@ -8,9 +8,13 @@ import {
   queryGenreNumberByGenreId,
   querySpotCategoryIdsByGenreNumber
 } from './repositories/spotCategoryRepository.js';
+import { listConditions } from './repositories/conditionRepository.js';
 import {
   BEDROCK_RETRY_TEMPERATURE,
   BEDROCK_TEMPERATURE,
+  DISTANCE_CONDITION_PK,
+  GENRE_CONDITION_PK,
+  TARGET_DISTANCE_RANGE_KM,
   DISTANCE_LOWER_RATIO,
   DISTANCE_UPPER_RATIO,
   MAX_PROMPT_CANDIDATES,
@@ -42,7 +46,74 @@ const defaultRepositories = {
   querySpotCategoryIdsByGenreNumber,
   searchNearbySpots,
   generateRoutePlan,
-  calculateWalkingRoute
+  calculateWalkingRoute,
+  listConditions
+};
+
+/**
+ * @description 配列をシャッフルした新しい配列を返す（Fisher-Yates）
+ * @param {Array} items 元の配列（変更しない）
+ * @returns {Array} シャッフルした配列
+ */
+const shuffleItems = (items) => {
+  const shuffled = [...items];
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+};
+
+/**
+ * @description おまかせ用に、マスタの有効なジャンルから1件以上をランダムに選ぶ。
+ * 選ぶ件数に上限は設けず、1〜全件の中からランダムに決める。
+ * @param {object[]} conditionItems 検索条件マスタの全項目
+ * @returns {{genreId: string, genreName: string}[]} 選んだジャンル
+ * @throws {ApplicationError} 有効なジャンルがマスタに無い場合
+ */
+const pickRandomGenres = (conditionItems) => {
+  const genreItems = conditionItems.filter(
+    (item) => item.pk === GENRE_CONDITION_PK && item.isActive && item.genreId
+  );
+
+  if (genreItems.length === 0) {
+    throw createNotFoundError('おまかせで選べるジャンルがマスタに登録されていません');
+  }
+
+  const selectCount = Math.floor(Math.random() * genreItems.length) + 1;
+
+  return shuffleItems(genreItems)
+    .slice(0, selectCount)
+    .map((item) => ({ genreId: item.genreId, genreName: item.genreName ?? item.genreId }));
+};
+
+/**
+ * @description おまかせ用に、マスタの距離の最小〜最大から1km単位でランダムに選ぶ。
+ * APIが受け付ける目標距離の範囲にも収める。
+ * @param {object[]} conditionItems 検索条件マスタの全項目
+ * @returns {number} 選んだ距離（km、整数）
+ * @throws {ApplicationError} 有効な距離がマスタに無い場合
+ */
+const pickRandomDistanceKm = (conditionItems) => {
+  const distancesKm = conditionItems
+    .filter((item) => item.pk === DISTANCE_CONDITION_PK && item.isActive)
+    .map((item) => Number(item.distanceKm))
+    .filter((distanceKm) => Number.isFinite(distanceKm));
+
+  if (distancesKm.length === 0) {
+    throw createNotFoundError('おまかせで選べる距離がマスタに登録されていません');
+  }
+
+  const minKm = Math.ceil(Math.max(Math.min(...distancesKm), TARGET_DISTANCE_RANGE_KM.min));
+  const maxKm = Math.floor(Math.min(Math.max(...distancesKm), TARGET_DISTANCE_RANGE_KM.max));
+
+  if (minKm > maxKm) {
+    throw createNotFoundError('おまかせで選べる距離がマスタに登録されていません');
+  }
+
+  return minKm + Math.floor(Math.random() * (maxKm - minKm + 1));
 };
 
 /**
@@ -128,6 +199,47 @@ const resolveSpotCategoryIds = async (genreId, repositories) => {
 };
 
 /**
+ * @description 複数のジャンルIDから検索対象のスポットカテゴリIDをまとめて引く。
+ * ジャンルが1つの場合は従来どおりエラーをそのまま投げる。
+ * 複数の場合（おまかせ）は、引けないジャンルを飛ばし、1件も引けなければエラーにする。
+ * @param {string[]} genreIds ジャンルID（英語）の一覧
+ * @param {object} repositories データ取得に使うリポジトリ
+ * @returns {Promise<string[]>} 重複を除いたカテゴリIDの一覧
+ * @throws {ApplicationError} カテゴリが1件も見つからない場合
+ */
+const resolveSpotCategoryIdsForGenres = async (genreIds, repositories) => {
+  if (genreIds.length === 1) {
+    return resolveSpotCategoryIds(genreIds[0], repositories);
+  }
+
+  const results = await Promise.allSettled(
+    genreIds.map((genreId) => resolveSpotCategoryIds(genreId, repositories))
+  );
+
+  const spotCategoryIds = new Set();
+
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      logWarn('ジャンルのカテゴリを引けなかったため、このジャンルを除いて続行します', {
+        genreId: genreIds[index],
+        errorMessage: result.reason?.message
+      });
+      return;
+    }
+
+    result.value.forEach((spotCategoryId) => spotCategoryIds.add(spotCategoryId));
+  });
+
+  if (spotCategoryIds.size === 0) {
+    throw createNotFoundError('おまかせで選んだジャンルに紐づくカテゴリ情報が見つかりませんでした', {
+      genreIds
+    });
+  }
+
+  return Array.from(spotCategoryIds);
+};
+
+/**
  * @description 周辺検索を行うカテゴリを上限数まで絞る。
  * ジャンルに紐づくカテゴリが多いと、その数だけ SearchNearby を並列に呼ぶことになり
  * 生成時間が伸びる。上限を超える場合は毎回ランダムに選び直すことで、生成時間を
@@ -150,15 +262,8 @@ const limitSearchCategories = (spotCategoryIds, excludedCategoryIds = []) => {
     return availableCategories;
   }
 
-  // Fisher-Yates でシャッフルしてから先頭を採用する
-  const shuffled = [...availableCategories];
-
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-  }
-
-  return shuffled.slice(0, MAX_SEARCH_CATEGORIES);
+  // シャッフルしてから先頭を採用する
+  return shuffleItems(availableCategories).slice(0, MAX_SEARCH_CATEGORIES);
 };
 
 /**
@@ -248,20 +353,44 @@ const collectCandidateSpotsWithRetry = async (
 /**
  * @description 条件に合う散歩ルートを作成する
  * @param {object} conditions 作成条件
- * @param {string} conditions.genreId ジャンルID（英語。例: food / nature）
- * @param {number} conditions.targetDistanceKm 目標距離（km）
+ * @param {string} [conditions.genreId] ジャンルID（英語。例: food / nature）。isGenreRandomがtrueの場合は未指定可
+ * @param {number} [conditions.targetDistanceKm] 目標距離（km）。isDistanceRandomがtrueの場合は未指定可
+ * @param {boolean} [conditions.isGenreRandom] ジャンルをおまかせで選ぶか
+ * @param {boolean} [conditions.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
  * @param {object} [repositories] 外部サービスへのアクセス（テスト時に差し替える）
- * @returns {Promise<{routeTitle: string, conceptStory: string, totalDistanceM: number, totalDurationS: number, spots: object[], coordinates: number[][]}>} 作成したルート
+ * @returns {Promise<{routeTitle: string, conceptStory: string, totalDistanceM: number, totalDurationS: number, spots: object[], coordinates: number[][], selectedGenreId?: string, selectedGenreName?: string, selectedDistanceKm?: number}>} 作成したルート
  * @throws {ApplicationError} マスタやスポットが見つからない、または外部サービスが失敗した場合
  */
 export const createRoute = async (
-  { genreId, targetDistanceKm, currentLocation },
+  { genreId, targetDistanceKm, currentLocation, isGenreRandom = false, isDistanceRandom = false },
   repositories = defaultRepositories
 ) => {
-  const allSpotCategoryIds = await resolveSpotCategoryIds(genreId, repositories);
+  // おまかせの項目は、検索条件マスタからランダムに選ぶ
+  const conditionItems =
+    isGenreRandom || isDistanceRandom ? await repositories.listConditions() : [];
 
-  const queryRadiusM = resolveQueryRadiusM(targetDistanceKm);
+  const selectedGenres = isGenreRandom
+    ? pickRandomGenres(conditionItems)
+    : [{ genreId, genreName: null }];
+  const selectedDistanceKm = isDistanceRandom
+    ? pickRandomDistanceKm(conditionItems)
+    : targetDistanceKm;
+  const selectedGenreId = selectedGenres.map((genre) => genre.genreId).join(',');
+
+  if (isGenreRandom || isDistanceRandom) {
+    logInfo('おまかせで条件を選択しました', {
+      selectedGenreIds: selectedGenres.map((genre) => genre.genreId),
+      selectedDistanceKm
+    });
+  }
+
+  const allSpotCategoryIds = await resolveSpotCategoryIdsForGenres(
+    selectedGenres.map((genre) => genre.genreId),
+    repositories
+  );
+
+  const queryRadiusM = resolveQueryRadiusM(selectedDistanceKm);
 
   const candidateSpots = await collectCandidateSpotsWithRetry(
     { allSpotCategoryIds, currentLocation, queryRadiusM },
@@ -271,7 +400,7 @@ export const createRoute = async (
   if (candidateSpots.length === 0) {
     throw createNotFoundError(
       '周辺にスポットが見つかりません。ジャンルと距離を変更して再検索してください',
-      { genreId, totalCategoryCount: allSpotCategoryIds.length }
+      { genreId: selectedGenreId, totalCategoryCount: allSpotCategoryIds.length }
     );
   }
 
@@ -300,7 +429,7 @@ export const createRoute = async (
     // AIにルート案を生成させる
     const plan = await repositories.generateRoutePlan(
       buildRoutePlanPrompt({
-        targetDistanceKm,
+        targetDistanceKm: selectedDistanceKm,
         currentLocation,
         candidateSpots: promptCandidateSpots,
         previousDistanceM
@@ -342,10 +471,10 @@ export const createRoute = async (
     }
 
     // 1. 許容範囲内ならそのまま採用
-    if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+    if (isWithinTargetRange(route.totalDistanceM, selectedDistanceKm)) {
       logInfo('目標距離の許容範囲内のルートを作成しました', {
         totalDistanceM: route.totalDistanceM,
-        targetDistanceKm,
+        targetDistanceKm: selectedDistanceKm,
         spotCount: spots.length
       });
       break;
@@ -353,12 +482,12 @@ export const createRoute = async (
 
     // 2. 大きく超過している場合はスポットを削って調整
     while (
-      isOverTargetDistance(route.totalDistanceM, targetDistanceKm) &&
+      isOverTargetDistance(route.totalDistanceM, selectedDistanceKm) &&
       spots.length > MIN_SPOT_COUNT
     ) {
       logInfo('目標距離を超えたためスポットを削って再計算します', {
         totalDistanceM: route.totalDistanceM,
-        targetDistanceKm,
+        targetDistanceKm: selectedDistanceKm,
         spotCount: spots.length
       });
 
@@ -366,7 +495,7 @@ export const createRoute = async (
       route = await repositories.calculateWalkingRoute({ currentLocation, spots });
 
       // 削った結果、許容範囲内に収まったらループ終了
-      if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+      if (isWithinTargetRange(route.totalDistanceM, selectedDistanceKm)) {
         logInfo('スポット削減により許容範囲内のルートを作成しました', {
           totalDistanceM: route.totalDistanceM,
           targetDistanceKm,
@@ -377,16 +506,16 @@ export const createRoute = async (
     }
 
     // 許容範囲内に収まったらメインループも終了
-    if (isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+    if (isWithinTargetRange(route.totalDistanceM, selectedDistanceKm)) {
       break;
     }
 
     // 3. 距離が短すぎる場合はスポットを追加して再生成
-    if (isTooShort(route.totalDistanceM, targetDistanceKm)) {
+    if (isTooShort(route.totalDistanceM, selectedDistanceKm)) {
       if (spots.length >= MAX_SPOT_COUNT) {
         logWarn('スポット数が最大のため、これ以上追加できません', {
           totalDistanceM: route.totalDistanceM,
-          targetDistanceKm,
+          targetDistanceKm: selectedDistanceKm,
           spotCount: spots.length
         });
         break;
@@ -394,7 +523,7 @@ export const createRoute = async (
 
       logInfo('目標距離より短いため、スポットを増やして再生成します', {
         totalDistanceM: route.totalDistanceM,
-        targetDistanceKm,
+        targetDistanceKm: selectedDistanceKm,
         spotCount: spots.length,
         retryCount
       });
@@ -406,25 +535,26 @@ export const createRoute = async (
     // 4. その他の場合（スポットが最小数で調整不可など）
     logWarn('許容範囲外ですが、これ以上の調整ができません', {
       totalDistanceM: route.totalDistanceM,
-      targetDistanceKm,
+      targetDistanceKm: selectedDistanceKm,
       spotCount: spots.length
     });
     break;
   }
 
   // 最終確認：許容範囲外ならエラー
-  if (!isWithinTargetRange(route.totalDistanceM, targetDistanceKm)) {
+  if (!isWithinTargetRange(route.totalDistanceM, selectedDistanceKm)) {
     throw createNotFoundError(
       '目標距離に近いルートを作成できませんでした。ジャンルと距離を変更して再検索してください',
       {
         totalDistanceM: route.totalDistanceM,
-        targetDistanceKm,
+        targetDistanceKm: selectedDistanceKm,
         spotCount: spots.length
       }
     );
   }
 
-  return {
+  // おまかせ機能で選択した値をレスポンスに含める
+  const response = {
     routeTitle,
     conceptStory,
     totalDistanceM: route.totalDistanceM,
@@ -441,4 +571,14 @@ export const createRoute = async (
     }),
     coordinates: route.coordinates
   };
+
+  if (isGenreRandom) {
+    response.selectedGenres = selectedGenres;
+  }
+
+  if (isDistanceRandom) {
+    response.selectedDistanceKm = selectedDistanceKm;
+  }
+
+  return response;
 };

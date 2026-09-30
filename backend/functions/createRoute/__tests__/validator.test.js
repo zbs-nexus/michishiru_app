@@ -18,8 +18,36 @@ describe('validateCreateRouteRequest', () => {
     assert.deepEqual(result.value, {
       genreId: 'nature',
       targetDistanceKm: 3,
-      currentLocation: { lat: 35.6862, lng: 139.7036 }
+      currentLocation: { lat: 35.6862, lng: 139.7036 },
+      isGenreRandom: false,
+      isDistanceRandom: false
     });
+  });
+
+  it('おまかせの項目は値が無くても通し、nullにする', () => {
+    const result = validateCreateRouteRequest({
+      isGenreRandom: true,
+      isDistanceRandom: true,
+      currentLocation: validBody.currentLocation
+    });
+
+    assert.equal(result.isValid, true);
+    assert.equal(result.value.genreId, null);
+    assert.equal(result.value.targetDistanceKm, null);
+    assert.equal(result.value.isGenreRandom, true);
+    assert.equal(result.value.isDistanceRandom, true);
+  });
+
+  it('距離だけおまかせの場合もジャンルは検証する', () => {
+    const result = validateCreateRouteRequest({
+      purposeCategory: 'history',
+      isDistanceRandom: true,
+      targetDistanceKm: 50
+    });
+
+    assert.equal(result.isValid, true);
+    assert.equal(result.value.genreId, 'history');
+    assert.equal(result.value.targetDistanceKm, null);
   });
 
   it('ジャンルと距離が未指定なら既定値を補う', () => {

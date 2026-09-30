@@ -123,6 +123,16 @@ export const toRoute = (payload) => {
       ? Math.round(totalDurationS / SECONDS_PER_MINUTE)
       : (body.duration ?? 0),
     spots: toSpots(body.waypoints ?? body.spots),
-    geometry: toLineGeometry(body.geometry)
+    geometry: toLineGeometry(body.geometry),
+    // おまかせで選ばれた条件。おまかせを使っていない項目はnull
+    selectedGenres: Array.isArray(body.selected_genres)
+      ? body.selected_genres.map((genre) => ({
+        genreId: genre.genre_id,
+        genreName: genre.genre_name ?? genre.genre_id
+      }))
+      : null,
+    selectedDistanceKm: Number.isFinite(body.selected_distance_km)
+      ? body.selected_distance_km
+      : null
   };
 };
