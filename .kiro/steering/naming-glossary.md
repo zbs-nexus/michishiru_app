@@ -67,6 +67,11 @@ inclusion: always
 | 距離 | distance | 2地点間の距離。単位は km |
 | 総距離 | totalDistance | 実際に歩いた散歩全体の距離 |
 | 所要時間 | duration | ルートの移動時間 |
+| 次の目的地 | nextSpot | 案内中にこれから向かうスポット |
+| 次の目的地までの距離 | distanceToNextM | 現在地から次の目的地までの直線距離（メートル） |
+| 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
+| 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
+| 到達判定の距離 | ARRIVAL_THRESHOLD_M | 到達とみなす距離（メートル）。`useRouteProgress.js` の定数 |
 
 ### 検索条件
 
@@ -223,4 +228,5 @@ inclusion: always
 | 2026/09/02 | CI/CD導入に伴い「環境とデプロイ」の節を追加（stage / dev / prod / deploy）/ `development`・`staging`・`env` を表記揺れとして禁止 |
 | 2026/09/09 | 地図描画（Step 6）の実装に伴い「地図」へ `geometry` / `coordinates` / `bounds` / `mapStyle` を追加 / 「ルートとスポット」へ `spotId` を追加 |
 | 2026/09/09 | `createRoute`（Places + Bedrock + Routes）の実装に伴い「ルートとスポット」へ `routeTitle` / `conceptStory` / `candidateSpots` / `spotCategory`、「地図」へ `position` を追加 |
+| 2026/09/09 | 案内中の次の目的地表示に伴い「ルートとスポット」へ `nextSpot` / `distanceToNextM` / `visitedSpotIds` / `visitedCount` / `ARRIVAL_THRESHOLD_M` を追加 |
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
