@@ -1,12 +1,10 @@
 <script setup>
-import { onMounted, onBeforeUnmount } from 'vue';
 import RouteMap from '@/components/feature/route/RouteMap.vue';
-import { useLocationTracking } from '@/composables/useLocationTracking';
 
 /**
  * @description 案内中の経路を画面いっぱいの地図に表示する。
- * リアルタイムで現在地を追跡し、Google Maps風のマーカーで表示する。
- * watchPosition を使用し、位置が変わるたびに自動で更新される。
+ * 現在地の追跡は親（View）が行い、ここでは受け取った値を地図へ渡すだけにする。
+ * 同じ追跡状態をバナーと共有するため、watchPositionを二重に開始しない。
  */
 defineProps({
   /** 経路の形（GeoJSONのLineString）。未取得の場合はnull */
@@ -18,25 +16,32 @@ defineProps({
   spots: {
     type: Array,
     required: true
+  },
+  /** 現在地の座標 { lng, lat } */
+  currentLocation: {
+    type: Object,
+    default: null
+  },
+  /** 向いている方向（度）。取得できない場合はnull */
+  currentHeading: {
+    type: Number,
+    default: null
+  },
+  /** 位置情報の精度（メートル）。取得できない場合はnull */
+  currentAccuracy: {
+    type: Number,
+    default: null
+  },
+  /** 現在地を追跡中かどうか */
+  isTracking: {
+    type: Boolean,
+    default: false
+  },
+  /** 位置情報の取得に失敗した場合のメッセージ */
+  trackingError: {
+    type: String,
+    default: null
   }
-});
-
-const {
-  currentLocation,
-  heading,
-  accuracy,
-  isTracking,
-  trackingError,
-  startTracking,
-  stopTracking
-} = useLocationTracking();
-
-onMounted(() => {
-  startTracking();
-});
-
-onBeforeUnmount(() => {
-  stopTracking();
 });
 </script>
 
@@ -48,8 +53,8 @@ onBeforeUnmount(() => {
         :spots="spots"
         :show-current-location="isTracking"
         :current-location="currentLocation"
-        :current-heading="heading"
-        :current-accuracy="accuracy"
+        :current-heading="currentHeading"
+        :current-accuracy="currentAccuracy"
       />
     </div>
     <div
