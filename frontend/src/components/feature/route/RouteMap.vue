@@ -442,11 +442,15 @@ onBeforeUnmount(() => {
   height: 100%;
 }
 
+/*
+ * 右端は地図の帰属表示（iマーク）を覆わないよう空けておく。
+ * 帰属表示は利用規約上、隠してはいけない。
+ */
 .route-map-notice {
   position: absolute;
   bottom: 12px;
   left: 12px;
-  right: 12px;
+  right: 52px;
   padding: 8px 12px;
   border-radius: 8px;
   background: var(--white);
