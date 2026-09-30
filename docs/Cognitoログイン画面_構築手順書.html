@@ -1,0 +1,1575 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cognito ログイン画面 構築手順書</title>
+  <style>
+    :root {
+      --primary: #1A73E8;
+      --primary-light: #E8F0FE;
+      --success: #34A853;
+      --success-light: #E6F4EA;
+      --warning: #FBBC04;
+      --warning-light: #FEF7E0;
+      --danger: #EA4335;
+      --danger-light: #FCE8E6;
+      --text: #202124;
+      --text-secondary: #5F6368;
+      --border: #DADCE0;
+      --bg: #FFFFFF;
+      --bg-secondary: #F8F9FA;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, 'Noto Sans JP', sans-serif;
+      line-height: 1.8;
+      color: var(--text);
+      background: var(--bg-secondary);
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: var(--bg);
+      border-radius: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      padding: 48px;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-bottom: 32px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-top: 40px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 2px solid var(--primary);
+      color: var(--text);
+    }
+
+    h3 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-top: 24px;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    h4 {
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 20px;
+      margin-bottom: 8px;
+      color: var(--text-secondary);
+    }
+
+    p {
+      margin-bottom: 16px;
+      color: var(--text);
+    }
+
+    ul, ol {
+      margin-bottom: 16px;
+      padding-left: 24px;
+    }
+
+    li {
+      margin-bottom: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--bg-secondary);
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    code {
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      background: var(--bg-secondary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #D93025;
+    }
+
+    pre {
+      background: #1E1E1E;
+      color: #D4D4D4;
+      padding: 20px;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-bottom: 24px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+      color: inherit;
+    }
+
+    .file-label {
+      display: inline-block;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 13px;
+      background: #2D3E50;
+      color: #fff;
+      padding: 6px 12px;
+      border-radius: 8px 8px 0 0;
+      margin-bottom: 0;
+    }
+
+    .file-label + pre {
+      border-top-left-radius: 0;
+      margin-top: 0;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .badge-new {
+      background: var(--success-light);
+      color: var(--success);
+    }
+
+    .badge-modified {
+      background: var(--primary-light);
+      color: var(--primary);
+    }
+
+    .badge-info {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+    }
+
+    .callout {
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      border-left: 4px solid;
+    }
+
+    .callout-info {
+      background: var(--primary-light);
+      border-color: var(--primary);
+    }
+
+    .callout-warning {
+      background: var(--warning-light);
+      border-color: var(--warning);
+    }
+
+    .callout-danger {
+      background: var(--danger-light);
+      border-color: var(--danger);
+    }
+
+    .callout-success {
+      background: var(--success-light);
+      border-color: var(--success);
+    }
+
+    .callout-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    .flow-diagram {
+      background: var(--bg-secondary);
+      padding: 24px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-family: 'Consolas', monospace;
+      font-size: 13px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .file-tree {
+      background: var(--bg-secondary);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 24px;
+      font-family: 'Consolas', monospace;
+      font-size: 13px;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    .file-tree .new {
+      color: var(--success);
+      font-weight: 600;
+    }
+
+    .file-tree .modified {
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .summary-box {
+      background: linear-gradient(135deg, var(--primary-light) 0%, #F0F4FF 100%);
+      padding: 24px;
+      border-radius: 12px;
+      margin-bottom: 32px;
+    }
+
+    .summary-box h3 {
+      margin-top: 0;
+      color: var(--primary);
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .summary-item {
+      background: var(--bg);
+      padding: 16px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .summary-item-value {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .summary-item-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 4px;
+    }
+
+    /* コンソール画面のラベルを表す */
+    .ui {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0 6px;
+      background: var(--bg-secondary);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .step {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px 24px;
+      margin-bottom: 24px;
+    }
+
+    .step-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .step-number {
+      flex: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+
+    .step-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .step p:last-child, .step table:last-child, .step pre:last-child {
+      margin-bottom: 0;
+    }
+
+    .checklist {
+      list-style: none;
+      padding-left: 0;
+    }
+
+    .checklist li {
+      padding-left: 28px;
+      position: relative;
+    }
+
+    .checklist li::before {
+      content: '☐';
+      position: absolute;
+      left: 4px;
+      font-size: 16px;
+      color: var(--primary);
+    }
+
+    footer {
+      margin-top: 48px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Cognito ログイン画面 構築手順書</h1>
+    <p class="subtitle">ミチシル — ルート作成地図アプリ ／ Amazon Cognito ユーザープールをコンソールで作成し、自前のログイン画面から認証する</p>
+
+    <div class="summary-box">
+      <h3>🔑 このドキュメントの位置づけ</h3>
+      <p>
+        Cognito のリソースは <strong>AWS マネジメントコンソールから手動で作成</strong>します（CDK化は後日の課題）。
+        ログイン画面はミチシルの見た目に合わせて<strong>アプリ内に自作</strong>し、認証処理だけを Cognito に任せます。
+      </p>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="summary-item-value">6 ステップ</div>
+          <div class="summary-item-label">コンソール作業</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-item-value">7 ファイル</div>
+          <div class="summary-item-label">フロント実装（新規5/変更2）</div>
+        </div>
+        <div class="summary-item">
+          <div class="summary-item-value">約60分</div>
+          <div class="summary-item-label">所要時間の目安</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 1. クリア条件 ========== -->
+    <h2>1. クリア条件と確認方法</h2>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>クリア条件</th>
+          <th>どこで満たすか</th>
+          <th>確認手順</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>ログイン画面が表示されること</td>
+          <td>第2部 <code>LoginView.vue</code> / ルーターガード</td>
+          <td>6章 手順1</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>ユーザー名とパスワードを入力してログインできること</td>
+          <td>第1部 Step 4・5（ユーザー作成）＋ 第2部 <code>authService.js</code></td>
+          <td>6章 手順2</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>ログイン後、ホーム画面が表示されること</td>
+          <td>第2部 <code>LoginView.vue</code> の遷移処理</td>
+          <td>6章 手順3</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>ここで言う「ホーム画面」は、既存の情報入力画面（<code>RouteConditionView.vue</code> ／ ルート名 <code>route-condition</code> ／ パス <code>/</code>）を指します。</p>
+
+    <h3>画面遷移（追加後）</h3>
+    <div class="flow-diagram">[ログイン画面 /login]  ← 未ログインの場合、どのURLを開いてもここへ送られる
+    │
+    │ ユーザー名 + パスワード → Cognito が認証
+    ▼
+[ホーム画面 / (US-1)]
+    │
+    │ ルート作成ボタン押下
+    ▼
+[ロード画面 (US-2)] → [ルート提案 (US-3)] → [案内 (US-6)] → [散歩結果 (US-8)]</div>
+
+    <!-- ========== 2. 設計方針 ========== -->
+    <h2>2. 設計方針（着手前に目を通すところ）</h2>
+
+    <h3>2-1. ホストされたログイン画面（マネージドログイン）を使わない理由</h3>
+    <p>Cognito には Cognito 側がホストするログインページ（マネージドログイン、旧ホストUI）があります。今回は使いません。</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>観点</th>
+          <th>マネージドログイン</th>
+          <th>自前のログイン画面（今回採用）</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>見た目</td>
+          <td>Cognito のドメインの画面へ遷移する。カスタマイズに制限あり</td>
+          <td>ミチシルの画面としてそのまま作れる</td>
+        </tr>
+        <tr>
+          <td>実装量</td>
+          <td>少ない（リダイレクトのみ）</td>
+          <td>入力欄とエラー表示を自分で作る</td>
+        </tr>
+        <tr>
+          <td>認証方式</td>
+          <td>OIDC のリダイレクト（認可コード + PKCE）</td>
+          <td>SRP（パスワードを送信せずに認証）</td>
+        </tr>
+        <tr>
+          <td>クリア条件との相性</td>
+          <td>「ログイン画面」が別ドメインの画面になる</td>
+          <td>アプリ内の画面として表示できる</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>2-2. 使用ライブラリ</h3>
+    <p>
+      <code>aws-amplify</code> の認証モジュール（<code>aws-amplify/auth</code>）を使います。SRP の計算、トークンの保存、
+      有効期限切れ時の自動更新までライブラリが行うため、自分で書く部分がログイン画面とエラー表示だけになります。
+    </p>
+
+    <div class="callout callout-warning">
+      <div class="callout-title">⚠️ 「Amplify は使わない」という前提条件との関係</div>
+      <p>
+        <code>ミチシル_前提条件.md</code> の「Amplify は使わない」は<strong>ホスティングと CI/CD（AWS Amplify のサービス）</strong>を指しています。
+        今回入れるのは <strong>npm パッケージの認証ライブラリ</strong>だけで、ホスティングは S3 + CloudFront のままです。
+        Amplify CLI の初期化（<code>amplify init</code>）も行いません。レビューで指摘されやすい点なので、PR の説明にこの一文を添えてください。
+      </p>
+    </div>
+
+    <h3>2-3. ユーザープールIDとアプリクライアントIDをフロントに置いてよいのか</h3>
+    <p>
+      置いてよい値です。どちらも<strong>公開前提の識別子</strong>で、シークレットではありません。ログインページの HTML を見れば分かる情報であり、
+      これを知っていてもユーザー名とパスワードが無ければ認証は通りません。
+    </p>
+    <p>
+      一方で<strong>クライアントシークレットは絶対にフロントへ置けません</strong>。今回は SPA 用のアプリクライアント（シークレットなし）を作るため、そもそも発行されません。
+      前提条件書の「APIキー・シークレットをフロントに埋め込まない」に抵触しない構成です。
+    </p>
+
+    <h3>2-4. 責務の置き場所</h3>
+    <div class="flow-diagram">LoginView.vue        画面の組み立てと、成功後のホームへの遷移
+  └ LoginForm.vue    入力欄。認証は行わず、入力値を emit するだけ
+stores/authStore.js  ログイン状態の保持（画面をまたぐためPinia）
+services/authService.js  Cognito との通信と、例外→日本語メッセージの変換
+router/index.js      未ログインのアクセスを /login へ送る判定</div>
+
+    <!-- ========== 3. 第1部 コンソール ========== -->
+    <h2>3. 第1部: AWS コンソールでの作成手順</h2>
+
+    <div class="callout callout-info">
+      <div class="callout-title">前提</div>
+      <p>
+        リージョンは <strong>アジアパシフィック（東京）ap-northeast-1</strong> を使います（既存リソースと同じ）。
+        コンソール右上のリージョンが東京になっているか、作業前に必ず確認してください。
+        必要な権限は <code>AmazonCognitoPowerUser</code> 相当です。
+      </p>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">1</div>
+        <div class="step-title">ユーザープールを作成する</div>
+      </div>
+      <ol>
+        <li>コンソールで「Cognito」を検索して開き、左メニューの <span class="ui">ユーザープール</span> を選ぶ</li>
+        <li><span class="ui">ユーザープールを作成</span> を押す</li>
+        <li><strong>アプリケーションの定義</strong>
+          <ul>
+            <li>アプリケーションタイプ: <span class="ui">シングルページアプリケーション (SPA)</span> を選ぶ<br>
+              <span class="badge badge-info">重要</span> これを選ぶとクライアントシークレット無しのアプリクライアントが作られます。後から変更できません。</li>
+            <li>アプリケーションの名前: <code>michishiru-web-dev</code></li>
+          </ul>
+        </li>
+        <li><strong>オプションの設定</strong>
+          <ul>
+            <li>サインイン識別子のオプション: <span class="ui">ユーザー名</span> のみを選ぶ（クリア条件が「ユーザー名とパスワード」のため）</li>
+            <li>サインアップの必須属性: <span class="ui">email</span> を選ぶ<br>
+              ユーザー名でサインインする場合、パスワード再設定のコード送信先として email または電話番号が必要になります。</li>
+          </ul>
+        </li>
+        <li><strong>リターンURLを追加</strong>: <code>http://localhost:5173</code> と入力する<br>
+          自前のログイン画面ではリダイレクトを使わないため実際には未使用ですが、ウィザードの入力欄なので埋めます（5173 は Vite の既定ポート）。</li>
+        <li><span class="ui">アプリケーションを作成</span> を押す</li>
+        <li>完了画面でコード例が表示される。下へスクロールして <span class="ui">概要に移動</span> を押す</li>
+      </ol>
+
+      <div class="callout callout-warning">
+        <div class="callout-title">⚠️ ウィザードで作ると後から変えられない設定</div>
+        <p>
+          このクイック作成では、<strong>ユーザー名の大文字小文字を区別しない</strong>（<code>JohnD</code> と <code>johnd</code> が同一ユーザー）、
+          <strong><code>preferred_username</code> をエイリアスとして使えない</strong>、という設定が固定されます。
+          変更にはユーザープールの作り直しが必要です。今回の用途では問題ありませんが、本番用に作り直す際は認識しておいてください。
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">2</div>
+        <div class="step-title">アプリクライアントの設定を確認する</div>
+      </div>
+      <ol>
+        <li>ユーザープールの左メニュー <span class="ui">アプリクライアント</span> を開き、作成されたクライアントを選ぶ</li>
+        <li><strong>クライアントシークレット</strong>が <span class="ui">なし</span> になっていることを確認する</li>
+        <li><span class="ui">ログインページ</span>／<span class="ui">認証フロー</span> の設定で、以下が有効になっていることを確認する
+          <table>
+            <thead>
+              <tr><th>認証フロー</th><th>設定</th><th>理由</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>ALLOW_USER_SRP_AUTH</code></td><td>有効</td><td>今回使う方式。パスワードをネットワークに流さない</td></tr>
+              <tr><td><code>ALLOW_REFRESH_TOKEN_AUTH</code></td><td>有効</td><td>再読み込み時のセッション復元に必要</td></tr>
+              <tr><td><code>ALLOW_USER_PASSWORD_AUTH</code></td><td><strong>無効のまま</strong></td><td>パスワードを平文で送る方式。SRP があるので不要</td></tr>
+            </tbody>
+          </table>
+        </li>
+      </ol>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">3</div>
+        <div class="step-title">セルフサインアップを無効にする</div>
+      </div>
+      <p>
+        コンソールのクイック作成では<strong>誰でも自分でアカウントを作れる状態</strong>になります。
+        ミチシルは今のところ管理者がユーザーを登録する運用にするため、閉じておきます。
+      </p>
+      <ol>
+        <li>ユーザープールの <span class="ui">サインアップ</span> タブを開く</li>
+        <li><span class="ui">セルフサービスのサインアップ</span> の <span class="ui">編集</span> を押す</li>
+        <li><span class="ui">セルフ登録を有効にする</span> のチェックを外して保存する</li>
+      </ol>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">4</div>
+        <div class="step-title">テスト用ユーザーを作成する</div>
+      </div>
+      <ol>
+        <li>ユーザープールの <span class="ui">ユーザー</span> タブ → <span class="ui">ユーザーを作成</span></li>
+        <li>招待メッセージ: <span class="ui">招待を送信しない</span></li>
+        <li>ユーザー名: <code>michishiru-test</code></li>
+        <li>E メールアドレス: 受け取れるアドレス（テストのみなら架空でも可）を入力し、<span class="ui">E メールアドレスを検証済みとしてマークする</span> にチェック</li>
+        <li>パスワード: <span class="ui">パスワードを設定</span> を選び、<code>Michishiru#2026</code> のように既定のポリシーを満たす値を入れる<br>
+          既定のポリシー: 8文字以上／大文字・小文字・数字・記号をそれぞれ1文字以上</li>
+        <li><span class="ui">ユーザーを作成</span> を押す</li>
+      </ol>
+      <p>作成直後、このユーザーのステータスは <code>FORCE_CHANGE_PASSWORD</code>（パスワードの変更が必要）です。<strong>この状態ではログインが完了しません。</strong>続けて Step 5 を行ってください。</p>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">5</div>
+        <div class="step-title">パスワードを恒久化して CONFIRMED にする（つまずきポイント）</div>
+      </div>
+      <p>
+        管理者が作ったユーザーのパスワードは「仮パスワード」として扱われ、初回ログイン時に新しいパスワードの設定を要求されます。
+        今回は初回パスワード変更画面を作らないため、パスワードを恒久パスワードに変えてしまいます。
+      </p>
+      <p>
+        コンソールの画面上にこの操作のボタンが無いため、<strong>CloudShell</strong>（コンソール右上のターミナルアイコン）から1行実行します。コンソール内で完結する作業です。
+      </p>
+      <pre><code>aws cognito-idp admin-set-user-password \
+  --user-pool-id ap-northeast-1_XXXXXXXXX \
+  --username michishiru-test \
+  --password 'Michishiru#2026' \
+  --permanent \
+  --region ap-northeast-1</code></pre>
+      <p>
+        実行後、<span class="ui">ユーザー</span> タブを再読み込みし、ステータスが <strong>確認済み（CONFIRMED）</strong> になっていることを確認します。
+      </p>
+      <div class="callout callout-info">
+        <div class="callout-title">将来やるなら</div>
+        <p>
+          アプリ側で初回パスワード変更に対応する場合は、<code>signIn</code> の戻り値 <code>nextStep.signInStep</code> が
+          <code>CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED</code> のときに新パスワード入力画面を出し、<code>confirmSignIn</code> を呼びます。今回は範囲外です。
+        </p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">6</div>
+        <div class="step-title">フロントで使う値を控える</div>
+      </div>
+      <table>
+        <thead>
+          <tr><th>値</th><th>取得場所</th><th>形</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>ユーザープールID</td>
+            <td>ユーザープールの <span class="ui">概要</span></td>
+            <td><code>ap-northeast-1_XXXXXXXXX</code></td>
+          </tr>
+          <tr>
+            <td>アプリクライアントID</td>
+            <td><span class="ui">アプリクライアント</span> → 対象のクライアント</td>
+            <td>26文字前後の英数字</td>
+          </tr>
+          <tr>
+            <td>リージョン</td>
+            <td>ユーザープールIDの先頭部分</td>
+            <td><code>ap-northeast-1</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ========== 4. 第2部 フロント ========== -->
+    <h2>4. 第2部: フロントエンドの実装</h2>
+
+    <h3>追加・変更するファイル</h3>
+    <div class="file-tree">frontend/
+├── <span class="new">.env.local</span>                                  新規（Git管理外）
+├── package.json                               <span class="modified">変更</span>（aws-amplify を追加）
+└── src/
+    ├── <span class="modified">main.js</span>                                 変更（Amplify.configure）
+    ├── constants/
+    │   └── <span class="new">authConfig.js</span>                       新規
+    ├── services/
+    │   └── <span class="new">authService.js</span>                      新規
+    ├── stores/
+    │   └── <span class="new">authStore.js</span>                        新規
+    ├── views/
+    │   └── <span class="new">LoginView.vue</span>                       新規
+    ├── components/feature/auth/
+    │   └── <span class="new">LoginForm.vue</span>                       新規
+    └── <span class="modified">router/index.js</span>                         変更（ログイン判定を追加）</div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">1</div>
+        <div class="step-title">ライブラリを追加する</div>
+      </div>
+      <p><code>frontend/</code> ディレクトリで実行します。バージョンは固定で入れます（既存の依存も全て固定バージョンです）。</p>
+      <pre><code>cd frontend
+npm install aws-amplify@6.22.1</code></pre>
+      <p>Vite 用の追加設定（polyfill 等）は不要です。v5 では必要でしたが、v6 では解消されています。</p>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">2</div>
+        <div class="step-title">接続情報を環境変数に置く</div>
+      </div>
+      <p>
+        <code>frontend/.env.local</code> を新規作成し、Step 6 で控えた値を入れます。
+        <code>.gitignore</code> の <code>*.local</code> に該当するため Git には入りません。
+      </p>
+      <div class="file-label">frontend/.env.local</div>
+      <pre><code># Cognito ユーザープール（コンソールで作成した値に置き換える）
+VITE_COGNITO_USER_POOL_ID=ap-northeast-1_XXXXXXXXX
+VITE_COGNITO_USER_POOL_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx</code></pre>
+      <div class="callout callout-warning">
+        <div class="callout-title">⚠️ dev サーバーの再起動が必要</div>
+        <p><code>.env.local</code> を作成・変更したら <code>npm run dev</code> を止めて起動し直してください。Vite は起動時にしか読み込みません。</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">3</div>
+        <div class="step-title">定数ファイルを作る</div>
+      </div>
+      <div class="file-label">frontend/src/constants/authConfig.js <span class="badge badge-new">新規</span></div>
+      <pre><code>/**
+ * @description Cognito への接続情報を定義する。
+ *
+ * ユーザープールIDとアプリクライアントIDは公開前提の識別子であり、シークレットではない。
+ * SPA用のアプリクライアントはクライアントシークレットを持たないため、
+ * ビルド成果物に含まれても認証を突破する材料にはならない。
+ * 環境（dev/prod）で値が変わるため、ビルド時に環境変数から取り込む。
+ */
+
+/** ユーザープールID。未設定の場合はnull */
+const USER_POOL_ID = import.meta.env.VITE_COGNITO_USER_POOL_ID ?? null;
+
+/** アプリクライアントID。未設定の場合はnull */
+const USER_POOL_CLIENT_ID = import.meta.env.VITE_COGNITO_USER_POOL_CLIENT_ID ?? null;
+
+/** Amplify へ渡す認証の設定 */
+export const AUTH_CONFIG = {
+  Cognito: {
+    userPoolId: USER_POOL_ID,
+    userPoolClientId: USER_POOL_CLIENT_ID
+  }
+};
+
+/** 接続情報が揃っているかどうか */
+export const HAS_CONFIGURED_AUTH =
+  USER_POOL_ID !== null &amp;&amp; USER_POOL_CLIENT_ID !== null;</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">4</div>
+        <div class="step-title">起動時に認証の設定を読み込む</div>
+      </div>
+      <p>最初の画面を描く前に設定を渡す必要があるため、<code>mount</code> より前に置きます。</p>
+      <div class="file-label">frontend/src/main.js <span class="badge badge-modified">変更（全文）</span></div>
+      <pre><code>import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import { Amplify } from 'aws-amplify';
+import App from '@/App.vue';
+import router from '@/router';
+import { AUTH_CONFIG, HAS_CONFIGURED_AUTH } from '@/constants/authConfig';
+import '@/assets/styles/global.css';
+
+// 認証の設定は最初の画面を描く前に渡す必要がある。
+// 未設定のまま進むとログイン時に分かりにくい例外になるため、ここで気付けるようにする
+if (HAS_CONFIGURED_AUTH) {
+  Amplify.configure({ Auth: AUTH_CONFIG });
+} else {
+  console.error(
+    'Cognito の接続情報が未設定です。frontend/.env.local を作成し、dev サーバーを再起動してください'
+  );
+}
+
+createApp(App).use(createPinia()).use(router).mount('#app');</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">5</div>
+        <div class="step-title">Cognito との通信を service に閉じ込める</div>
+      </div>
+      <p>
+        ライブラリへの依存をこのファイルだけに留めます。将来ライブラリを差し替える場合も、直すのはここだけになります。
+        Cognito の例外名を画面に出す日本語へ変換するのもここで行います。
+      </p>
+      <div class="file-label">frontend/src/services/authService.js <span class="badge badge-new">新規</span></div>
+      <pre><code>import {
+  getCurrentUser,
+  signIn as cognitoSignIn,
+  signOut as cognitoSignOut
+} from 'aws-amplify/auth';
+
+/**
+ * @description Cognito を使った認証処理をまとめる。
+ * ライブラリへの依存をこのファイルに閉じ込め、呼び出し側は例外だけを扱う。
+ */
+
+/** Cognito が返す例外名と、画面に出す文言の対応 */
+const ERROR_MESSAGES = {
+  NotAuthorizedException: 'ユーザー名またはパスワードが違います',
+  UserNotFoundException: 'ユーザー名またはパスワードが違います',
+  UserNotConfirmedException: 'このユーザーは有効化されていません。管理者に連絡してください',
+  PasswordResetRequiredException: 'パスワードの再設定が必要です。管理者に連絡してください',
+  TooManyRequestsException: '試行回数が多すぎます。しばらく待ってから試してください',
+  EmptySignInUsername: 'ユーザー名を入力してください',
+  EmptySignInPassword: 'パスワードを入力してください',
+  // 仮パスワードのまま（手順書 第1部 Step 5 が未実施）の場合に出る
+  CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED:
+    'パスワードの初期設定が必要です。管理者に連絡してください'
+};
+
+/** 対応表に無い例外に使う文言 */
+const DEFAULT_ERROR_MESSAGE = 'ログインに失敗しました。通信状況を確認してください';
+
+/**
+ * @description 認証の例外を、画面に出せる文言へ変換する
+ * @param {Error} error 発生した例外
+ * @returns {string} 画面に出す文言
+ */
+export const toAuthErrorMessage = (error) =>
+  ERROR_MESSAGES[error?.name] ?? DEFAULT_ERROR_MESSAGE;
+
+/**
+ * @description ユーザー名とパスワードでサインインする。
+ * 通信方式はSRPで、パスワードそのものはネットワークに流れない。
+ * @param {string} username ユーザー名
+ * @param {string} password パスワード
+ * @returns {Promise&lt;void&gt;} 成功時は何も返さない。失敗時は例外を投げる
+ */
+export const signInWithPassword = async (username, password) => {
+  const { isSignedIn, nextStep } = await cognitoSignIn({ username, password });
+
+  if (isSignedIn) {
+    return;
+  }
+
+  // MFAや初回パスワード変更など、追加の手続きを求められた場合。
+  // 対応する画面を用意していないため、失敗として上位へ返す
+  const error = new Error(`サインインが完了しませんでした: ${nextStep.signInStep}`);
+  error.name = nextStep.signInStep;
+  throw error;
+};
+
+/**
+ * @description サインアウトしてトークンを破棄する
+ * @returns {Promise&lt;void&gt;}
+ */
+export const signOutFromCognito = () => cognitoSignOut();
+
+/**
+ * @description 保存されているセッションから、サインイン中のユーザー名を取得する。
+ * 再読み込み後にログイン状態を復元するために使う。
+ * @returns {Promise&lt;string|null&gt;} ユーザー名。未サインインの場合はnull
+ */
+export const fetchSignedInUsername = async () => {
+  try {
+    const { username } = await getCurrentUser();
+
+    return username;
+  } catch {
+    // 未サインインでも例外になる仕様のため、サインインしていない状態として扱う
+    return null;
+  }
+};</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">6</div>
+        <div class="step-title">ログイン状態をストアで保持する</div>
+      </div>
+      <p>ルーターガードと複数の画面から参照するため、Pinia で持ちます（<code>routeStore.js</code> と同じ書き方に揃えています）。</p>
+      <div class="file-label">frontend/src/stores/authStore.js <span class="badge badge-new">新規</span></div>
+      <pre><code>import { computed, ref } from 'vue';
+import { defineStore } from 'pinia';
+import {
+  fetchSignedInUsername,
+  signInWithPassword,
+  signOutFromCognito,
+  toAuthErrorMessage
+} from '@/services/authService';
+
+/**
+ * @description ログイン状態を保持するグローバルストア。
+ * ルーターガードと各画面から参照するため、Piniaで一元管理する。
+ */
+export const useAuthStore = defineStore('auth', () => {
+  /** サインイン中のユーザー名。未サインインの場合はnull */
+  const username = ref(null);
+
+  /** Cognito のセッションを確認済みかどうか（再読み込み直後の二重確認を防ぐ） */
+  const isSessionRestored = ref(false);
+
+  /** サインインの通信中かどうか */
+  const isSigningIn = ref(false);
+
+  /** 直近のサインイン失敗の理由。成功時はnull */
+  const errorMessage = ref(null);
+
+  /** サインイン済みかどうか */
+  const isSignedIn = computed(() => username.value !== null);
+
+  /**
+   * @description 保存されているセッションからログイン状態を復元する
+   * @returns {Promise&lt;void&gt;}
+   */
+  const restoreSession = async () => {
+    username.value = await fetchSignedInUsername();
+    isSessionRestored.value = true;
+  };
+
+  /**
+   * @description ユーザー名とパスワードでサインインする
+   * @param {string} inputUsername 入力されたユーザー名
+   * @param {string} inputPassword 入力されたパスワード
+   * @returns {Promise&lt;boolean&gt;} 成功したかどうか
+   */
+  const signIn = async (inputUsername, inputPassword) => {
+    isSigningIn.value = true;
+    errorMessage.value = null;
+
+    try {
+      await signInWithPassword(inputUsername, inputPassword);
+      username.value = await fetchSignedInUsername();
+
+      return true;
+    } catch (error) {
+      errorMessage.value = toAuthErrorMessage(error);
+
+      return false;
+    } finally {
+      isSigningIn.value = false;
+    }
+  };
+
+  /**
+   * @description サインアウトする
+   * @returns {Promise&lt;void&gt;}
+   */
+  const signOut = async () => {
+    await signOutFromCognito();
+    username.value = null;
+    errorMessage.value = null;
+  };
+
+  return {
+    username,
+    isSessionRestored,
+    isSigningIn,
+    errorMessage,
+    isSignedIn,
+    restoreSession,
+    signIn,
+    signOut
+  };
+});</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">7</div>
+        <div class="step-title">入力フォームのコンポーネントを作る</div>
+      </div>
+      <p>
+        認証は行わず、入力値を親へ渡すだけにします。
+        <code>BaseButton</code> は <code>type="button"</code> 固定でフォーム送信ができないため、
+        Enter キーでログインできるようここでは <code>type="submit"</code> のボタンを使い、見た目は共通クラスの <code>primary-btn</code> を借ります。
+      </p>
+      <div class="file-label">frontend/src/components/feature/auth/LoginForm.vue <span class="badge badge-new">新規</span></div>
+      <pre><code>&lt;script setup&gt;
+import { ref } from 'vue';
+
+/**
+ * @description ユーザー名とパスワードの入力欄を提供する。
+ * 認証は行わず、入力された値を親へ渡すだけに留める。
+ */
+defineProps({
+  /** サインインの通信中かどうか */
+  isSigningIn: {
+    type: Boolean,
+    default: false
+  },
+  /** 表示するエラーの文言。無い場合はnull */
+  errorMessage: {
+    type: String,
+    default: null
+  }
+});
+
+const emit = defineEmits(['submitLogin']);
+
+/** 入力中のユーザー名 */
+const username = ref('');
+
+/** 入力中のパスワード */
+const password = ref('');
+
+/**
+ * @description 入力値を親へ渡す。
+ * 前後の空白はコピー貼り付けで混ざりやすいため、ユーザー名だけ取り除く。
+ * @returns {void}
+ */
+const handleSubmit = () => {
+  emit('submitLogin', {
+    username: username.value.trim(),
+    password: password.value
+  });
+};
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;form
+    class="login-form"
+    @submit.prevent="handleSubmit"
+  &gt;
+    &lt;label class="login-field"&gt;
+      &lt;span class="login-label"&gt;ユーザー名&lt;/span&gt;
+      &lt;input
+        v-model="username"
+        type="text"
+        name="username"
+        autocomplete="username"
+        :disabled="isSigningIn"
+        required
+      &gt;
+    &lt;/label&gt;
+
+    &lt;label class="login-field"&gt;
+      &lt;span class="login-label"&gt;パスワード&lt;/span&gt;
+      &lt;input
+        v-model="password"
+        type="password"
+        name="password"
+        autocomplete="current-password"
+        :disabled="isSigningIn"
+        required
+      &gt;
+    &lt;/label&gt;
+
+    &lt;p
+      v-if="errorMessage"
+      class="login-error"
+      role="alert"
+    &gt;
+      {{ errorMessage }}
+    &lt;/p&gt;
+
+    &lt;button
+      class="primary-btn"
+      type="submit"
+      :disabled="isSigningIn"
+    &gt;
+      {{ isSigningIn ? 'ログイン中...' : 'ログイン' }}
+    &lt;/button&gt;
+  &lt;/form&gt;
+&lt;/template&gt;
+
+&lt;style scoped&gt;
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-gray);
+}
+
+/* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
+.login-field input {
+  padding: 14px;
+  font-size: 16px;
+  border: 1px solid #DDE3E8;
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.login-field input:focus {
+  outline: 2px solid var(--route-blue);
+  outline-offset: 1px;
+}
+
+.login-field input:disabled {
+  background: var(--bg-light);
+}
+
+.login-error {
+  font-size: 13px;
+  color: #D93025;
+}
+&lt;/style&gt;</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">8</div>
+        <div class="step-title">ログイン画面（View）を作る</div>
+      </div>
+      <div class="file-label">frontend/src/views/LoginView.vue <span class="badge badge-new">新規</span></div>
+      <pre><code>&lt;script setup&gt;
+import { useRouter } from 'vue-router';
+import logoImage from '@/assets/images/logo.png';
+import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import LoginForm from '@/components/feature/auth/LoginForm.vue';
+import { useAuthStore } from '@/stores/authStore';
+
+/**
+ * @description ログイン画面。
+ * 認証はストアとserviceへ委譲し、この画面は成功後の遷移だけを担う。
+ */
+const router = useRouter();
+const authStore = useAuthStore();
+
+/**
+ * @description 入力された資格情報でサインインし、成功したらホームへ進む。
+ * 失敗の理由はストアが保持し、フォーム側に表示される。
+ * @param {{username: string, password: string}} credentials 入力された資格情報
+ * @returns {Promise&lt;void&gt;}
+ */
+const handleLogin = async ({ username, password }) => {
+  const isSucceeded = await authStore.signIn(username, password);
+
+  if (isSucceeded) {
+    router.push({ name: 'route-condition' });
+  }
+};
+&lt;/script&gt;
+
+&lt;template&gt;
+  &lt;DefaultLayout&gt;
+    &lt;template #background&gt;
+      &lt;div class="header-bg" /&gt;
+    &lt;/template&gt;
+
+    &lt;div class="logo-header"&gt;
+      &lt;div class="logo-icon"&gt;
+        &lt;img
+          :src="logoImage"
+          alt="ミチシル"
+          width="50"
+          height="50"
+        &gt;
+      &lt;/div&gt;
+      &lt;div class="logo-text"&gt;
+        &lt;h1&gt;ミチシル&lt;/h1&gt;
+        &lt;p&gt;ルート提案型お散歩アプリ&lt;/p&gt;
+      &lt;/div&gt;
+    &lt;/div&gt;
+
+    &lt;h2 class="section-title"&gt;
+      ログイン
+    &lt;/h2&gt;
+
+    &lt;LoginForm
+      :is-signing-in="authStore.isSigningIn"
+      :error-message="authStore.errorMessage"
+      @submit-login="handleLogin"
+    /&gt;
+  &lt;/DefaultLayout&gt;
+&lt;/template&gt;</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">9</div>
+        <div class="step-title">ルーターにログイン判定を追加する</div>
+      </div>
+      <p>
+        既存のガード（ルート未取得なら条件入力へ戻す）と1つの <code>beforeEach</code> にまとめ、
+        <strong>ログイン判定 → ルート取得判定</strong> の順で見ます。ガードを2つに分けると実行順が読みにくくなるためです。
+      </p>
+      <div class="file-label">frontend/src/router/index.js <span class="badge badge-modified">変更（全文）</span></div>
+      <pre><code>import { createRouter, createWebHistory } from 'vue-router';
+import LoginView from '@/views/LoginView.vue';
+import RouteConditionView from '@/views/RouteConditionView.vue';
+import RouteNavigationView from '@/views/RouteNavigationView.vue';
+import RouteSuggestionView from '@/views/RouteSuggestionView.vue';
+import WalkResultView from '@/views/WalkResultView.vue';
+import { useAuthStore } from '@/stores/authStore';
+import { useRouteStore } from '@/stores/routeStore';
+
+/**
+ * @description URLと画面の対応を定義する。
+ * ローディングと終了確認はURLを持たない表示状態のため、Viewには含めない。
+ */
+const routes = [
+  {
+    path: '/login',
+    name: 'login',
+    component: LoginView,
+    // 未ログインで開ける唯一の画面
+    meta: { isPublic: true }
+  },
+  {
+    path: '/',
+    name: 'route-condition',
+    component: RouteConditionView
+  },
+  {
+    path: '/suggestion',
+    name: 'route-suggestion',
+    component: RouteSuggestionView,
+    meta: { requiresRoute: true }
+  },
+  {
+    path: '/navigation',
+    name: 'route-navigation',
+    component: RouteNavigationView,
+    meta: { requiresRoute: true }
+  },
+  {
+    path: '/result',
+    name: 'walk-result',
+    component: WalkResultView,
+    meta: { requiresRoute: true }
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    redirect: { name: 'route-condition' }
+  }
+];
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+  scrollBehavior: () => ({ top: 0 })
+});
+
+// ログイン状態とルート取得状態を、この順で見て遷移を決める
+router.beforeEach(async (to) =&gt; {
+  const authStore = useAuthStore();
+
+  // 再読み込み直後はストアが空になるため、残っているセッションを一度だけ確認する
+  if (!authStore.isSessionRestored) {
+    await authStore.restoreSession();
+  }
+
+  if (to.meta.isPublic) {
+    // ログイン済みならログイン画面には留まらせず、ホームへ送る
+    return authStore.isSignedIn ? { name: 'route-condition' } : true;
+  }
+
+  if (!authStore.isSignedIn) {
+    return { name: 'login' };
+  }
+
+  if (!to.meta.requiresRoute) {
+    return true;
+  }
+
+  const routeStore = useRouteStore();
+
+  // ルート未取得の状態で直接URLを開いた場合は条件入力へ戻す
+  return routeStore.hasRoute ? true : { name: 'route-condition' };
+});
+
+export default router;</code></pre>
+    </div>
+
+    <div class="step">
+      <div class="step-head">
+        <div class="step-number">10</div>
+        <div class="step-title">（任意）ログアウトボタンを付ける</div>
+      </div>
+      <p>
+        クリア条件には含まれませんが、無いと<strong>2回目のログインを試せません</strong>（ブラウザの localStorage を手で消すことになります）。
+        ホーム画面に小さく置いておくと確認が楽になります。
+      </p>
+      <div class="file-label">frontend/src/views/RouteConditionView.vue（抜粋）<span class="badge badge-modified">変更</span></div>
+      <pre><code>// script setup へ追加
+import { useAuthStore } from '@/stores/authStore';
+
+const authStore = useAuthStore();
+
+/**
+ * @description サインアウトしてログイン画面へ戻る
+ * @returns {Promise&lt;void&gt;}
+ */
+const handleLogout = async () =&gt; {
+  await authStore.signOut();
+  router.push({ name: 'login' });
+};</code></pre>
+      <pre><code>&lt;!-- template の logo-header の直後などへ追加 --&gt;
+&lt;p class="hint"&gt;
+  {{ authStore.username }} でログイン中
+  &lt;button
+    type="button"
+    class="secondary-btn"
+    @click="handleLogout"
+  &gt;
+    ログアウト
+  &lt;/button&gt;
+&lt;/p&gt;</code></pre>
+    </div>
+
+    <!-- ========== 5. デプロイ ========== -->
+    <h2>5. dev 環境へ反映する場合</h2>
+    <p>
+      <code>.env.local</code> はローカル専用です。GitHub Actions でビルドされる dev/prod 環境では値が入らず、
+      <strong>ログインできない状態のアプリが配信されます</strong>。CloudFront 上で動かすには、ビルドステップへ環境変数を渡します。
+    </p>
+    <ol>
+      <li>GitHub のリポジトリ設定 → <span class="ui">Settings</span> → <span class="ui">Secrets and variables</span> → <span class="ui">Actions</span> → <span class="ui">Variables</span> タブ</li>
+      <li><code>VITE_COGNITO_USER_POOL_ID</code> と <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code> を登録する<br>
+        シークレットではないため Variables で十分です（Secrets にしても動きます）。</li>
+      <li><code>.github/workflows/deploy.yml</code> のビルドステップに <code>env</code> を追加する</li>
+    </ol>
+    <div class="file-label">.github/workflows/deploy.yml（抜粋）<span class="badge badge-modified">変更</span></div>
+    <pre><code>      - name: フロントエンドをビルドする
+        working-directory: frontend
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
+        run: |
+          npm ci
+          npm run build</code></pre>
+    <div class="callout callout-info">
+      <div class="callout-title">dev と prod で別のユーザープールを使う場合</div>
+      <p>
+        GitHub の Environments（dev / prod）を作り、環境ごとに同名の Variables を持たせます。
+        今回はコンソールで dev 用を1つ作っただけなので、まずは共通のリポジトリ Variables で構いません。
+      </p>
+    </div>
+    <p>
+      SPA のディープリンク（<code>/login</code> を直接開く）は、CloudFront の 403/404 を <code>/index.html</code> へ返す設定が
+      <code>iac/lib/michishiru-stack.ts</code> に既にあるため、追加作業は不要です。
+    </p>
+
+    <!-- ========== 6. 動作確認 ========== -->
+    <h2>6. 動作確認</h2>
+
+    <pre><code>cd frontend
+npm run dev</code></pre>
+
+    <table>
+      <thead>
+        <tr><th>#</th><th>操作</th><th>期待する結果</th><th>クリア条件</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td><code>http://localhost:5173/</code> を開く</td>
+          <td>URLが <code>/login</code> に変わり、ミチシルのロゴ付きログイン画面が表示される</td>
+          <td>条件1 ✅</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>わざと誤ったパスワードで送信する</td>
+          <td>「ユーザー名またはパスワードが違います」が表示され、画面は遷移しない</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td><code>michishiru-test</code> と設定したパスワードで送信する</td>
+          <td>ボタンが「ログイン中...」になり、その後ホーム画面へ遷移する</td>
+          <td>条件2・3 ✅</td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>ホーム画面でブラウザを再読み込みする</td>
+          <td>ログイン画面に戻らず、ホーム画面が表示される（セッション復元）</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>ログイン中に <code>/login</code> を直接開く</td>
+          <td>ホーム画面へ送られる</td>
+          <td>—</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>ログアウト（Step 10 を実装した場合）</td>
+          <td>ログイン画面に戻り、再読み込みしてもホームには入れない</td>
+          <td>—</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>PR を出す前のチェック</h3>
+    <ul class="checklist">
+      <li><code>frontend/</code> で <code>npm run lint</code> が通る</li>
+      <li><code>frontend/</code> で <code>npm run build</code> が通る</li>
+      <li>上の動作確認 1〜4 が通る</li>
+      <li><code>.env.local</code> が Git の差分に含まれていない（<code>git status</code> で確認）</li>
+      <li><code>package.json</code> / <code>package-lock.json</code> の差分が <code>aws-amplify</code> の追加だけになっている</li>
+    </ul>
+
+    <!-- ========== 7. トラブルシューティング ========== -->
+    <h2>7. つまずきやすい点</h2>
+
+    <table>
+      <thead>
+        <tr><th>症状</th><th>原因</th><th>対処</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>コンソールに <code>Auth UserPool not configured</code></td>
+          <td><code>.env.local</code> が無い、または dev サーバーを再起動していない</td>
+          <td>ファイルを確認し、<code>npm run dev</code> を再起動する</td>
+        </tr>
+        <tr>
+          <td><code>ResourceNotFoundException: User pool client ... does not exist</code></td>
+          <td>アプリクライアントIDの誤り、またはリージョン違いのプールを見ている</td>
+          <td>ユーザープールIDの先頭が <code>ap-northeast-1_</code> になっているか、クライアントIDを取り違えていないか確認する</td>
+        </tr>
+        <tr>
+          <td>「パスワードの初期設定が必要です」と出る</td>
+          <td>ユーザーが <code>FORCE_CHANGE_PASSWORD</code> のまま（第1部 Step 5 未実施）</td>
+          <td>CloudShell で <code>admin-set-user-password --permanent</code> を実行する</td>
+        </tr>
+        <tr>
+          <td>正しいパスワードなのに「ユーザー名またはパスワードが違います」</td>
+          <td>Cognito は既定で「ユーザーが存在しない」ことを隠すため、ユーザー名の誤りも同じ文言になる</td>
+          <td>コンソールの <span class="ui">ユーザー</span> タブでユーザー名の綴りとステータスを確認する</td>
+        </tr>
+        <tr>
+          <td><code>InvalidParameterException: USER_PASSWORD_AUTH flow not enabled</code></td>
+          <td><code>signIn</code> に <code>authFlowType</code> を指定して平文方式を使おうとしている</td>
+          <td>指定を外す。既定の SRP を使えばこのエラーは出ない</td>
+        </tr>
+        <tr>
+          <td>ログイン成功後もログイン画面に戻される</td>
+          <td><code>signIn</code> 後に <code>username</code> をストアへ入れていない</td>
+          <td><code>authStore.signIn</code> 内の <code>fetchSignedInUsername</code> の呼び出しを確認する</td>
+        </tr>
+        <tr>
+          <td>画面が真っ白で何も出ない</td>
+          <td><code>main.js</code> の import 追加ミス、またはガードが例外で止まっている</td>
+          <td>ブラウザの開発者ツールのコンソールを見る</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ========== 8. セキュリティ ========== -->
+    <h2>8. セキュリティ上おさえておくこと</h2>
+
+    <div class="callout callout-danger">
+      <div class="callout-title">🚨 ログイン画面を付けても API は保護されない</div>
+      <p>
+        ルーターガードは<strong>画面の出し分けだけ</strong>です。API Gateway は現在も未認証で公開されているため、
+        エンドポイントのURLを知っていれば誰でも <code>/api/*</code> を直接呼べます。
+        「認証を入れた」と言える状態にするには、API Gateway に Cognito オーソライザーを追加する作業が別途必要です（9章）。
+      </p>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>項目</th><th>現状</th><th>備考</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>トークンの保存先</td>
+          <td>localStorage（ライブラリの既定）</td>
+          <td>XSS があればトークンを抜かれる。<code>innerHTML</code> への外部入力の埋め込みを避ける</td>
+        </tr>
+        <tr>
+          <td>クライアントシークレット</td>
+          <td>無し（SPA用クライアント）</td>
+          <td>フロントに置けないため、これが正しい構成</td>
+        </tr>
+        <tr>
+          <td>MFA</td>
+          <td>無効</td>
+          <td>必要になったらユーザープールの <span class="ui">サインイン</span> タブで有効化。アプリ側に確認コード入力画面の追加が必要</td>
+        </tr>
+        <tr>
+          <td>セルフサインアップ</td>
+          <td>無効（第1部 Step 3）</td>
+          <td>有効なままだと第三者がアカウントを作れる</td>
+        </tr>
+        <tr>
+          <td>パスワードポリシー</td>
+          <td>既定（8文字以上・4種混在）</td>
+          <td>変更する場合は <span class="ui">認証</span> → <span class="ui">パスワードポリシー</span></td>
+        </tr>
+        <tr>
+          <td>ログイン試行の制限</td>
+          <td>Cognito 側で自動（連続失敗でスロットリング）</td>
+          <td>アプリ側の実装は不要</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- ========== 9. 今後の課題 ========== -->
+    <h2>9. この作業の後に残る課題</h2>
+
+    <table>
+      <thead>
+        <tr><th>#</th><th>課題</th><th>内容</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>API Gateway の保護</td>
+          <td>
+            メソッドに Cognito オーソライザー（<code>authorizationType: COGNITO_USER_POOLS</code>）を付け、
+            フロントは <code>fetchAuthSession()</code> で取り出した idToken を <code>Authorization</code> ヘッダーに付けて送る。
+            <code>routeService.js</code> / <code>conditionService.js</code> の共通化が必要
+          </td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>CDK への移行</td>
+          <td>
+            今回コンソールで作ったユーザープールは CDK の管理外。
+            <code>ミチシル_前提条件.md</code> の「マスタテーブルのCDK管理」と同じ状態が増えるため、
+            環境分離（dev/prod）と合わせて <code>iac/</code> へ取り込む
+          </td>
+        </tr>
+        <tr>
+          <td>3</td>
+          <td>ドキュメントの更新</td>
+          <td>
+            <code>ミチシル_前提条件.md</code> の「認証・認可: 未定」を Cognito 採用として「確定した要素」へ移し、構成図に Cognito を追加する。
+            <code>naming-glossary.md</code> に認証の用語（<code>login</code> / <code>signIn</code> / <code>signOut</code> の使い分け）を登録する
+          </td>
+        </tr>
+        <tr>
+          <td>4</td>
+          <td>ユーザーストーリーの整理</td>
+          <td>ログイン画面は US-1 より前に位置する画面。US として受け入れ条件を起こし、<code>docs/設計書.md</code> の画面遷移図を更新する</td>
+        </tr>
+        <tr>
+          <td>5</td>
+          <td>初回パスワード変更・パスワード再設定</td>
+          <td>現状は管理者が CLI で恒久パスワードを設定する運用。ユーザー自身が変更できる画面が無い</td>
+        </tr>
+        <tr>
+          <td>6</td>
+          <td>ユーザー単位のデータ管理</td>
+          <td>ログインしても保存されるルートは全ユーザー共通。DynamoDB のキー設計に <code>userId</code>（Cognito の sub）を入れるか検討する</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout callout-success">
+      <div class="callout-title">✅ 用語について</div>
+      <p>
+        画面の名前は「ログイン画面」、コード上の関数名は <code>signIn</code> / <code>signOut</code> で書いています
+        （Cognito と Amplify の API 名が <code>signIn</code> のため、揃えたほうが読みやすい）。
+        辞書へ登録する際はこの使い分けも書き添えてください。
+      </p>
+    </div>
+
+    <footer>
+      ミチシル — Cognito ログイン画面 構築手順書<br>
+      参照: <a href="https://docs.aws.amazon.com/cognito/latest/developerguide/getting-started-user-pools-application.html">Create a new application in the Amazon Cognito console（AWS 公式ドキュメント）</a> ／
+      <a href="https://docs.amplify.aws/vue/build-a-backend/auth/connect-your-frontend/sign-in/">Sign in — Amplify Documentation for Vue</a><br>
+      ライセンス上の制約に合わせて内容は要約・言い換えしています
+    </footer>
+  </div>
+</body>
+</html>
