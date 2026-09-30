@@ -22,11 +22,7 @@ defineProps({
     type: Object,
     default: null
   },
-  /** 向いている方向（度）。取得できない場合はnull */
-  currentHeading: {
-    type: Number,
-    default: null
-  },
+
   /** 位置情報の精度（メートル）。取得できない場合はnull */
   currentAccuracy: {
     type: Number,
@@ -53,7 +49,6 @@ defineProps({
         :spots="spots"
         :show-current-location="isTracking"
         :current-location="currentLocation"
-        :current-heading="currentHeading"
         :current-accuracy="currentAccuracy"
       />
     </div>
