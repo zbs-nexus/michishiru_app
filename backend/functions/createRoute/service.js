@@ -133,15 +133,25 @@ const resolveSpotCategoryIds = async (genreId, repositories) => {
  * 生成時間が伸びる。上限を超える場合は毎回ランダムに選び直すことで、生成時間を
  * 抑えつつ、再作成のたびに異なるカテゴリの組み合わせを試せるようにする。
  * @param {string[]} spotCategoryIds ジャンルに紐づく全カテゴリID
+ * @param {string[]} excludedCategoryIds 除外するカテゴリID（既に使用済みのカテゴリ）
  * @returns {string[]} 上限数までのカテゴリID（元が上限以下ならそのまま返す）
  */
-const limitSearchCategories = (spotCategoryIds) => {
-  if (spotCategoryIds.length <= MAX_SEARCH_CATEGORIES) {
-    return spotCategoryIds;
+const limitSearchCategories = (spotCategoryIds, excludedCategoryIds = []) => {
+  // 除外対象を除いた残りのカテゴリを取得
+  const availableCategories = spotCategoryIds.filter(
+    (id) => !excludedCategoryIds.includes(id)
+  );
+
+  if (availableCategories.length === 0) {
+    return [];
+  }
+
+  if (availableCategories.length <= MAX_SEARCH_CATEGORIES) {
+    return availableCategories;
   }
 
   // Fisher-Yates でシャッフルしてから先頭を採用する
-  const shuffled = [...spotCategoryIds];
+  const shuffled = [...availableCategories];
 
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
@@ -153,46 +163,86 @@ const limitSearchCategories = (spotCategoryIds) => {
 
 /**
  * @description カテゴリごとに周辺スポットを検索し、重複を除いた候補にまとめる。
+ * スポットが見つからなかった場合、残りのカテゴリで再検索を行う。
  *
  * 一部のカテゴリで検索が失敗しても、残りの候補でルートを作れるため処理を続ける。
  * すべて失敗した場合は候補が空になり、呼び出し側で404として扱われる。
  * @param {object} conditions 検索条件
- * @param {string[]} conditions.spotCategoryIds 検索するカテゴリIDの一覧
+ * @param {string[]} conditions.allSpotCategoryIds ジャンルに紐づく全カテゴリID
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
  * @param {number} conditions.queryRadiusM 周辺検索の半径（m）
  * @param {object} repositories データ取得に使うリポジトリ
  * @returns {Promise<{name: string, position: number[]}[]>} 重複を除いた候補スポット
  */
-const collectCandidateSpots = async (
-  { spotCategoryIds, currentLocation, queryRadiusM },
+const collectCandidateSpotsWithRetry = async (
+  { allSpotCategoryIds, currentLocation, queryRadiusM },
   repositories
 ) => {
-  const results = await Promise.allSettled(
-    spotCategoryIds.map((spotCategoryId) =>
-      repositories.searchNearbySpots({ currentLocation, spotCategoryId, queryRadiusM })
-    )
-  );
+  const usedCategoryIds = [];
+  let candidateSpots = [];
+  let retryCount = 0;
 
-  // カテゴリの順序を保ったまま、スポット名で重複を除く
-  const candidateSpotsByName = new Map();
+  // スポットが見つかるか、すべてのカテゴリを試すまで繰り返す
+  while (candidateSpots.length === 0 && usedCategoryIds.length < allSpotCategoryIds.length) {
+    // 未使用のカテゴリから上限数まで選択
+    const spotCategoryIds = limitSearchCategories(allSpotCategoryIds, usedCategoryIds);
 
-  results.forEach((result, index) => {
-    if (result.status === 'rejected') {
-      logWarn('カテゴリ単位の周辺検索に失敗したため、このカテゴリを除いて続行します', {
-        spotCategoryId: spotCategoryIds[index],
-        errorMessage: result.reason?.message
+    if (spotCategoryIds.length === 0) {
+      logInfo('すべてのカテゴリを試しましたが、スポットが見つかりませんでした', {
+        totalCategoryCount: allSpotCategoryIds.length,
+        usedCategoryCount: usedCategoryIds.length
       });
-      return;
+      break;
     }
 
-    for (const spot of result.value) {
-      if (!candidateSpotsByName.has(spot.name)) {
-        candidateSpotsByName.set(spot.name, spot);
+    logInfo('カテゴリで周辺スポットを検索します', {
+      spotCategoryIds,
+      retryCount,
+      usedCategoryCount: usedCategoryIds.length,
+      totalCategoryCount: allSpotCategoryIds.length
+    });
+
+    // 今回使用するカテゴリを記録
+    usedCategoryIds.push(...spotCategoryIds);
+
+    const results = await Promise.allSettled(
+      spotCategoryIds.map((spotCategoryId) =>
+        repositories.searchNearbySpots({ currentLocation, spotCategoryId, queryRadiusM })
+      )
+    );
+
+    // カテゴリの順序を保ったまま、スポット名で重複を除く
+    const candidateSpotsByName = new Map();
+
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        logWarn('カテゴリ単位の周辺検索に失敗したため、このカテゴリを除いて続行します', {
+          spotCategoryId: spotCategoryIds[index],
+          errorMessage: result.reason?.message
+        });
+        return;
       }
-    }
-  });
 
-  return Array.from(candidateSpotsByName.values());
+      for (const spot of result.value) {
+        if (!candidateSpotsByName.has(spot.name)) {
+          candidateSpotsByName.set(spot.name, spot);
+        }
+      }
+    });
+
+    candidateSpots = Array.from(candidateSpotsByName.values());
+
+    if (candidateSpots.length === 0) {
+      logInfo('スポットが見つからなかったため、別のカテゴリで再検索します', {
+        triedCategoryIds: spotCategoryIds,
+        remainingCategoryCount: allSpotCategoryIds.length - usedCategoryIds.length
+      });
+    }
+
+    retryCount += 1;
+  }
+
+  return candidateSpots;
 };
 
 /**
@@ -209,21 +259,19 @@ export const createRoute = async (
   { genreId, targetDistanceKm, currentLocation },
   repositories = defaultRepositories
 ) => {
-  const spotCategoryIds = limitSearchCategories(
-    await resolveSpotCategoryIds(genreId, repositories)
-  );
+  const allSpotCategoryIds = await resolveSpotCategoryIds(genreId, repositories);
 
   const queryRadiusM = resolveQueryRadiusM(targetDistanceKm);
 
-  const candidateSpots = await collectCandidateSpots(
-    { spotCategoryIds, currentLocation, queryRadiusM },
+  const candidateSpots = await collectCandidateSpotsWithRetry(
+    { allSpotCategoryIds, currentLocation, queryRadiusM },
     repositories
   );
 
   if (candidateSpots.length === 0) {
     throw createNotFoundError(
       '周辺にスポットが見つかりません。ジャンルと距離を変更して再検索してください',
-      { genreId, spotCategoryIds }
+      { genreId, totalCategoryCount: allSpotCategoryIds.length }
     );
   }
 
