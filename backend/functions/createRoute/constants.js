@@ -114,8 +114,9 @@ export const DEFAULT_CURRENT_LOCATION = { lng: 139.702973, lat: 35.686338 };
 /**
  * 目標距離に対して許容する下限の割合。総距離がこれを下回ると「短すぎ」とみなす。
  * 固定±1kmだと短距離目標に対して厳しすぎたため、目標距離に対する割合で判定する。
+ * 長距離（5km以上）でも実現可能な範囲に調整している。
  */
-export const DISTANCE_LOWER_RATIO = 0.6;
+export const DISTANCE_LOWER_RATIO = 0.5;
 
 /**
  * 目標距離に対して許容する上限の割合。総距離がこれを上回ると「超過」とみなし、
@@ -127,15 +128,15 @@ export const DISTANCE_UPPER_RATIO = 1.4;
 export const MIN_SPOT_COUNT = 1;
 
 /** スポットを増やすときの最大のスポット数 */
-export const MAX_SPOT_COUNT = 5;
+export const MAX_SPOT_COUNT = 15;
 
 /**
  * ルート生成ループ（Bedrock呼び出し）の最大回数。
  * Bedrockの生成は1回あたり数秒かかり、生成時間の主なボトルネックになる。
- * 5秒以内の応答を優先し、初回生成に加えて再生成は最大1回まで（計2回）に抑える。
+ * 初回生成に加えて再生成は最大2回まで（計3回）とし、短すぎるルートの再生成機会を増やす。
  * 距離超過の調整はスポット削減（Bedrockを呼ばない）で対応する。
  */
-export const MAX_ROUTE_RETRY_COUNT = 2;
+export const MAX_ROUTE_RETRY_COUNT = 3;
 
 /** 1kmあたりのメートル数 */
 export const METERS_PER_KM = 1000;
@@ -171,5 +172,5 @@ export const LATITUDE_RANGE = { min: -90, max: 90 };
 /** 受け付ける経度の範囲 */
 export const LONGITUDE_RANGE = { min: -180, max: 180 };
 
-/** 受け付ける目標距離の範囲（km） */
-export const TARGET_DISTANCE_RANGE_KM = { min: 0.5, max: 20 };
+/** 受け付ける目標距離の範囲（km）。0.5kmは到達困難なため下限を1.0kmとする。上限は段階的に拡大し現在は10kmとする */
+export const TARGET_DISTANCE_RANGE_KM = { min: 1.0, max: 10 };

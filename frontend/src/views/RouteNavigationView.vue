@@ -24,7 +24,6 @@ const isEndConfirmVisible = ref(false);
 
 const {
   currentLocation,
-  heading,
   accuracy,
   isTracking,
   trackingError,
@@ -86,7 +85,6 @@ const handleConfirmEnd = () => {
       :geometry="routeStore.currentRoute.geometry"
       :spots="spots"
       :current-location="currentLocation"
-      :current-heading="heading"
       :current-accuracy="accuracy"
       :is-tracking="isTracking"
       :tracking-error="trackingError"
