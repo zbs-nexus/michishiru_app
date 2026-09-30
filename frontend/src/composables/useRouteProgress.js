@@ -1,5 +1,9 @@
 import { computed, ref, watch } from 'vue';
 import { calculateDistanceM } from '@/utils/geoDistance';
+import {
+  calculateAlongRouteDistanceM,
+  toRouteMeasure
+} from '@/utils/routeGeometry';
 
 /**
  * @description 案内中の進捗（次の目的地と到達状況）を管理する composable。
@@ -7,10 +11,19 @@ import { calculateDistanceM } from '@/utils/geoDistance';
  *
  * 到達済みのスポットは未到達へ戻さない。GPSの精度により現在地が前後しても
  * 案内が逆行しないようにするため、判定は一方向にのみ進める。
+ *
+ * 表示する距離は経路の折れ線に沿って測り、到達判定は直線距離で行う。
+ * 判定に道沿いの距離を使うと、近道した場合に到達と見なせなくなるため分けている。
  */
 
 /** 到達とみなす距離（メートル）。一般的なGPSの誤差を見込んで余裕を持たせる */
 const ARRIVAL_THRESHOLD_M = 40;
+
+/**
+ * 経路に沿った距離を採用する、経路からの離れの上限（メートル）。
+ * これ以上離れると射影先が別の区間へ吸着して距離が飛ぶため、直線距離へ切り替える。
+ */
+const MAX_ROUTE_DEVIATION_M = 100;
 
 /**
  * @description 次の目的地と到達状況を提供する
@@ -18,9 +31,15 @@ const ARRIVAL_THRESHOLD_M = 40;
  * @param {import('vue').Ref<object[]>} sources.spots 巡る順に並んだスポットの一覧
  * @param {import('vue').Ref<{lat: number, lng: number}>} sources.currentLocation 現在地
  * @param {import('vue').Ref<number|null>} sources.accuracy 位置情報の精度（メートル）
+ * @param {import('vue').Ref<object|null>} [sources.geometry] 経路の形（GeoJSONのLineString）
  * @returns {object} 次の目的地・距離・到達状況
  */
-export const useRouteProgress = ({ spots, currentLocation, accuracy }) => {
+export const useRouteProgress = ({
+  spots,
+  currentLocation,
+  accuracy,
+  geometry = ref(null)
+}) => {
   /** 到達済みのスポットID。判定が進む方向にのみ追加する */
   const visitedSpotIds = ref([]);
 
@@ -32,16 +51,48 @@ export const useRouteProgress = ({ spots, currentLocation, accuracy }) => {
       ) ?? null
   );
 
-  /** 次の目的地までの直線距離（メートル）。判定できない場合はnull */
-  const distanceToNextM = computed(() => {
-    if (nextSpot.value === null) {
+  /** 次の目的地の座標。取得できない場合はnull */
+  const nextSpotPosition = computed(() => {
+    if (
+      nextSpot.value === null ||
+      !Number.isFinite(nextSpot.value.lat) ||
+      !Number.isFinite(nextSpot.value.lng)
+    ) {
       return null;
     }
 
-    return calculateDistanceM(currentLocation.value, {
-      lat: nextSpot.value.lat,
-      lng: nextSpot.value.lng
+    return { lat: nextSpot.value.lat, lng: nextSpot.value.lng };
+  });
+
+  /** 経路の累積距離。ルートが変わったときだけ組み立て直す */
+  const routeMeasure = computed(() => toRouteMeasure(geometry.value?.coordinates));
+
+  /** 次の目的地までの直線距離（メートル）。到達判定に使う */
+  const straightDistanceToNextM = computed(() => {
+    if (nextSpotPosition.value === null) {
+      return null;
+    }
+
+    return calculateDistanceM(currentLocation.value, nextSpotPosition.value);
+  });
+
+  /**
+   * 次の目的地までの距離（メートル）。表示に使う。
+   * 経路に沿って測り、測れない場合は直線距離で代替する。
+   */
+  const distanceToNextM = computed(() => {
+    if (nextSpotPosition.value === null) {
+      return null;
+    }
+
+    const alongRouteM = calculateAlongRouteDistanceM({
+      measure: routeMeasure.value,
+      fromPosition: currentLocation.value,
+      toPosition: nextSpotPosition.value,
+      maxDeviationM: MAX_ROUTE_DEVIATION_M
     });
+
+    return alongRouteM ?? straightDistanceToNextM.value;
   });
 
   /** 到達済みのスポット数 */
@@ -65,7 +116,7 @@ export const useRouteProgress = ({ spots, currentLocation, accuracy }) => {
       return;
     }
 
-    const distanceM = distanceToNextM.value;
+    const distanceM = straightDistanceToNextM.value;
 
     if (distanceM === null || distanceM > ARRIVAL_THRESHOLD_M) {
       return;
