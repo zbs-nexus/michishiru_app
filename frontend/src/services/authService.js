@@ -1,7 +1,10 @@
 import {
+  confirmSignUp as cognitoConfirmSignUp,
   getCurrentUser,
+  resendSignUpCode as cognitoResendSignUpCode,
   signIn as cognitoSignIn,
-  signOut as cognitoSignOut
+  signOut as cognitoSignOut,
+  signUp as cognitoSignUp
 } from 'aws-amplify/auth';
 
 /**
@@ -20,11 +23,31 @@ const ERROR_MESSAGES = {
   EmptySignInPassword: 'パスワードを入力してください',
   // 仮パスワードのまま（恒久パスワードが未設定）の場合に出る
   CONFIRM_SIGN_IN_WITH_NEW_PASSWORD_REQUIRED:
-    'パスワードの初期設定が必要です。管理者に連絡してください'
+    'パスワードの初期設定が必要です。管理者に連絡してください',
+  // ここから下はユーザー登録で出るもの
+  UsernameExistsException: 'このユーザー名は既に使われています',
+  InvalidPasswordException:
+    'パスワードの条件を満たしていません。8文字以上で、大文字・小文字・数字・記号をそれぞれ含めてください',
+  InvalidParameterException: '入力内容を確認してください',
+  CodeMismatchException: '確認コードが違います',
+  ExpiredCodeException:
+    '確認コードの有効期限が切れています。コードを再送してください',
+  CodeDeliveryFailureException:
+    '確認コードを送信できませんでした。メールアドレスを確認してください',
+  LimitExceededException: '試行回数が多すぎます。しばらく待ってから試してください',
+  EmptySignUpUsername: 'ユーザー名を入力してください',
+  EmptySignUpPassword: 'パスワードを入力してください',
+  EmptyConfirmSignUpUsername: 'ユーザー名を入力してください',
+  EmptyConfirmSignUpCode: '確認コードを入力してください'
 };
 
-/** 対応表に無い例外に使う文言 */
-const DEFAULT_ERROR_MESSAGE = 'ログインに失敗しました。通信状況を確認してください';
+/** サインインの対応表に無い例外に使う文言 */
+const SIGN_IN_DEFAULT_ERROR_MESSAGE =
+  'ログインに失敗しました。通信状況を確認してください';
+
+/** ユーザー登録の対応表に無い例外に使う文言 */
+const SIGN_UP_DEFAULT_ERROR_MESSAGE =
+  'ユーザー登録に失敗しました。通信状況を確認してください';
 
 /**
  * @description 認証の例外を、画面に出せる文言へ変換する
@@ -32,7 +55,16 @@ const DEFAULT_ERROR_MESSAGE = 'ログインに失敗しました。通信状況�
  * @returns {string} 画面に出す文言
  */
 export const toAuthErrorMessage = (error) =>
-  ERROR_MESSAGES[error?.name] ?? DEFAULT_ERROR_MESSAGE;
+  ERROR_MESSAGES[error?.name] ?? SIGN_IN_DEFAULT_ERROR_MESSAGE;
+
+/**
+ * @description ユーザー登録の例外を、画面に出せる文言へ変換する。
+ * 対応表はサインインと共通で、当てはまらなかった場合の文言だけを変える。
+ * @param {Error} error 発生した例外
+ * @returns {string} 画面に出す文言
+ */
+export const toSignUpErrorMessage = (error) =>
+  ERROR_MESSAGES[error?.name] ?? SIGN_UP_DEFAULT_ERROR_MESSAGE;
 
 /**
  * @description ユーザー名とパスワードでサインインする。
@@ -53,6 +85,81 @@ export const signInWithPassword = async (username, password) => {
   const error = new Error(`サインインが完了しませんでした: ${nextStep.signInStep}`);
   error.name = nextStep.signInStep;
   throw error;
+};
+
+/**
+ * @description ユーザー名・メールアドレス・パスワードでユーザーを登録する。
+ * ユーザープールはメールアドレスを必須属性としているため、登録時に必ず送る。
+ *
+ * 登録直後のユーザーは未確認の状態で、メールで届く確認コードを
+ * `confirmSignUpWithCode` に渡すまでサインインできない。
+ * @param {string} username ユーザー名
+ * @param {string} email メールアドレス
+ * @param {string} password パスワード
+ * @returns {Promise<{isConfirmationRequired: boolean, codeDeliveryDestination: string|null}>} 確認コードの入力が必要かどうかと、コードの送信先
+ * @throws {Error} 登録に失敗した場合、または未対応の手続きを求められた場合
+ */
+export const signUpWithEmail = async (username, email, password) => {
+  const { isSignUpComplete, nextStep } = await cognitoSignUp({
+    username,
+    password,
+    options: { userAttributes: { email } }
+  });
+
+  if (isSignUpComplete) {
+    return { isConfirmationRequired: false, codeDeliveryDestination: null };
+  }
+
+  if (nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
+    return {
+      isConfirmationRequired: true,
+      // 送信先はマスクされた形（例: a***@example.com）で返る
+      codeDeliveryDestination: nextStep.codeDeliveryDetails?.destination ?? null
+    };
+  }
+
+  // 自動サインインなど、対応する画面を用意していない手続きは失敗として返す
+  const error = new Error(
+    `ユーザー登録が完了しませんでした: ${nextStep.signUpStep}`
+  );
+  error.name = nextStep.signUpStep;
+  throw error;
+};
+
+/**
+ * @description メールで届いた確認コードでユーザーを有効化する
+ * @param {string} username 登録したユーザー名
+ * @param {string} confirmationCode メールで届いた確認コード
+ * @returns {Promise<void>} 成功時は何も返さない。失敗時は例外を投げる
+ * @throws {Error} コードが違う・期限切れ、または未対応の手続きを求められた場合
+ */
+export const confirmSignUpWithCode = async (username, confirmationCode) => {
+  const { isSignUpComplete, nextStep } = await cognitoConfirmSignUp({
+    username,
+    confirmationCode
+  });
+
+  if (isSignUpComplete) {
+    return;
+  }
+
+  const error = new Error(
+    `ユーザー登録の確認が完了しませんでした: ${nextStep.signUpStep}`
+  );
+  error.name = nextStep.signUpStep;
+  throw error;
+};
+
+/**
+ * @description 確認コードを再送する
+ * @param {string} username 登録したユーザー名
+ * @returns {Promise<string|null>} コードの送信先（マスクされた形）
+ * @throws {Error} 再送に失敗した場合
+ */
+export const resendConfirmationCode = async (username) => {
+  const codeDeliveryDetails = await cognitoResendSignUpCode({ username });
+
+  return codeDeliveryDetails?.destination ?? null;
 };
 
 /**

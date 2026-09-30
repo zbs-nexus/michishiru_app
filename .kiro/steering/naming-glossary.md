@@ -153,6 +153,25 @@ inclusion: always
 | 作成日時 | createdAt | データの作成日時 |
 | 更新日時 | updatedAt | データの最終更新日時 |
 
+### 認証
+
+画面の名前は日本語（「ログイン画面」「ユーザー登録画面」）、コード上の名前は Cognito と Amplify の API 名に合わせる。
+
+| 日本語 | 英語（コード上） | 説明 |
+|---|---|---|
+| ログイン（画面・行為） | login | 画面名・URL・ルート名に使う（`/login` / `route name: login`） |
+| サインイン | signIn | ログイン処理そのもの。関数名・状態名に使う（`signIn` / `isSigningIn`） |
+| サインアウト | signOut | ログアウト処理 |
+| ユーザー登録（画面・行為） | signUp | 画面名は「ユーザー登録」、コード上は `signUp`（`/sign-up` / `isSigningUp`） |
+| ユーザー名 | username | Cognito のサインイン識別子 |
+| メールアドレス | email | 確認コードの送信先。Cognito の必須属性 |
+| パスワード | password | - |
+| 確認コード | confirmationCode | ユーザー登録後にメールで届く6桁の数字 |
+| ユーザー登録の確認 | confirmSignUp | 確認コードでユーザーを有効化すること |
+| ログイン済みかどうか | isSignedIn | - |
+
+`logout` は使わない（`signOut` に統一）。`register` / `signup`（大文字なし）も使わない。
+
 ---
 
 ## 使ってはいけない表記揺れ
@@ -230,3 +249,4 @@ inclusion: always
 | 2026/09/09 | `createRoute`（Places + Bedrock + Routes）の実装に伴い「ルートとスポット」へ `routeTitle` / `conceptStory` / `candidateSpots` / `spotCategory`、「地図」へ `position` を追加 |
 | 2026/09/09 | 案内中の次の目的地表示に伴い「ルートとスポット」へ `nextSpot` / `distanceToNextM` / `visitedSpotIds` / `visitedCount` / `ARRIVAL_THRESHOLD_M` を追加 |
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
+| 2026/09/30 | ユーザー登録画面の追加に伴い「認証」の節を新設。未登録だったログイン関連の語（login / signIn / signOut / isSignedIn / username / password）と、登録で使う語（signUp / email / confirmationCode / confirmSignUp）を登録。`logout` / `register` を禁止 |

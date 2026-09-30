@@ -1,10 +1,14 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import {
+  confirmSignUpWithCode,
   fetchSignedInUsername,
+  resendConfirmationCode,
   signInWithPassword,
   signOutFromCognito,
-  toAuthErrorMessage
+  signUpWithEmail,
+  toAuthErrorMessage,
+  toSignUpErrorMessage
 } from '@/services/authService';
 
 /**
@@ -21,7 +25,10 @@ export const useAuthStore = defineStore('auth', () => {
   /** サインインの通信中かどうか */
   const isSigningIn = ref(false);
 
-  /** 直近のサインイン失敗の理由。成功時はnull */
+  /** ユーザー登録の通信中かどうか */
+  const isSigningUp = ref(false);
+
+  /** 直近のサインイン・ユーザー登録の失敗の理由。成功時はnull */
   const errorMessage = ref(null);
 
   /** サインイン済みかどうか */
@@ -61,6 +68,82 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   /**
+   * @description ユーザーを新規登録する。
+   * 登録できてもこの時点ではまだサインインしておらず、
+   * メールで届く確認コードを confirmSignUp に渡すまで有効にならない。
+   * @param {string} inputUsername 入力されたユーザー名
+   * @param {string} inputEmail 入力されたメールアドレス
+   * @param {string} inputPassword 入力されたパスワード
+   * @returns {Promise<{isSucceeded: boolean, isConfirmationRequired: boolean, codeDeliveryDestination: string|null}>} 登録の結果
+   */
+  const signUp = async (inputUsername, inputEmail, inputPassword) => {
+    isSigningUp.value = true;
+    errorMessage.value = null;
+
+    try {
+      const { isConfirmationRequired, codeDeliveryDestination } =
+        await signUpWithEmail(inputUsername, inputEmail, inputPassword);
+
+      return { isSucceeded: true, isConfirmationRequired, codeDeliveryDestination };
+    } catch (error) {
+      errorMessage.value = toSignUpErrorMessage(error);
+
+      return {
+        isSucceeded: false,
+        isConfirmationRequired: false,
+        codeDeliveryDestination: null
+      };
+    } finally {
+      isSigningUp.value = false;
+    }
+  };
+
+  /**
+   * @description 確認コードでユーザー登録を確定する
+   * @param {string} inputUsername 登録したユーザー名
+   * @param {string} inputConfirmationCode 入力された確認コード
+   * @returns {Promise<boolean>} 成功したかどうか
+   */
+  const confirmSignUp = async (inputUsername, inputConfirmationCode) => {
+    isSigningUp.value = true;
+    errorMessage.value = null;
+
+    try {
+      await confirmSignUpWithCode(inputUsername, inputConfirmationCode);
+
+      return true;
+    } catch (error) {
+      errorMessage.value = toSignUpErrorMessage(error);
+
+      return false;
+    } finally {
+      isSigningUp.value = false;
+    }
+  };
+
+  /**
+   * @description 確認コードを再送する
+   * @param {string} inputUsername 登録したユーザー名
+   * @returns {Promise<boolean>} 成功したかどうか
+   */
+  const resendCode = async (inputUsername) => {
+    isSigningUp.value = true;
+    errorMessage.value = null;
+
+    try {
+      await resendConfirmationCode(inputUsername);
+
+      return true;
+    } catch (error) {
+      errorMessage.value = toSignUpErrorMessage(error);
+
+      return false;
+    } finally {
+      isSigningUp.value = false;
+    }
+  };
+
+  /**
    * @description サインアウトする
    * @returns {Promise<void>}
    */
@@ -70,14 +153,28 @@ export const useAuthStore = defineStore('auth', () => {
     errorMessage.value = null;
   };
 
+  /**
+   * @description 直近の失敗メッセージを消す。
+   * 画面を切り替えたときに前の画面のエラーが残らないようにする。
+   * @returns {void}
+   */
+  const clearErrorMessage = () => {
+    errorMessage.value = null;
+  };
+
   return {
     username,
     isSessionRestored,
     isSigningIn,
+    isSigningUp,
     errorMessage,
     isSignedIn,
     restoreSession,
     signIn,
-    signOut
+    signUp,
+    confirmSignUp,
+    resendCode,
+    signOut,
+    clearErrorMessage
   };
 });

@@ -44,13 +44,14 @@ const handleSubmit = () => {
     BaseButton は type="button" 固定でフォームを送信できないため、
     Enterキーでログインできるようここでは submit のボタンを使い、
     見た目だけ共通クラスの primary-btn を借りる。
+    入力欄のスタイル（auth-*）はユーザー登録画面と共通のため global.css に置いている。
   -->
   <form
-    class="login-form"
+    class="auth-form"
     @submit.prevent="handleSubmit"
   >
-    <label class="login-field">
-      <span class="login-label">ユーザー名</span>
+    <label class="auth-field">
+      <span class="auth-label">ユーザー名</span>
       <input
         v-model="username"
         type="text"
@@ -61,8 +62,8 @@ const handleSubmit = () => {
       >
     </label>
 
-    <label class="login-field">
-      <span class="login-label">パスワード</span>
+    <label class="auth-field">
+      <span class="auth-label">パスワード</span>
       <input
         v-model="password"
         type="password"
@@ -75,7 +76,7 @@ const handleSubmit = () => {
 
     <p
       v-if="errorMessage"
-      class="login-error"
+      class="auth-error"
       role="alert"
     >
       {{ errorMessage }}
@@ -90,46 +91,3 @@ const handleSubmit = () => {
     </button>
   </form>
 </template>
-
-<style scoped>
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.login-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.login-label {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-gray);
-}
-
-/* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
-.login-field input {
-  padding: 14px;
-  font-size: 16px;
-  border: 1px solid #DDE3E8;
-  border-radius: 10px;
-  background: var(--white);
-}
-
-.login-field input:focus {
-  outline: 2px solid var(--route-blue);
-  outline-offset: 1px;
-}
-
-.login-field input:disabled {
-  background: var(--bg-light);
-}
-
-.login-error {
-  font-size: 13px;
-  color: #D93025;
-}
-</style>

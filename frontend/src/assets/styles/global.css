@@ -275,6 +275,67 @@ body {
   cursor: pointer;
 }
 
+/* 認証フォーム（ログイン・ユーザー登録で共通） */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-gray);
+}
+
+/* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
+.auth-field input {
+  padding: 14px;
+  font-size: 16px;
+  border: 1px solid #DDE3E8;
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.auth-field input:focus {
+  outline: 2px solid var(--route-blue);
+  outline-offset: 1px;
+}
+
+.auth-field input:disabled {
+  background: var(--bg-light);
+}
+
+.auth-error {
+  font-size: 13px;
+  color: #D93025;
+}
+
+.auth-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-gray);
+}
+
+/* 画面の下に置く「ログインへ」「登録へ」の行き先 */
+.auth-switch {
+  margin-top: 24px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-gray);
+}
+
+.auth-switch a {
+  font-weight: 600;
+  color: var(--route-blue);
+}
+
 /* ローディング画面 */
 #screen-loading {
   background: linear-gradient(180deg, #E8F0E8 0%, #F0F5F0 50%, #F5F9FB 100%);
