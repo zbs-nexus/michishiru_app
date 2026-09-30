@@ -62,9 +62,26 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # Cognito の接続情報はビルド時に埋め込まれるため、ビルドの前に値が揃っているか確かめる。
+      # 空のままビルドすると、配信後にログインを試すまで設定漏れに気付けない。
+      - name: Cognito の接続情報が設定されているか確認する
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
+        run: |
+          if [ -z "$VITE_COGNITO_USER_POOL_ID" ] || [ -z "$VITE_COGNITO_USER_POOL_CLIENT_ID" ]; then
+            echo "::error::Cognito の接続情報が未設定です。リポジトリの Settings → Secrets and variables → Actions → Variables に VITE_COGNITO_USER_POOL_ID と VITE_COGNITO_USER_POOL_CLIENT_ID を登録してください"
+            exit 1
+          fi
+
       # フロントエンドをビルドする（dist は cdk deploy で S3 へアップロードされる）
+      # VITE_ で始まる値は import.meta.env としてビルド成果物に埋め込まれる。
+      # 実行時には読み込まれないため、ここで渡さないと未設定のまま配信される。
       - name: フロントエンドをビルドする
         working-directory: frontend
+        env:
+          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
+          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
         run: |
           npm ci
           npm run build
