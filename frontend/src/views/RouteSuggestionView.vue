@@ -24,6 +24,7 @@ const {
 } = useRouteCreation();
 const {
   message: toastMessage,
+  variant: toastVariant,
   showMessage,
   hideMessage
 } = useToastMessage();
@@ -44,7 +45,8 @@ const randomSelectionMessage = computed(() => {
     parts.push(`距離: ${route.selectedDistanceKm}km`);
   }
 
-  return parts.length > 0 ? `おまかせで選びました（${parts.join(' / ')}）` : null;
+  // トーストに「おまかせ」のラベルが付くため、本文は選ばれた内容だけにする
+  return parts.length > 0 ? `${parts.join(' / ')} で選びました` : null;
 });
 
 /**
@@ -53,7 +55,7 @@ const randomSelectionMessage = computed(() => {
  */
 const showRandomSelectionMessage = () => {
   if (randomSelectionMessage.value) {
-    showMessage(randomSelectionMessage.value);
+    showMessage(randomSelectionMessage.value, 'omakase');
   }
 };
 
@@ -101,6 +103,7 @@ const handleRegenerate = async () => {
     <BaseToast
       v-if="toastMessage"
       :message="toastMessage"
+      :variant="toastVariant"
       @close="hideMessage"
     />
 

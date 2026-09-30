@@ -52,8 +52,23 @@ const distanceScaleLabels = computed(() => [
 <template>
   <div>
     <div class="input-section">
-      <h3>ジャンル</h3>
-      <div class="button-grid">
+      <div class="section-header">
+        <h3>ジャンル</h3>
+        <button
+          class="random-icon-btn"
+          :class="{ selected: isGenreRandom }"
+          type="button"
+          :aria-pressed="isGenreRandom"
+          aria-label="ジャンルをおまかせで選ぶ"
+          @click="$emit('toggleGenreRandom')"
+        >
+          ？
+        </button>
+      </div>
+      <div
+        v-if="!isGenreRandom"
+        class="button-grid"
+      >
         <button
           v-for="option in genreOptions"
           :key="option.value"
@@ -66,17 +81,13 @@ const distanceScaleLabels = computed(() => [
           <span class="btn-icon">{{ option.icon }}</span>
           <span>{{ option.label }}</span>
         </button>
-        <button
-          class="select-btn random-btn"
-          :class="{ selected: isGenreRandom }"
-          type="button"
-          :aria-pressed="isGenreRandom"
-          aria-label="ジャンルをおまかせで選ぶ"
-          @click="$emit('toggleGenreRandom')"
-        >
-          <span class="btn-icon">？</span>
-        </button>
       </div>
+      <p
+        v-else
+        class="hint random-message"
+      >
+        おまかせでジャンルを選択します
+      </p>
     </div>
 
     <div class="input-section">
@@ -95,22 +106,20 @@ const distanceScaleLabels = computed(() => [
           ？
         </button>
       </div>
-      <BaseSlider
-        v-if="!isDistanceRandom"
-        :model-value="distanceKm"
-        :min-value="distanceRange.minKm"
-        :max-value="distanceRange.maxKm"
-        :scale-labels="distanceScaleLabels"
-        unit="km"
-        labelled-by="distance-label"
-        @update:model-value="$emit('selectDistance', $event)"
-      />
-      <p
-        v-if="!isDistanceRandom"
-        class="hint"
-      >
-        {{ distanceRange.minLabel }} 〜 {{ distanceRange.maxLabel }} の範囲で選べます
-      </p>
+      <template v-if="!isDistanceRandom">
+        <BaseSlider
+          :model-value="distanceKm"
+          :min-value="distanceRange.minKm"
+          :max-value="distanceRange.maxKm"
+          :scale-labels="distanceScaleLabels"
+          unit="km"
+          labelled-by="distance-label"
+          @update:model-value="$emit('selectDistance', $event)"
+        />
+        <p class="hint">
+          {{ distanceRange.minLabel }} 〜 {{ distanceRange.maxLabel }} の範囲で選べます
+        </p>
+      </template>
       <p
         v-else
         class="hint random-message"
@@ -126,7 +135,12 @@ const distanceScaleLabels = computed(() => [
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 12px;
+}
+
+/* 見出しの下余白は .section-header が持つため、横並びの中央揃えを崩さないよう消す */
+.section-header h3 {
+  margin-bottom: 0;
 }
 
 .random-icon-btn {
