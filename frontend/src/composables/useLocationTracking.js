@@ -18,8 +18,15 @@ const MAXIMUM_AGE_MS = 0;
  * 採用する測位精度の上限（メートル）。
  * これより精度が悪い測位は座標が大きく飛ぶため、現在地を更新せず前回の位置を保つ。
  * 屋外のGPSは5〜10m程度、建物内や高層ビル街では数十mまで悪化する。
+ * ブラウザの座標上書き（開発者ツール）も大きめの精度を返すため、余裕を持たせている。
  */
-const MAX_ACCEPTABLE_ACCURACY_M = 50;
+const MAX_ACCEPTABLE_ACCURACY_M = 100;
+
+/**
+ * 精度が悪い測位しか届かない場合でも、この時間を超えたら受け入れる（ミリ秒）。
+ * 精度の良い測位が続かない環境で、現在地が固まったままになるのを防ぐ。
+ */
+const MAX_POSITION_AGE_MS = 10000;
 
 /**
  * @description Geolocation API のエラーコードからユーザー向けメッセージを生成する
@@ -63,6 +70,9 @@ export const useLocationTracking = () => {
   /** watchPosition の ID */
   let watchId = null;
 
+  /** 直前に現在地として採用した時刻。採用が途切れていないかの判定に使う */
+  let lastAcceptedAt = null;
+
   /**
    * @description 位置情報の更新時に呼ばれるコールバック
    * @param {GeolocationPosition} position 位置情報
@@ -70,6 +80,10 @@ export const useLocationTracking = () => {
    */
   const handlePositionUpdate = (position) => {
     const positionAccuracy = position.coords.accuracy;
+
+    // 測位そのものは届いているため、精度を採用するかに関わらずエラー表示を解除する。
+    // ここを採用判定の後ろに置くと、精度が悪い測位が続く間エラーが消えなくなる
+    trackingError.value = null;
 
     // accuracyがnullの間は現在地が既定値のままなので、初回だけは精度を問わず採用する。
     // ここで弾くと、精度が悪い場所では案内が始まらなくなる
@@ -79,7 +93,11 @@ export const useLocationTracking = () => {
       Number.isFinite(positionAccuracy) &&
       positionAccuracy <= MAX_ACCEPTABLE_ACCURACY_M;
 
-    if (!isFirstFix && !isReliableAccuracy) {
+    // 精度が悪い測位しか来ない環境で、現在地が固まったままにならないようにする
+    const isPositionStale =
+      lastAcceptedAt !== null && Date.now() - lastAcceptedAt >= MAX_POSITION_AGE_MS;
+
+    if (!isFirstFix && !isReliableAccuracy && !isPositionStale) {
       return;
     }
 
@@ -88,7 +106,7 @@ export const useLocationTracking = () => {
       lat: position.coords.latitude
     };
     accuracy.value = positionAccuracy;
-    trackingError.value = null;
+    lastAcceptedAt = Date.now();
   };
 
   /**
@@ -114,6 +132,7 @@ export const useLocationTracking = () => {
 
     isTracking.value = true;
     trackingError.value = null;
+    lastAcceptedAt = null;
 
     watchId = navigator.geolocation.watchPosition(
       handlePositionUpdate,
