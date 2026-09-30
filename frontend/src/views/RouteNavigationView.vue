@@ -33,10 +33,14 @@ const {
 /** 案内対象のスポット。巡る順に並んでいる */
 const spots = computed(() => routeStore.currentRoute?.spots ?? []);
 
+/** 経路の形。次の目的地までの距離を道に沿って測るために渡す */
+const geometry = computed(() => routeStore.currentRoute?.geometry ?? null);
+
 const { nextSpot, distanceToNextM, isCompleted } = useRouteProgress({
   spots,
   currentLocation,
-  accuracy
+  accuracy,
+  geometry
 });
 
 // 追跡の停止はuseLocationTracking側で画面の破棄時に行われる
@@ -108,3 +112,14 @@ const handleConfirmEnd = () => {
     </template>
   </DefaultLayout>
 </template>
+
+<style scoped>
+/*
+ * この画面は地図が全画面に広がるため、地図右下の帰属表示（iマーク）と
+ * 終了ボタンが重なる。共通の位置（global.css の bottom: 20px）は
+ * 他の画面でも使うため変えず、この画面だけ上へ寄せる。
+ */
+.primary-btn.full-width {
+  bottom: 44px;
+}
+</style>
