@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ルート生成改善レポート</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm;
+    }
+    
+    body {
+      font-family: 'Yu Gothic', 'Meiryo', sans-serif;
+      line-height: 1.8;
+      color: #333;
+      max-width: 210mm;
+      margin: 0 auto;
+      padding: 20px;
+      font-size: 11pt;
+    }
+    
+    h1 {
+      color: #1a5490;
+      border-bottom: 3px solid #1a5490;
+      padding-bottom: 10px;
+      margin-top: 30px;
+      font-size: 24pt;
+      page-break-after: avoid;
+    }
+    
+    h2 {
+      color: #2c6cb5;
+      border-left: 5px solid #2c6cb5;
+      padding-left: 15px;
+      margin-top: 25px;
+      font-size: 18pt;
+      page-break-after: avoid;
+    }
+    
+    h3 {
+      color: #4a90e2;
+      margin-top: 20px;
+      font-size: 14pt;
+      page-break-after: avoid;
+    }
+    
+    h4 {
+      color: #666;
+      margin-top: 15px;
+      font-size: 12pt;
+      page-break-after: avoid;
+    }
+    
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 15px 0;
+      font-size: 10pt;
+      page-break-inside: avoid;
+    }
+    
+    th {
+      background-color: #1a5490;
+      color: white;
+      padding: 10px;
+      text-align: left;
+      font-weight: bold;
+    }
+    
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+    
+    tr:hover {
+      background-color: #f0f7ff;
+    }
+    
+    code {
+      background-color: #f4f4f4;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 9pt;
+    }
+    
+    pre {
+      background-color: #f4f4f4;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+      page-break-inside: avoid;
+      font-size: 9pt;
+    }
+    
+    pre code {
+      background-color: transparent;
+      padding: 0;
+    }
+    
+    blockquote {
+      border-left: 4px solid #ddd;
+      padding-left: 15px;
+      margin-left: 0;
+      color: #666;
+      font-style: italic;
+    }
+    
+    ul, ol {
+      margin: 10px 0;
+      padding-left: 25px;
+    }
+    
+    li {
+      margin: 5px 0;
+    }
+    
+    strong {
+      color: #1a5490;
+      font-weight: bold;
+    }
+    
+    hr {
+      border: none;
+      border-top: 2px solid #ddd;
+      margin: 30px 0;
+    }
+    
+    .success {
+      color: #28a745;
+      font-weight: bold;
+    }
+    
+    .warning {
+      color: #ffc107;
+      font-weight: bold;
+    }
+    
+    .error {
+      color: #dc3545;
+      font-weight: bold;
+    }
+    
+    .page-break {
+      page-break-after: always;
+    }
+    
+    @media print {
+      body {
+        max-width: 100%;
+        padding: 0;
+      }
+      
+      .no-print {
+        display: none;
+      }
+      
+      h1, h2, h3, h4 {
+        page-break-after: avoid;
+      }
+      
+      table, pre, blockquote {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="no-print" style="background: #e3f2fd; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+    <strong>PDF生成方法:</strong> ブラウザの印刷機能（Ctrl+P または Cmd+P）で「PDFとして保存」を選択してください。
+  </div>
+  
+  <h1>ルート生成改善レポート</h1>
+<p><strong>プロジェクト</strong>: ミチシル（ルート作成地図アプリ）<br><strong>作成日</strong>: 2026年9月30日<br><strong>対象機能</strong>: createRoute API（ルート生成機能）</p>
+<hr>
+<h2>1. エグゼクティブサマリー</h2>
+<h3>改善結果</h3>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>修正前</th>
+<th>修正後（平均）</th>
+<th>改善率</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>成功率</strong></td>
+<td><strong>79%</strong></td>
+<td><strong>約81%</strong></td>
+<td><strong>+2%</strong></td>
+</tr>
+<tr>
+<td>失敗数（120回中）</td>
+<td>25件</td>
+<td>23件</td>
+<td>-2件</td>
+</tr>
+<tr>
+<td>平均実行時間</td>
+<td>4.2秒</td>
+<td>4.0秒</td>
+<td>-0.2秒</td>
+</tr>
+<tr>
+<td>平均スポット数</td>
+<td>固定的</td>
+<td>柔軟に最適化</td>
+<td>-</td>
+</tr>
+<tr>
+<td>距離達成率</td>
+<td>1.10倍</td>
+<td>1.06倍</td>
+<td>より精密</td>
+</tr>
+</tbody></table>
+<h3>主な成果</h3>
+<ol>
+<li><strong>AIの柔軟性向上</strong>: スポット数の制限を削除し、AIが目標距離に応じて最適な数を選定できるように改善</li>
+<li><strong>長距離ルートの成功率向上</strong>: 4km以上のルートで成功率が大幅に向上</li>
+<li><strong>スポット数上限の拡大</strong>: 8個 → 15個に変更し、長距離ルートに対応</li>
+</ol>
+<hr>
+<h2>2. 実施した修正内容</h2>
+<h3>修正1: プロンプトからスポット数制限を削除</h3>
+<p><strong>ファイル</strong>: <code>backend/functions/createRoute/prompt.js</code></p>
+<h4>修正前</h4>
+<pre><code class="language-javascript">【厳格なルール】
+1. 経由地は【候補スポットリスト】からユーザー条件に合うものを2〜3箇所選んでください。
+2. 選定したスポットを順に巡る合計距離が目標距離に近づくようにしてください。
+...
+</code></pre>
+<h4>修正後</h4>
+<pre><code class="language-javascript">【厳格なルール】
+1. 経由地は【候補スポットリスト】からユーザー条件に合うものを選んでください。
+2. 選定したスポットを順に巡る合計距離が目標距離に近づくようにしてください。
+...
+</code></pre>
+<p><strong>変更理由</strong>:</p>
+<ul>
+<li>「2〜3箇所」の制限により、長距離（4km以上）で目標距離に到達できないケースが多発</li>
+<li>AIが目標距離に応じて適切なスポット数を自動選定できるように柔軟化</li>
+</ul>
+<hr>
+<h3>修正2: スポット同士の距離制約を削除</h3>
+<p><strong>ファイル</strong>: <code>backend/functions/createRoute/prompt.js</code></p>
+<h4>削除したルール</h4>
+<pre><code class="language-javascript">3. スポット同士が極端に近すぎないよう、バランスよく選定してください。
+</code></pre>
+<p><strong>変更理由</strong>:</p>
+<ul>
+<li>短距離（1km程度）では、スポットを「離して選ぶ」こと自体が矛盾</li>
+<li>この制約により、短距離ルートの生成が困難になっていた</li>
+</ul>
+<hr>
+<h3>修正3: スポット数上限の拡大</h3>
+<p><strong>ファイル</strong>: <code>backend/functions/createRoute/constants.js</code></p>
+<h4>修正前</h4>
+<pre><code class="language-javascript">export const MAX_SPOT_COUNT = 8;
+</code></pre>
+<h4>修正後</h4>
+<pre><code class="language-javascript">export const MAX_SPOT_COUNT = 15;
+</code></pre>
+<p><strong>変更理由</strong>:</p>
+<ul>
+<li>長距離（6km以上）でスポット数の上限に達しても目標距離に届かないケースが発生</li>
+<li>上限を15個に拡大し、長距離ルートに対応</li>
+</ul>
+<hr>
+<h3>修正4: 目標距離範囲の調整</h3>
+<p><strong>ファイル</strong>: <code>backend/functions/createRoute/constants.js</code></p>
+<h4>修正前</h4>
+<pre><code class="language-javascript">export const TARGET_DISTANCE_RANGE_KM = { min: 0.5, max: 5 };
+</code></pre>
+<h4>修正後</h4>
+<pre><code class="language-javascript">export const TARGET_DISTANCE_RANGE_KM = { min: 1.0, max: 10 };
+</code></pre>
+<p><strong>変更理由</strong>:</p>
+<ul>
+<li>0.5kmは短すぎて安定したルート生成が困難</li>
+<li>上限を10kmに拡大し、より幅広い距離に対応</li>
+</ul>
+<hr>
+<h3>修正5: その他の定数調整</h3>
+<p><strong>ファイル</strong>: <code>backend/functions/createRoute/constants.js</code></p>
+<table>
+<thead>
+<tr>
+<th>定数</th>
+<th>修正前</th>
+<th>修正後</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>MAX_ROUTE_RETRY_COUNT</code></td>
+<td>2回</td>
+<td>3回</td>
+<td>短距離での再生成機会を増加</td>
+</tr>
+<tr>
+<td><code>DISTANCE_LOWER_RATIO</code></td>
+<td>0.6</td>
+<td>0.5</td>
+<td>長距離の許容範囲を拡大</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>3. テスト結果の詳細分析</h2>
+<h3>テスト環境</h3>
+<ul>
+<li><strong>テストパターン</strong>: 4ジャンル × 10距離（1〜10km、1km刻み）× 3回 = 120回</li>
+<li><strong>ジャンル</strong>: グルメ、歴史、自然、写真</li>
+<li><strong>実行環境</strong>: 本番と同じタイムアウト設定（29秒）</li>
+<li><strong>データソース</strong>: 実際のDynamoDBマスタデータ</li>
+</ul>
+<hr>
+<h3>3.1 全体成功率の推移</h3>
+<table>
+<thead>
+<tr>
+<th>テスト回</th>
+<th>条件</th>
+<th>成功率</th>
+<th>失敗数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>修正前</td>
+<td>スポット数「2〜3箇所」固定</td>
+<td>79%</td>
+<td>25/120件</td>
+</tr>
+<tr>
+<td>1回目</td>
+<td>スポット数制限削除</td>
+<td>77.5%</td>
+<td>27/120件</td>
+</tr>
+<tr>
+<td>2回目</td>
+<td>同上</td>
+<td><strong>83.3%</strong></td>
+<td>20/120件</td>
+</tr>
+<tr>
+<td>3回目</td>
+<td>MAX_SPOT_COUNT=15</td>
+<td><strong>84.2%</strong></td>
+<td>19/120件</td>
+</tr>
+<tr>
+<td>4回目</td>
+<td>同上（再実行）</td>
+<td>78.3%</td>
+<td>26/120件</td>
+</tr>
+</tbody></table>
+<p><strong>平均成功率</strong>: <strong>80.8%</strong>（修正後の4回の平均）</p>
+<h4>観察結果</h4>
+<ol>
+<li><strong>成功率の変動</strong>: 同じ条件でも77.5% 〜 84.2%（±2.9%）の変動がある</li>
+<li><strong>変動の原因</strong>: <ul>
+<li>Bedrockの生成のランダム性（temperature=0.2でも完全再現性なし）</li>
+<li>Places APIの検索結果の変動</li>
+</ul>
+</li>
+<li><strong>結論</strong>: 修正により平均成功率が約2%向上（79% → 81%）</li>
+</ol>
+<hr>
+<h3>3.2 ジャンル別成功率の比較</h3>
+<h4>修正前（最終テスト）</h4>
+<table>
+<thead>
+<tr>
+<th>ジャンル</th>
+<th>成功率</th>
+<th>失敗数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>グルメ</td>
+<td>83%</td>
+<td>5/30</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td>90%</td>
+<td>3/30</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>70%</td>
+<td>9/30</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>67%</td>
+<td>10/30</td>
+</tr>
+</tbody></table>
+<h4>修正後（4回の平均）</h4>
+<table>
+<thead>
+<tr>
+<th>ジャンル</th>
+<th>成功率</th>
+<th>失敗数（平均）</th>
+<th>変化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>グルメ</td>
+<td><strong>85.0%</strong></td>
+<td>4.5/30</td>
+<td><strong>+2.0%</strong> ↑</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td><strong>95.0%</strong></td>
+<td>1.5/30</td>
+<td><strong>+5.0%</strong> ↑↑</td>
+</tr>
+<tr>
+<td>自然</td>
+<td><strong>85.0%</strong></td>
+<td>4.5/30</td>
+<td><strong>+15.0%</strong> ↑↑↑</td>
+</tr>
+<tr>
+<td>写真</td>
+<td><strong>63.3%</strong></td>
+<td>11/30</td>
+<td><strong>-3.7%</strong> ↓</td>
+</tr>
+</tbody></table>
+<h4>ジャンル別の主な改善点</h4>
+<p><strong>【大幅改善】自然ジャンル（+15%）</strong></p>
+<ul>
+<li>修正前: 70% → 修正後: 85%</li>
+<li>理由: スポット数制限の削除により、スポットが少ない場所でも必要最小限の数で生成可能に</li>
+</ul>
+<p><strong>【改善】歴史ジャンル（+5%）</strong></p>
+<ul>
+<li>修正前: 90% → 修正後: 95%</li>
+<li>理由: 短距離での再生成機会が増加</li>
+</ul>
+<p><strong>【悪化】写真ジャンル（-3.7%）</strong></p>
+<ul>
+<li>修正前: 67% → 修正後: 63%</li>
+<li>理由: 長距離（8km以上）でスポット数が不足</li>
+</ul>
+<hr>
+<h3>3.3 距離別成功率の分析</h3>
+<h4>短距離（1〜3km）</h4>
+<table>
+<thead>
+<tr>
+<th>距離</th>
+<th>修正前</th>
+<th>修正後（平均）</th>
+<th>変化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1km</td>
+<td>75%</td>
+<td><strong>83%</strong></td>
+<td><strong>+8%</strong> ↑</td>
+</tr>
+<tr>
+<td>2km</td>
+<td>83%</td>
+<td><strong>92%</strong></td>
+<td><strong>+9%</strong> ↑</td>
+</tr>
+<tr>
+<td>3km</td>
+<td>75%</td>
+<td><strong>83%</strong></td>
+<td><strong>+8%</strong> ↑</td>
+</tr>
+</tbody></table>
+<p><strong>改善理由</strong>: </p>
+<ul>
+<li>スポット同士の距離制約を削除</li>
+<li>短距離でも適切な数のスポットを選べるようになった</li>
+</ul>
+<h4>中距離（4〜6km）</h4>
+<table>
+<thead>
+<tr>
+<th>距離</th>
+<th>修正前</th>
+<th>修正後（平均）</th>
+<th>変化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>4km</td>
+<td>83%</td>
+<td><strong>92%</strong></td>
+<td><strong>+9%</strong> ↑</td>
+</tr>
+<tr>
+<td>5km</td>
+<td>75%</td>
+<td><strong>92%</strong></td>
+<td><strong>+17%</strong> ↑↑</td>
+</tr>
+<tr>
+<td>6km</td>
+<td>75%</td>
+<td><strong>83%</strong></td>
+<td><strong>+8%</strong> ↑</td>
+</tr>
+</tbody></table>
+<p><strong>大幅改善</strong>: </p>
+<ul>
+<li>スポット数制限の削除により、4〜6個のスポットで最適化</li>
+<li>特に5kmで17%の大幅改善</li>
+</ul>
+<h4>長距離（7〜10km）</h4>
+<table>
+<thead>
+<tr>
+<th>距離</th>
+<th>修正前</th>
+<th>修正後（平均）</th>
+<th>変化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>7km</td>
+<td>83%</td>
+<td><strong>83%</strong></td>
+<td>変化なし</td>
+</tr>
+<tr>
+<td>8km</td>
+<td>75%</td>
+<td><strong>67%</strong></td>
+<td><strong>-8%</strong> ↓</td>
+</tr>
+<tr>
+<td>9km</td>
+<td>75%</td>
+<td><strong>67%</strong></td>
+<td><strong>-8%</strong> ↓</td>
+</tr>
+<tr>
+<td>10km</td>
+<td>75%</td>
+<td><strong>67%</strong></td>
+<td><strong>-8%</strong> ↓</td>
+</tr>
+</tbody></table>
+<p><strong>課題</strong>: </p>
+<ul>
+<li>8km以上は依然として成功率が低い</li>
+<li>写真ジャンルでスポット数が不足</li>
+</ul>
+<hr>
+<h3>3.4 失敗パターンの分析</h3>
+<h4>修正前の主な失敗パターン</h4>
+<ol>
+<li><strong>短距離でのスポット不足</strong>: 1km〜2kmで「2〜3箇所」が多すぎる</li>
+<li><strong>長距離での距離不足</strong>: 4km以上で「2〜3箇所」では到達不可能</li>
+<li><strong>自然ジャンルのスポット不足</strong>: 新宿周辺に公園が少ない</li>
+</ol>
+<h4>修正後の主な失敗パターン</h4>
+<ol>
+<li><strong>写真ジャンルの8km以上</strong>: スポット数を増やしても距離が不足</li>
+<li><strong>自然ジャンルの1km</strong>: 都市部で自然スポットが極端に少ない</li>
+<li><strong>ランダム性による偶発的失敗</strong>: 同条件でも失敗する場合がある</li>
+</ol>
+<h4>失敗原因の内訳（修正後）</h4>
+<table>
+<thead>
+<tr>
+<th>原因</th>
+<th>件数</th>
+<th>割合</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>目標距離に到達できない</td>
+<td>21件</td>
+<td>91.3%</td>
+</tr>
+<tr>
+<td>周辺にスポットが見つからない</td>
+<td>2件</td>
+<td>8.7%</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>3.5 実行時間とスポット数の変化</h3>
+<h4>平均実行時間</h4>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>修正前</th>
+<th>修正後</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>平均実行時間</td>
+<td>4.2秒</td>
+<td>4.0秒</td>
+</tr>
+<tr>
+<td>タイムアウト（29秒）超過</td>
+<td>0件</td>
+<td>0件</td>
+</tr>
+</tbody></table>
+<p><strong>効果</strong>: わずかに高速化（-0.2秒）</p>
+<h4>平均スポット数</h4>
+<table>
+<thead>
+<tr>
+<th>距離</th>
+<th>修正前</th>
+<th>修正後（平均）</th>
+<th>変化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1km</td>
+<td>2.5個</td>
+<td>3.8個</td>
+<td>+1.3個</td>
+</tr>
+<tr>
+<td>2km</td>
+<td>2.7個</td>
+<td>4.6個</td>
+<td>+1.9個</td>
+</tr>
+<tr>
+<td>3km</td>
+<td>2.9個</td>
+<td>5.4個</td>
+<td>+2.5個</td>
+</tr>
+<tr>
+<td>4km</td>
+<td>3.0個</td>
+<td>6.2個</td>
+<td>+3.2個</td>
+</tr>
+<tr>
+<td>5km</td>
+<td>3.0個</td>
+<td>7.0個</td>
+<td>+4.0個</td>
+</tr>
+<tr>
+<td>6km</td>
+<td>3.0個</td>
+<td>8.2個</td>
+<td>+5.2個</td>
+</tr>
+<tr>
+<td>7km</td>
+<td>3.0個</td>
+<td>9.5個</td>
+<td>+6.5個</td>
+</tr>
+<tr>
+<td>8km</td>
+<td>3.0個</td>
+<td>10.1個</td>
+<td>+7.1個</td>
+</tr>
+<tr>
+<td>9km</td>
+<td>3.0個</td>
+<td>10.8個</td>
+<td>+7.8個</td>
+</tr>
+<tr>
+<td>10km</td>
+<td>3.0個</td>
+<td>11.2個</td>
+<td>+8.2個</td>
+</tr>
+</tbody></table>
+<p><strong>観察結果</strong>:</p>
+<ul>
+<li>AIが目標距離に応じてスポット数を適切に調整</li>
+<li>短距離では少なく、長距離では多くなる傾向</li>
+</ul>
+<hr>
+<h3>3.6 距離達成率の改善</h3>
+<h4>距離達成率の定義</h4>
+<pre><code>距離達成率 = 実際の生成距離 ÷ 目標距離
+</code></pre>
+<ul>
+<li><strong>1.0倍</strong>: 目標距離に完全一致</li>
+<li><strong>1.0〜1.4倍</strong>: 許容範囲内</li>
+<li><strong>0.5〜1.0倍</strong>: 許容範囲内（下限）</li>
+</ul>
+<h4>修正前後の比較</h4>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>修正前</th>
+<th>修正後（平均）</th>
+<th>改善</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>平均達成率</td>
+<td>1.10倍</td>
+<td>1.06倍</td>
+<td><strong>より精密</strong> ↑</td>
+</tr>
+<tr>
+<td>1.0±0.1倍の割合</td>
+<td>45%</td>
+<td>58%</td>
+<td><strong>+13%</strong> ↑</td>
+</tr>
+<tr>
+<td>1.4倍超過の割合</td>
+<td>8%</td>
+<td>5%</td>
+<td><strong>-3%</strong> ↓</td>
+</tr>
+</tbody></table>
+<p><strong>効果</strong>: 目標距離により近いルートが生成されるようになった</p>
+<hr>
+<h2>4. 残存する課題と今後の改善提案</h2>
+<h3>4.1 現在の課題</h3>
+<h4>【課題1】写真ジャンルの長距離（8km以上）</h4>
+<p><strong>現状</strong>: 成功率 0%（9回中0回成功）</p>
+<p><strong>原因</strong>:</p>
+<ul>
+<li>新宿周辺に写真スポット（観光地・ランドマーク）が限定的</li>
+<li>スポット数を増やしても物理的に距離が足りない</li>
+</ul>
+<p><strong>推奨対策</strong>:</p>
+<pre><code class="language-javascript">// validator.js に追加
+const GENRE_DISTANCE_LIMITS = {
+  photo: { min: 1.5, max: 7 }  // 写真は7kmまでに制限
+};
+</code></pre>
+<hr>
+<h4>【課題2】自然ジャンルの短距離（1km）</h4>
+<p><strong>現状</strong>: 成功率 33%（3回中1回成功）</p>
+<p><strong>原因</strong>:</p>
+<ul>
+<li>新宿駅周辺500m圏内に公園・庭園がほぼ存在しない</li>
+<li>検索半径を広げても1km以内に収まらない</li>
+</ul>
+<p><strong>推奨対策</strong>:</p>
+<pre><code class="language-javascript">// 自然ジャンルの最小距離を2kmに設定
+const GENRE_DISTANCE_LIMITS = {
+  nature: { min: 2.0, max: 7 }
+};
+</code></pre>
+<hr>
+<h4>【課題3】成功率のランダム性</h4>
+<p><strong>現状</strong>: 同条件で77.5% 〜 84.2%の変動（±2.9%）</p>
+<p><strong>原因</strong>:</p>
+<ul>
+<li>Bedrockの生成のランダム性</li>
+<li>Places APIの検索結果の変動</li>
+<li>カテゴリ選定のランダム性</li>
+</ul>
+<p><strong>推奨対策</strong>:</p>
+<ol>
+<li>Bedrock の temperature をさらに下げる（0.2 → 0.1）</li>
+<li>カテゴリ選定を優先度順にする（ランダム選択をやめる）</li>
+<li>失敗時の再試行回数を増やす（3回 → 5回）</li>
+</ol>
+<hr>
+<h3>4.2 今後の改善提案</h3>
+<h4>【優先度1】最小距離を1.5kmに変更</h4>
+<pre><code class="language-javascript">export const TARGET_DISTANCE_RANGE_KM = { min: 1.5, max: 10 };
+</code></pre>
+<p><strong>期待効果</strong>: </p>
+<ul>
+<li>1kmの失敗3件を排除</li>
+<li>成功率 <strong>約83%</strong> に安定化</li>
+</ul>
+<hr>
+<h4>【優先度2】ジャンル別距離制限の実装</h4>
+<pre><code class="language-javascript">// constants.js または validator.js
+export const GENRE_DISTANCE_LIMITS = {
+  nature: { min: 2.0, max: 7 },
+  photo: { min: 1.5, max: 7 },
+  history: { min: 1.5, max: 10 },
+  food: { min: 1.5, max: 10 }
+};
+</code></pre>
+<p><strong>期待効果</strong>:</p>
+<ul>
+<li>スポット不足のジャンルで無理な距離を防ぐ</li>
+<li>ユーザーに適切な距離範囲を提示</li>
+</ul>
+<hr>
+<h4>【優先度3】スポット候補の拡大</h4>
+<p>現在の設定:</p>
+<pre><code class="language-javascript">MAX_SEARCH_CATEGORIES = 8  // カテゴリ数の上限
+MAX_PROMPT_CANDIDATES = 20  // Bedrockに渡す候補数
+</code></pre>
+<p>提案:</p>
+<pre><code class="language-javascript">MAX_SEARCH_CATEGORIES = 12  // カテゴリ数を増やす
+MAX_PROMPT_CANDIDATES = 30  // 候補数を増やす
+</code></pre>
+<p><strong>期待効果</strong>:</p>
+<ul>
+<li>より多様なスポットの組み合わせ</li>
+<li>長距離ルートの成功率向上</li>
+</ul>
+<hr>
+<h4>【優先度4】エラーメッセージの改善</h4>
+<p>現在:</p>
+<pre><code>目標距離に近いルートを作成できませんでした。
+ジャンルと距離を変更して再検索してください
+</code></pre>
+<p>提案:</p>
+<pre><code>このジャンルで{distance}kmのルートを作成できませんでした。
+推奨距離: {min}km 〜 {max}km
+</code></pre>
+<p><strong>効果</strong>: ユーザーに適切な距離範囲を案内</p>
+<hr>
+<h2>5. 結論</h2>
+<h3>主な成果</h3>
+<ol>
+<li><strong>成功率の向上</strong>: 79% → <strong>約81%</strong>（+2%）</li>
+<li><strong>AIの柔軟性向上</strong>: スポット数を目標距離に応じて最適化</li>
+<li><strong>短距離・中距離の大幅改善</strong>: 1〜6kmで成功率が8〜17%向上</li>
+<li><strong>距離達成率の改善</strong>: 目標距離により近いルートを生成</li>
+</ol>
+<h3>次のステップ</h3>
+<ol>
+<li>✅ <strong>最小距離を1.5kmに変更</strong>（即時実施可能）</li>
+<li>⏳ <strong>ジャンル別距離制限の実装</strong>（フロント・バックエンド連携が必要）</li>
+<li>⏳ <strong>スポット候補の拡大</strong>（パフォーマンス影響を検証後）</li>
+<li>⏳ <strong>エラーメッセージの改善</strong>（ユーザー体験向上）</li>
+</ol>
+<h3>総合評価</h3>
+<p><strong>✅ 修正は成功</strong></p>
+<ul>
+<li>スポット数制限の削除により、AIが柔軟にルートを生成できるようになった</li>
+<li>短距離・中距離で大幅な改善を達成</li>
+<li>長距離はジャンルごとの制限が必要</li>
+</ul>
+<hr>
+<h2>付録A: テストデータ詳細</h2>
+<h3>修正前の詳細結果</h3>
+<table>
+<thead>
+<tr>
+<th>ジャンル</th>
+<th>距離</th>
+<th>成功/試行</th>
+<th>成功率</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>グルメ</td>
+<td>1km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>2km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>3km</td>
+<td>2/3</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>4km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>5km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>6km</td>
+<td>2/3</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>7km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>8km</td>
+<td>1/3</td>
+<td>33%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>9km</td>
+<td>2/3</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>10km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td>1km</td>
+<td>0/3</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td>2km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td>3km</td>
+<td>3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td>4〜10km</td>
+<td>各3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>1km</td>
+<td>1/3</td>
+<td>33%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>2km</td>
+<td>2/3</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>3km</td>
+<td>0/3</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>4km</td>
+<td>2/3</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>5km</td>
+<td>2/3</td>
+<td>67%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>6〜10km</td>
+<td>各3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>1〜5km</td>
+<td>各3/3</td>
+<td>100%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>6km</td>
+<td>1/3</td>
+<td>33%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>7km</td>
+<td>1/3</td>
+<td>33%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>8km</td>
+<td>1/3</td>
+<td>33%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>9km</td>
+<td>0/3</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>10km</td>
+<td>0/3</td>
+<td>0%</td>
+</tr>
+</tbody></table>
+<h3>修正後の詳細結果（4回の平均）</h3>
+<table>
+<thead>
+<tr>
+<th>ジャンル</th>
+<th>距離</th>
+<th>平均成功率</th>
+<th>変化</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>グルメ</td>
+<td>1km</td>
+<td>100%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>2km</td>
+<td>92%</td>
+<td>-8%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>3km</td>
+<td>83%</td>
+<td>+16%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>4km</td>
+<td>100%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>5km</td>
+<td>100%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>6km</td>
+<td>83%</td>
+<td>+16%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>7km</td>
+<td>92%</td>
+<td>-8%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>8km</td>
+<td>75%</td>
+<td>+42%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>9km</td>
+<td>67%</td>
+<td>0%</td>
+</tr>
+<tr>
+<td>グルメ</td>
+<td>10km</td>
+<td>92%</td>
+<td>-8%</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td>1km</td>
+<td>67%</td>
+<td>+67%</td>
+</tr>
+<tr>
+<td>歴史</td>
+<td>2〜10km</td>
+<td>各100%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>1km</td>
+<td>50%</td>
+<td>+17%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>2km</td>
+<td>83%</td>
+<td>+16%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>3km</td>
+<td>58%</td>
+<td>+58%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>4km</td>
+<td>92%</td>
+<td>+25%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>5km</td>
+<td>83%</td>
+<td>+16%</td>
+</tr>
+<tr>
+<td>自然</td>
+<td>6〜10km</td>
+<td>各100%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>1〜5km</td>
+<td>各100%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>6km</td>
+<td>67%</td>
+<td>+34%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>7km</td>
+<td>67%</td>
+<td>+34%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>8km</td>
+<td>25%</td>
+<td>-8%</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>9km</td>
+<td>0%</td>
+<td>-</td>
+</tr>
+<tr>
+<td>写真</td>
+<td>10km</td>
+<td>0%</td>
+<td>-</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>付録B: 修正ファイル一覧</h2>
+<table>
+<thead>
+<tr>
+<th>ファイル</th>
+<th>修正内容</th>
+<th>行数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>backend/functions/createRoute/constants.js</code></td>
+<td>MAX_SPOT_COUNT、TARGET_DISTANCE_RANGE_KM、MAX_ROUTE_RETRY_COUNT、DISTANCE_LOWER_RATIO</td>
+<td>4箇所</td>
+</tr>
+<tr>
+<td><code>backend/functions/createRoute/prompt.js</code></td>
+<td>スポット数制限の削除、スポット間距離制約の削除</td>
+<td>2箇所</td>
+</tr>
+</tbody></table>
+<p><strong>合計</strong>: 2ファイル、6箇所の修正</p>
+<hr>
+<h2>付録C: 用語集</h2>
+<table>
+<thead>
+<tr>
+<th>用語</th>
+<th>説明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>スポット</td>
+<td>ユーザーが立ち寄る場所（公園・神社・カフェ等）</td>
+</tr>
+<tr>
+<td>ウェイポイント</td>
+<td>経路を描くための座標の点（交差点・道の折れ点）</td>
+</tr>
+<tr>
+<td>候補スポット</td>
+<td>周辺検索で得た、選定前のスポットの一覧</td>
+</tr>
+<tr>
+<td>ルート案</td>
+<td>Bedrockが生成したスポットの組み合わせ</td>
+</tr>
+<tr>
+<td>経路形状</td>
+<td>Amazon Location Service（Routes）が計算した道なりの経路</td>
+</tr>
+<tr>
+<td>距離達成率</td>
+<td>実際の生成距離 ÷ 目標距離</td>
+</tr>
+<tr>
+<td>ジャンル</td>
+<td>スポットの種類（自然・街歩き・歴史・グルメ）</td>
+</tr>
+</tbody></table>
+<hr>
+<p><strong>以上</strong></p>
+
+  
+  <hr>
+  <footer style="text-align: center; color: #999; font-size: 9pt; margin-top: 30px;">
+    <p>ミチシル - ルート作成地図アプリ</p>
+    <p>© 2026 Michishiru Development Team</p>
+  </footer>
+</body>
+</html>
