@@ -24,6 +24,12 @@ authStore.clearErrorMessage();
 const hasRegistered = computed(() => route.query.registered === '1');
 
 /**
+ * パスワードを再設定して戻ってきたかどうか。
+ * hasRegistered と同じ理由で、状態は持ち越さずクエリで判断する。
+ */
+const hasResetPassword = computed(() => route.query.reset === '1');
+
+/**
  * @description 入力された資格情報でサインインし、成功したらホームへ進む。
  * 失敗の理由はストアが保持し、フォーム側に表示される。
  * @param {{username: string, password: string}} credentials 入力された資格情報
@@ -65,10 +71,18 @@ const handleLogin = async ({ username, password }) => {
 
     <p
       v-if="hasRegistered"
-      class="auth-note registered-note"
+      class="auth-note completed-note"
       role="status"
     >
       ユーザー登録が完了しました。登録した内容でログインしてください。
+    </p>
+
+    <p
+      v-else-if="hasResetPassword"
+      class="auth-note completed-note"
+      role="status"
+    >
+      パスワードを再設定しました。新しいパスワードでログインしてください。
     </p>
 
     <LoginForm
@@ -76,6 +90,13 @@ const handleLogin = async ({ username, password }) => {
       :error-message="authStore.errorMessage"
       @submit-login="handleLogin"
     />
+
+    <p class="auth-switch">
+      パスワードをお忘れの方は
+      <RouterLink :to="{ name: 'password-reset' }">
+        パスワードの再設定
+      </RouterLink>
+    </p>
 
     <p class="auth-switch">
       アカウントをお持ちでない方は
@@ -88,7 +109,12 @@ const handleLogin = async ({ username, password }) => {
 
 <style scoped>
 /* フォームとの間隔を空ける。auth-note 自体は余白を持たないため、ここで足す */
-.registered-note {
+.completed-note {
   margin-bottom: 16px;
+}
+
+/* 2行並ぶため、2行目の余白を詰める */
+.auth-switch + .auth-switch {
+  margin-top: 8px;
 }
 </style>

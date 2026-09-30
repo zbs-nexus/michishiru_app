@@ -1,7 +1,9 @@
 import {
+  confirmResetPassword as cognitoConfirmResetPassword,
   confirmSignUp as cognitoConfirmSignUp,
   getCurrentUser,
   resendSignUpCode as cognitoResendSignUpCode,
+  resetPassword as cognitoResetPassword,
   signIn as cognitoSignIn,
   signOut as cognitoSignOut,
   signUp as cognitoSignUp
@@ -38,7 +40,25 @@ const ERROR_MESSAGES = {
   EmptySignUpUsername: 'ユーザー名を入力してください',
   EmptySignUpPassword: 'パスワードを入力してください',
   EmptyConfirmSignUpUsername: 'ユーザー名を入力してください',
-  EmptyConfirmSignUpCode: '確認コードを入力してください'
+  EmptyConfirmSignUpCode: '確認コードを入力してください',
+  // ここから下はパスワード再設定で出るもの
+  EmptyResetPasswordUsername: 'ユーザー名を入力してください',
+  EmptyConfirmResetPasswordUsername: 'ユーザー名を入力してください',
+  EmptyConfirmResetPasswordConfirmationCode: '確認コードを入力してください',
+  EmptyConfirmResetPasswordNewPassword: '新しいパスワードを入力してください'
+};
+
+/**
+ * パスワード再設定のときだけ文言を変える例外。
+ * サインインと同じ対応表を使うと「パスワードが違います」のように場面に合わない文言になるため、
+ * こちらを先に見る。
+ */
+const PASSWORD_RESET_ERROR_MESSAGES = {
+  // ユーザーの有無を画面で言い当てないよう、あいまいな文言にする
+  UserNotFoundException: 'ユーザー名を確認してください',
+  // メールアドレスが未確認のユーザーは、送信先が無いため再設定できない
+  InvalidParameterException:
+    'このユーザーはメールアドレスが未確認のため再設定できません。管理者に連絡してください'
 };
 
 /** サインインの対応表に無い例外に使う文言 */
@@ -48,6 +68,10 @@ const SIGN_IN_DEFAULT_ERROR_MESSAGE =
 /** ユーザー登録の対応表に無い例外に使う文言 */
 const SIGN_UP_DEFAULT_ERROR_MESSAGE =
   'ユーザー登録に失敗しました。通信状況を確認してください';
+
+/** パスワード再設定の対応表に無い例外に使う文言 */
+const PASSWORD_RESET_DEFAULT_ERROR_MESSAGE =
+  'パスワードの再設定に失敗しました。通信状況を確認してください';
 
 /**
  * @description 認証の例外を、画面に出せる文言へ変換する
@@ -65,6 +89,17 @@ export const toAuthErrorMessage = (error) =>
  */
 export const toSignUpErrorMessage = (error) =>
   ERROR_MESSAGES[error?.name] ?? SIGN_UP_DEFAULT_ERROR_MESSAGE;
+
+/**
+ * @description パスワード再設定の例外を、画面に出せる文言へ変換する。
+ * 再設定のときだけ文言を変える例外を先に見て、無ければ共通の対応表を使う。
+ * @param {Error} error 発生した例外
+ * @returns {string} 画面に出す文言
+ */
+export const toPasswordResetErrorMessage = (error) =>
+  PASSWORD_RESET_ERROR_MESSAGES[error?.name] ??
+  ERROR_MESSAGES[error?.name] ??
+  PASSWORD_RESET_DEFAULT_ERROR_MESSAGE;
 
 /**
  * @description ユーザー名とパスワードでサインインする。
@@ -161,6 +196,45 @@ export const resendConfirmationCode = async (username) => {
 
   return codeDeliveryDetails?.destination ?? null;
 };
+
+/**
+ * @description パスワードを忘れた利用者へ、再設定用の確認コードをメールで送る。
+ *
+ * 新しいパスワードはこの時点では決めず、`confirmPasswordResetWithCode` で設定する。
+ * 送信先はユーザープールで確認済みのメールアドレスで、こちらからは指定できない。
+ * @param {string} username ユーザー名
+ * @returns {Promise<string|null>} コードの送信先（マスクされた形）。取得できない場合はnull
+ * @throws {Error} 送信に失敗した場合、または未対応の手続きを求められた場合
+ */
+export const sendPasswordResetCode = async (username) => {
+  const { nextStep } = await cognitoResetPassword({ username });
+
+  if (nextStep.resetPasswordStep === 'CONFIRM_RESET_PASSWORD_WITH_CODE') {
+    // 送信先はマスクされた形（例: a***@example.com）で返る
+    return nextStep.codeDeliveryDetails?.destination ?? null;
+  }
+
+  // コード入力を伴わない設定（DONE）は想定していないため、失敗として返す
+  const error = new Error(
+    `パスワード再設定を開始できませんでした: ${nextStep.resetPasswordStep}`
+  );
+  error.name = nextStep.resetPasswordStep;
+  throw error;
+};
+
+/**
+ * @description メールで届いた確認コードで、新しいパスワードを設定する
+ * @param {string} username ユーザー名
+ * @param {string} confirmationCode メールで届いた確認コード
+ * @param {string} newPassword 新しいパスワード
+ * @returns {Promise<void>} 成功時は何も返さない。失敗時は例外を投げる
+ * @throws {Error} コードが違う・期限切れ、またはパスワードが条件を満たさない場合
+ */
+export const confirmPasswordResetWithCode = (
+  username,
+  confirmationCode,
+  newPassword
+) => cognitoConfirmResetPassword({ username, confirmationCode, newPassword });
 
 /**
  * @description サインアウトしてトークンを破棄する

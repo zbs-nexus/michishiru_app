@@ -1,13 +1,16 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import {
+  confirmPasswordResetWithCode,
   confirmSignUpWithCode,
   fetchSignedInUsername,
   resendConfirmationCode,
+  sendPasswordResetCode,
   signInWithPassword,
   signOutFromCognito,
   signUpWithEmail,
   toAuthErrorMessage,
+  toPasswordResetErrorMessage,
   toSignUpErrorMessage
 } from '@/services/authService';
 
@@ -27,6 +30,9 @@ export const useAuthStore = defineStore('auth', () => {
 
   /** ユーザー登録の通信中かどうか */
   const isSigningUp = ref(false);
+
+  /** パスワード再設定の通信中かどうか */
+  const isResettingPassword = ref(false);
 
   /** 直近のサインイン・ユーザー登録の失敗の理由。成功時はnull */
   const errorMessage = ref(null);
@@ -144,6 +150,61 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   /**
+   * @description パスワード再設定の確認コードを送る。
+   * この時点ではまだパスワードは変わらない。
+   * @param {string} inputUsername 入力されたユーザー名
+   * @returns {Promise<{isSucceeded: boolean, codeDeliveryDestination: string|null}>} 送信の結果とコードの送信先
+   */
+  const resetPassword = async (inputUsername) => {
+    isResettingPassword.value = true;
+    errorMessage.value = null;
+
+    try {
+      const codeDeliveryDestination = await sendPasswordResetCode(inputUsername);
+
+      return { isSucceeded: true, codeDeliveryDestination };
+    } catch (error) {
+      errorMessage.value = toPasswordResetErrorMessage(error);
+
+      return { isSucceeded: false, codeDeliveryDestination: null };
+    } finally {
+      isResettingPassword.value = false;
+    }
+  };
+
+  /**
+   * @description 確認コードと新しいパスワードで再設定を確定する
+   * @param {string} inputUsername 対象のユーザー名
+   * @param {string} inputConfirmationCode 入力された確認コード
+   * @param {string} inputNewPassword 入力された新しいパスワード
+   * @returns {Promise<boolean>} 成功したかどうか
+   */
+  const confirmResetPassword = async (
+    inputUsername,
+    inputConfirmationCode,
+    inputNewPassword
+  ) => {
+    isResettingPassword.value = true;
+    errorMessage.value = null;
+
+    try {
+      await confirmPasswordResetWithCode(
+        inputUsername,
+        inputConfirmationCode,
+        inputNewPassword
+      );
+
+      return true;
+    } catch (error) {
+      errorMessage.value = toPasswordResetErrorMessage(error);
+
+      return false;
+    } finally {
+      isResettingPassword.value = false;
+    }
+  };
+
+  /**
    * @description サインアウトする
    * @returns {Promise<void>}
    */
@@ -167,6 +228,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSessionRestored,
     isSigningIn,
     isSigningUp,
+    isResettingPassword,
     errorMessage,
     isSignedIn,
     restoreSession,
@@ -174,6 +236,8 @@ export const useAuthStore = defineStore('auth', () => {
     signUp,
     confirmSignUp,
     resendCode,
+    resetPassword,
+    confirmResetPassword,
     signOut,
     clearErrorMessage
   };

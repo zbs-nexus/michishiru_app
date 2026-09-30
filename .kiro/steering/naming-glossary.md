@@ -174,9 +174,13 @@ inclusion: always
 | パスワード | password | - |
 | 確認コード | confirmationCode | ユーザー登録後にメールで届く6桁の数字 |
 | ユーザー登録の確認 | confirmSignUp | 確認コードでユーザーを有効化すること |
+| パスワード再設定（画面・行為） | resetPassword | 画面名は「パスワードの再設定」、コード上は `resetPassword`（`/password-reset` / `isResettingPassword`） |
+| パスワード再設定の確認 | confirmResetPassword | 確認コードと新しいパスワードで再設定を確定すること |
+| 新しいパスワード | newPassword | 再設定で利用者が決めるパスワード |
 | ログイン済みかどうか | isSignedIn | - |
 
 `logout` は使わない（`signOut` に統一）。`register` / `signup`（大文字なし）も使わない。
+`forgotPassword` / `reissuePassword` も使わない（`resetPassword` に統一）。Cognito は新しいパスワードを発行せず利用者に決めさせるため、「再発行」ではなく「再設定」と呼ぶ。
 
 ---
 
@@ -256,5 +260,6 @@ inclusion: always
 | 2026/09/09 | 案内中の次の目的地表示に伴い「ルートとスポット」へ `nextSpot` / `distanceToNextM` / `visitedSpotIds` / `visitedCount` / `ARRIVAL_THRESHOLD_M` を追加 |
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
 | 2026/09/30 | ユーザー登録画面の追加に伴い「認証」の節を新設。未登録だったログイン関連の語（login / signIn / signOut / isSignedIn / username / password）と、登録で使う語（signUp / email / confirmationCode / confirmSignUp）を登録。`logout` / `register` を禁止 |
+| 2026/09/30 | パスワード再設定画面の追加に伴い「認証」へ `resetPassword` / `confirmResetPassword` / `newPassword` を登録。`forgotPassword` / `reissuePassword` を禁止し、「再発行」ではなく「再設定」と呼ぶことを明記 |
 | 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
