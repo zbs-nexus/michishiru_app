@@ -203,7 +203,7 @@ michishiru_app/
 
 | 場所 | 用途 | 例 |
 |---|---|---|
-| `tools/`（ルート） | 複数の領域にまたがる開発補助 | `dev.js`（フロント＋API同時起動）, `localApiServer.js` |
+| `tools/`（ルート） | 複数の領域にまたがる開発補助 | `dev.js`（フロント＋API同時起動）, `localApiServer.js`, `exportCognitoOutputs.js`（CDKの出力をフロントのビルドへ渡す） |
 | `backend/tools/` | バックエンド専用のスクリプト | `seed.js`（DynamoDBへの初期データ投入） |
 
 判断基準: `frontend/` と `backend/` の両方に触れるならルートの `tools/`、片方だけならその領域の `tools/`。

@@ -26,6 +26,35 @@ describe('MichishiruStack (フロントのみ・既定)', () => {
     template.resourceCountIs('AWS::ApiGateway::RestApi', 0);
     template.resourceCountIs('AWS::DynamoDB::GlobalTable', 0);
   });
+
+  test('セルフサインアップとメール確認を有効にしたユーザープールを作成する', () => {
+    template.hasResourceProperties('AWS::Cognito::UserPool', {
+      UserPoolName: 'michishiru-users-dev',
+      AutoVerifiedAttributes: ['email'],
+      AdminCreateUserConfig: { AllowAdminCreateUserOnly: false },
+      Policies: {
+        PasswordPolicy: Match.objectLike({
+          MinimumLength: 8,
+          RequireUppercase: true,
+          RequireLowercase: true,
+          RequireNumbers: true,
+          RequireSymbols: true
+        })
+      },
+      Schema: Match.arrayWith([
+        Match.objectLike({ Name: 'email', Required: true })
+      ])
+    });
+  });
+
+  test('シークレットを持たないSPA用アプリクライアントを作成する', () => {
+    template.hasResourceProperties('AWS::Cognito::UserPoolClient', {
+      ClientName: 'michishiru-web-dev',
+      GenerateSecret: false,
+      ExplicitAuthFlows: Match.arrayWith(['ALLOW_USER_SRP_AUTH']),
+      PreventUserExistenceErrors: 'ENABLED'
+    });
+  });
 });
 
 describe('MichishiruStack (バックエンド有効)', () => {

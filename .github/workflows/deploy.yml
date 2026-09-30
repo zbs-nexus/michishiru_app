@@ -28,17 +28,18 @@ jobs:
   checks:
     uses: ./.github/workflows/checks.yml
 
-  deploy:
-    name: build & deploy
-    needs: checks
+  # デプロイ先を決める。
+  # GitHub の Environment 名はブランチ名に合わせる（develop / main）。
+  # Environment はジョブの開始時に解決されるため、同じジョブ内のステップの出力は使えない。
+  # そのためこのジョブで先に決め、deploy ジョブが needs 経由で受け取る。
+  setup:
+    name: デプロイ先の決定
     runs-on: ubuntu-latest
-    env:
-      AWS_REGION: ap-northeast-1
+    outputs:
+      stage: ${{ steps.vars.outputs.stage }}
+      environment: ${{ steps.vars.outputs.environment }}
     steps:
-      - uses: actions/checkout@v4
-
-      # ブランチ or 手動入力からデプロイ先の stage を決める
-      - name: デプロイ先の環境を決定する
+      - name: ブランチまたは手動入力から stage と Environment を決める
         id: vars
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -48,8 +49,29 @@ jobs:
           else
             STAGE="dev"
           fi
+
+          if [ "$STAGE" = "prod" ]; then
+            ENVIRONMENT="main"
+          else
+            ENVIRONMENT="develop"
+          fi
+
           echo "stage=$STAGE" >> "$GITHUB_OUTPUT"
-          echo "デプロイ先: $STAGE"
+          echo "environment=$ENVIRONMENT" >> "$GITHUB_OUTPUT"
+          echo "デプロイ先: stage=$STAGE / Environment=$ENVIRONMENT"
+
+  deploy:
+    name: build & deploy
+    needs: [checks, setup]
+    runs-on: ubuntu-latest
+    # デプロイ履歴を環境ごとに残すための指定。Environment 名はブランチ名に対応する。
+    # Cognito の接続情報は Environment 変数ではなく、cdk deploy の出力から受け取る。
+    environment: ${{ needs.setup.outputs.environment }}
+    env:
+      AWS_REGION: ap-northeast-1
+      STAGE: ${{ needs.setup.outputs.stage }}
+    steps:
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
@@ -62,45 +84,47 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Cognito の接続情報はビルド時に埋め込まれるため、ビルドの前に値が揃っているか確かめる。
-      # 空のままビルドすると、配信後にログインを試すまで設定漏れに気付けない。
-      - name: Cognito の接続情報が設定されているか確認する
-        env:
-          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
-          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
-        run: |
-          if [ -z "$VITE_COGNITO_USER_POOL_ID" ] || [ -z "$VITE_COGNITO_USER_POOL_CLIENT_ID" ]; then
-            echo "::error::Cognito の接続情報が未設定です。リポジトリの Settings → Secrets and variables → Actions → Variables に VITE_COGNITO_USER_POOL_ID と VITE_COGNITO_USER_POOL_CLIENT_ID を登録してください"
-            exit 1
-          fi
-
-      # フロントエンドをビルドする（dist は cdk deploy で S3 へアップロードされる）
-      # VITE_ で始まる値は import.meta.env としてビルド成果物に埋め込まれる。
-      # 実行時には読み込まれないため、ここで渡さないと未設定のまま配信される。
-      - name: フロントエンドをビルドする
-        working-directory: frontend
-        env:
-          VITE_COGNITO_USER_POOL_ID: ${{ vars.VITE_COGNITO_USER_POOL_ID }}
-          VITE_COGNITO_USER_POOL_CLIENT_ID: ${{ vars.VITE_COGNITO_USER_POOL_CLIENT_ID }}
-        run: |
-          npm ci
-          npm run build
-
       # createRoute の Lambda は esbuild で依存ごとバンドルするため、
       # cdk deploy の前に backend の依存を揃えておく
       - name: backend の依存を取得（Lambda のバンドルに必要）
         working-directory: backend
         run: npm ci
 
-      # 対象環境のスタックをデプロイする。
-      # MichishiruStack 内の BucketDeployment が frontend/dist を S3 へ同期し、
-      # CloudFront のキャッシュ無効化まで行う。
-      # withBackend=true でバックエンド（Lambda + API Gateway + DynamoDB）も含めてデプロイする。
-      - name: インフラをデプロイする（cdk deploy）
+      # 先にインフラだけをデプロイする。
+      # Cognito のユーザープールは CDK で作るため、その ID はデプロイ後に確定する。
+      # この時点では frontend/dist が無いため、静的ファイルのアップロードはスキップされる。
+      - name: インフラをデプロイする（cdk deploy・1回目）
         working-directory: iac
         run: |
           npm ci
-          npx cdk deploy "Michishiru-${{ steps.vars.outputs.stage }}" \
+          npx cdk deploy "Michishiru-$STAGE" \
+            -c withBackend=true \
+            --require-approval never \
+            --outputs-file cdk-outputs.json
+
+      # スタックの出力から Cognito の接続情報を取り出し、後続のステップへ渡す。
+      # ID を人が登録する必要はなく、常にデプロイしたプールの値が使われる。
+      # VITE_ で始まる値は import.meta.env としてビルド成果物に埋め込まれる。
+      # 実行時には読み込まれないため、ビルド前に環境変数として渡す必要がある。
+      # 値は GITHUB_ENV へ書き出して後続のステップへ引き継ぐ。
+      - name: Cognito の接続情報をスタック出力から取り出す
+        run: node tools/exportCognitoOutputs.js
+
+      # フロントエンドをビルドする（dist は次の cdk deploy で S3 へアップロードされる）
+      # VITE_COGNITO_* は直前のステップが GITHUB_ENV へ書き込んだ値を使う。
+      - name: フロントエンドをビルドする
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      # 2回目のデプロイで静的ファイルを配信する。
+      # MichishiruStack 内の BucketDeployment が frontend/dist を S3 へ同期し、
+      # CloudFront のキャッシュ無効化まで行う。
+      - name: フロントエンドを配信する（cdk deploy・2回目）
+        working-directory: iac
+        run: |
+          npx cdk deploy "Michishiru-$STAGE" \
             -c withBackend=true \
             --require-approval never \
             --outputs-file cdk-outputs.json
