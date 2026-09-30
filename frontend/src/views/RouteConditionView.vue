@@ -63,7 +63,7 @@ const handleSelectGenre = (value) => {
  */
 const handleCreateRoute = async () => {
   if (!routeStore.hasRequiredConditions) {
-    showMessage('ジャンルを選択してください');
+    showMessage('ジャンルを選択するか、おまかせを選んでください');
     return;
   }
 
@@ -74,6 +74,7 @@ const handleCreateRoute = async () => {
     return;
   }
 
+  // おまかせで選ばれた条件は提案画面で表示する
   router.push({ name: 'route-suggestion' });
 };
 
@@ -139,10 +140,14 @@ const handleSignOut = async () => {
       <RouteConditionForm
         :genre="routeStore.genre"
         :distance-km="routeStore.distanceKm"
+        :is-genre-random="routeStore.isGenreRandom"
+        :is-distance-random="routeStore.isDistanceRandom"
         :genre-options="genreOptions"
         :distance-range="distanceRange"
         @select-genre="handleSelectGenre"
         @select-distance="routeStore.selectDistance"
+        @toggle-genre-random="routeStore.toggleGenreRandom"
+        @toggle-distance-random="routeStore.toggleDistanceRandom"
       />
 
       <!-- 未選択でも押せるようにし、押下時にポップアップで不足を知らせる -->

@@ -42,6 +42,7 @@ export const useRouteCreation = () => {
    * @description ストアが保持する入力条件でルートを作成し、結果をストアへ保存する。
    * 条件はストアから読むため、初回作成と再作成で同じ値が使われる。
    * 現在地は Geolocation API から取得し、失敗時はフォールバック値を使用する。
+   * おまかせ機能が有効な場合は、バックエンドでランダム選択が行われる。
    * @returns {Promise<boolean>} 成功した場合はtrue
    */
   const createRoute = async () => {
@@ -54,13 +55,17 @@ export const useRouteCreation = () => {
       // 現在地を取得（失敗時はフォールバック値が返る）
       const location = await fetchCurrentLocation();
 
-      // ジャンルは英語のジャンルID（genre）を送る。表示名（genreName）ではマスタと一致しない
+      // おまかせ機能が有効な場合は、genreId / distanceKm を undefined として送る
       const route = await requestRouteCreation({
-        genreId: routeStore.genre,
-        distanceKm: routeStore.distanceKm,
+        genreId: routeStore.isGenreRandom ? undefined : routeStore.genre,
+        distanceKm: routeStore.isDistanceRandom ? undefined : routeStore.distanceKm,
+        isGenreRandom: routeStore.isGenreRandom,
+        isDistanceRandom: routeStore.isDistanceRandom,
         currentLocation: location
       });
 
+      // おまかせで選ばれた値はルート（route.selectedGenres / selectedDistanceKm）が持つ。
+      // 入力条件へは書き戻さず、再作成でも毎回おまかせで選び直す
       routeStore.setCurrentRoute(route);
 
       return true;
