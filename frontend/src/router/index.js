@@ -3,6 +3,7 @@ import LoginView from '@/views/LoginView.vue';
 import RouteConditionView from '@/views/RouteConditionView.vue';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
 import RouteSuggestionView from '@/views/RouteSuggestionView.vue';
+import SignUpView from '@/views/SignUpView.vue';
 import WalkResultView from '@/views/WalkResultView.vue';
 import { useAuthStore } from '@/stores/authStore';
 import { useRouteStore } from '@/stores/routeStore';
@@ -16,7 +17,13 @@ const routes = [
     path: '/login',
     name: 'login',
     component: LoginView,
-    // 未ログインで開ける唯一の画面
+    // 未ログインで開ける画面（もう1つはユーザー登録）
+    meta: { isPublic: true }
+  },
+  {
+    path: '/sign-up',
+    name: 'sign-up',
+    component: SignUpView,
     meta: { isPublic: true }
   },
   {
