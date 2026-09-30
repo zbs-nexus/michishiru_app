@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import LoginView from '@/views/LoginView.vue';
+import PasswordResetView from '@/views/PasswordResetView.vue';
 import RouteConditionView from '@/views/RouteConditionView.vue';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
 import RouteSuggestionView from '@/views/RouteSuggestionView.vue';
@@ -17,13 +18,19 @@ const routes = [
     path: '/login',
     name: 'login',
     component: LoginView,
-    // 未ログインで開ける画面（もう1つはユーザー登録）
+    // 未ログインで開ける画面（ほかにユーザー登録とパスワード再設定）
     meta: { isPublic: true }
   },
   {
     path: '/sign-up',
     name: 'sign-up',
     component: SignUpView,
+    meta: { isPublic: true }
+  },
+  {
+    path: '/password-reset',
+    name: 'password-reset',
+    component: PasswordResetView,
     meta: { isPublic: true }
   },
   {
