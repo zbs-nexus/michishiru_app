@@ -59,11 +59,7 @@ const props = defineProps({
     type: Object,
     default: null
   },
-  /** 現在地の方向（度、北を0度として時計回り） */
-  currentHeading: {
-    type: Number,
-    default: null
-  },
+
   /** 現在地の精度（メートル） */
   currentAccuracy: {
     type: Number,
@@ -80,6 +76,12 @@ const ROUTE_OUTLINE_LAYER_ID = 'route-line-outline';
 /** ルートの線を描くレイヤーのID */
 const ROUTE_LINE_LAYER_ID = 'route-line';
 
+/** 開始地点のマーカーに表示する文字（Start の頭文字） */
+const ORIGIN_MARKER_LABEL = 'S';
+
+/** 開始地点のマーカーを押したときに出す文言 */
+const ORIGIN_POPUP_TEXT = 'スタート地点';
+
 /** 地図を描画するDOM要素 */
 const mapContainer = ref(null);
 
@@ -93,6 +95,7 @@ const hasNoGeometry = ref(false);
  */
 let map = null;
 let markers = [];
+let originMarker = null;
 let currentLocationMarker = null;
 
 /**
@@ -122,6 +125,69 @@ const toRouteFeature = (geometry) => {
 };
 
 /**
+ * @description 経路の先頭の座標を取り出す。
+ * ルート生成時に現在地を出発地として送っているため、経路の先頭が開始地点になる。
+ * @param {object|null} geometry 経路の形
+ * @returns {number[]|null} [経度, 緯度]。取り出せない場合はnull
+ */
+const toOriginPosition = (geometry) => {
+  const rawGeometry = geometry === null ? null : toRaw(geometry);
+  const firstPosition = rawGeometry?.coordinates?.[0];
+
+  if (!Array.isArray(firstPosition)) {
+    return null;
+  }
+
+  const lng = Number(firstPosition[0]);
+  const lat = Number(firstPosition[1]);
+
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) {
+    return null;
+  }
+
+  return [lng, lat];
+};
+
+/**
+ * @description 開始地点の目印となる要素を組み立てる。
+ * スポットのマーカー（青い丸に巡る順の番号）と見分けられるよう、
+ * 色と表示する文字を変えている。
+ * @returns {HTMLElement} マーカーとして使う要素
+ */
+const createOriginMarkerElement = () => {
+  const element = document.createElement('div');
+  element.className = 'origin-marker';
+  element.textContent = ORIGIN_MARKER_LABEL;
+  return element;
+};
+
+/**
+ * @description 開始地点のマーカーを描き直す。
+ * 経路が無い場合は目印も消す。
+ * @returns {void}
+ */
+const renderOriginMarker = () => {
+  const originPosition = toOriginPosition(props.geometry);
+
+  if (originPosition === null) {
+    originMarker?.remove();
+    originMarker = null;
+    return;
+  }
+
+  if (originMarker === null) {
+    originMarker = new Marker({ element: createOriginMarkerElement() })
+      .setLngLat(originPosition)
+      .setPopup(new Popup({ offset: 16 }).setText(ORIGIN_POPUP_TEXT))
+      .addTo(map);
+    return;
+  }
+
+  // 再作成で別のルートに差し替わった場合は位置だけ更新する
+  originMarker.setLngLat(originPosition);
+};
+
+/**
  * @description スポットの見出し要素を組み立てる。
  * ライブラリがマーカーをコンポーネントの外側へ挿入するため、
  * スタイルは global.css に置いている。
@@ -137,7 +203,7 @@ const createSpotMarkerElement = (order) => {
 
 /**
  * @description 現在地マーカーのDOM要素を作成する。
- * Google Maps風の青い円と方向を示す矢印で構成される。
+ * 精度を示す外円と、現在地を示す青い円で構成される。
  * @returns {HTMLElement} 現在地マーカー要素
  */
 const createCurrentLocationElement = () => {
@@ -154,37 +220,7 @@ const createCurrentLocationElement = () => {
   innerCircle.className = 'current-location-dot';
   container.appendChild(innerCircle);
 
-  // 方向を示す矢印
-  const arrow = document.createElement('div');
-  arrow.className = 'current-location-arrow';
-  container.appendChild(arrow);
-
   return container;
-};
-
-/**
- * @description 現在地マーカーの方向を更新する
- * @param {number|null} heading 方向（度）
- * @returns {void}
- */
-const updateCurrentLocationHeading = (heading) => {
-  if (currentLocationMarker === null) {
-    return;
-  }
-
-  const element = currentLocationMarker.getElement();
-  const arrow = element.querySelector('.current-location-arrow');
-
-  if (arrow === null) {
-    return;
-  }
-
-  if (heading === null) {
-    arrow.style.display = 'none';
-  } else {
-    arrow.style.display = 'block';
-    arrow.style.transform = `rotate(${heading}deg)`;
-  }
 };
 
 /**
@@ -211,13 +247,11 @@ const renderCurrentLocationMarker = () => {
     })
       .setLngLat(lngLat)
       .addTo(map);
-  } else {
-    // 位置のみ更新
-    currentLocationMarker.setLngLat(lngLat);
+    return;
   }
 
-  // 方向を更新
-  updateCurrentLocationHeading(props.currentHeading);
+  // 位置のみ更新
+  currentLocationMarker.setLngLat(lngLat);
 };
 
 /**
@@ -331,6 +365,7 @@ onMounted(() => {
   // スタイルの読み込み完了前はソースを追加できないため、loadを待つ
   map.on('load', () => {
     renderRouteLine();
+    renderOriginMarker();
     renderSpotMarkers();
     renderCurrentLocationMarker();
     fitToRoute();
@@ -346,6 +381,7 @@ watch(
     }
 
     renderRouteLine();
+    renderOriginMarker();
     renderSpotMarkers();
     fitToRoute();
   }
@@ -353,7 +389,7 @@ watch(
 
 // 現在地が更新されたらマーカーを更新する
 watch(
-  () => [props.currentLocation, props.currentHeading, props.showCurrentLocation],
+  () => [props.currentLocation, props.showCurrentLocation],
   () => {
     if (map === null || !map.isStyleLoaded()) {
       return;
@@ -367,6 +403,8 @@ watch(
 onBeforeUnmount(() => {
   markers.forEach((marker) => marker.remove());
   markers = [];
+  originMarker?.remove();
+  originMarker = null;
   if (currentLocationMarker !== null) {
     currentLocationMarker.remove();
     currentLocationMarker = null;
