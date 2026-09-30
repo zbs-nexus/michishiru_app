@@ -72,6 +72,12 @@ inclusion: always
 | 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
 | 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
 | 到達判定の距離 | ARRIVAL_THRESHOLD_M | 到達とみなす距離（メートル）。`useRouteProgress.js` の定数 |
+| 距離表示の丸め単位 | DISTANCE_ROUNDING_UNIT_M | 距離表示を丸める単位（メートル）。`RouteNextSpotBanner.vue` の定数 |
+| 採用する測位精度の上限 | MAX_ACCEPTABLE_ACCURACY_M | この値より精度が悪い測位は現在地に採用しない（メートル）。`useLocationTracking.js` の定数 |
+| 経路に沿った距離 | alongRouteDistanceM | 直線距離ではなく、経路の折れ線をたどった距離（メートル） |
+| 経路からの離れ | deviationM | 現在地が経路の折れ線からどれだけ離れているか（メートル） |
+| 経路の測定用データ | routeMeasure | 経路の各点までの累積距離をまとめたもの。距離計算に使う |
+| 経路沿いを採用する離れの上限 | MAX_ROUTE_DEVIATION_M | これ以上経路から離れたら直線距離へ切り替える（メートル）。`useRouteProgress.js` の定数 |
 
 ### 検索条件
 
@@ -250,3 +256,5 @@ inclusion: always
 | 2026/09/09 | 案内中の次の目的地表示に伴い「ルートとスポット」へ `nextSpot` / `distanceToNextM` / `visitedSpotIds` / `visitedCount` / `ARRIVAL_THRESHOLD_M` を追加 |
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
 | 2026/09/30 | ユーザー登録画面の追加に伴い「認証」の節を新設。未登録だったログイン関連の語（login / signIn / signOut / isSignedIn / username / password）と、登録で使う語（signUp / email / confirmationCode / confirmSignUp）を登録。`logout` / `register` を禁止 |
+| 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
+| 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |

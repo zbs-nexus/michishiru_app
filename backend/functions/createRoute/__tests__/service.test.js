@@ -197,14 +197,14 @@ describe('createRoute', () => {
     assert.equal(result.totalDistanceM, 3500);
   });
 
-  it('距離が短すぎる場合（目標-1km未満）はスポットを増やして再生成する', async () => {
-    // 1回目: 2スポットで1.5km（短すぎる） → 2回目: 3スポットで3km（OK）
+  it('距離が短すぎる場合（目標×DISTANCE_LOWER_RATIO未満）はスポットを増やして再生成する', async () => {
+    // 1回目: 2スポットで1.4km（目標3kmの下限1.5km未満） → 2回目: 3スポットで3km（OK）
     const { repositories, calls } = createRepositoryStub({
       plannedSpotsSequence: [
         [createSpot('スポット1'), createSpot('スポット2')],
         [createSpot('スポット1'), createSpot('スポット2'), createSpot('スポット3')]
       ],
-      distancesM: [1500, 3000]
+      distancesM: [1400, 3000]
     });
 
     const result = await createRoute(conditions, repositories);

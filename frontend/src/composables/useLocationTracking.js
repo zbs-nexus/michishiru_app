@@ -15,6 +15,13 @@ const GEOLOCATION_TIMEOUT_MS = 10000;
 const MAXIMUM_AGE_MS = 0;
 
 /**
+ * 採用する測位精度の上限（メートル）。
+ * これより精度が悪い測位は座標が大きく飛ぶため、現在地を更新せず前回の位置を保つ。
+ * 屋外のGPSは5〜10m程度、建物内や高層ビル街では数十mまで悪化する。
+ */
+const MAX_ACCEPTABLE_ACCURACY_M = 50;
+
+/**
  * @description Geolocation API のエラーコードからユーザー向けメッセージを生成する
  * @param {GeolocationPositionError} error Geolocation API のエラー
  * @returns {string} エラーメッセージ
@@ -62,13 +69,25 @@ export const useLocationTracking = () => {
    * @returns {void}
    */
   const handlePositionUpdate = (position) => {
-    const newLocation = {
+    const positionAccuracy = position.coords.accuracy;
+
+    // accuracyがnullの間は現在地が既定値のままなので、初回だけは精度を問わず採用する。
+    // ここで弾くと、精度が悪い場所では案内が始まらなくなる
+    const isFirstFix = accuracy.value === null;
+
+    const isReliableAccuracy =
+      Number.isFinite(positionAccuracy) &&
+      positionAccuracy <= MAX_ACCEPTABLE_ACCURACY_M;
+
+    if (!isFirstFix && !isReliableAccuracy) {
+      return;
+    }
+
+    currentLocation.value = {
       lng: position.coords.longitude,
       lat: position.coords.latitude
     };
-
-    currentLocation.value = newLocation;
-    accuracy.value = position.coords.accuracy;
+    accuracy.value = positionAccuracy;
     trackingError.value = null;
   };
 
