@@ -74,9 +74,21 @@ defineProps({
   height: 100%;
 }
 
+/*
+ * ズームボタンが次の目的地バナー（top: 12px、高さ約60px）の下に隠れて
+ * 押せなくなるため、この画面だけコントロールを下へ寄せる。
+ */
+.navigation-map :deep(.maplibregl-ctrl-top-right) {
+  margin-top: 84px;
+}
+
+/*
+ * 終了ボタン（bottom: 44px、高さ約51px）の上に置く。
+ * ボタンの上端は約95pxなので、重ならない位置まで上げる。
+ */
 .tracking-error {
   position: absolute;
-  bottom: 80px;
+  bottom: 108px;
   left: 12px;
   right: 12px;
   padding: 8px 12px;
