@@ -278,6 +278,93 @@ describe('createRoute', () => {
     );
   });
 
+  describe('おまかせ', () => {
+    /** おまかせで参照するマスタ（ジャンル3件・距離1〜10km・無効ジャンル1件） */
+    const conditionItems = [
+      { pk: 'GENRE#ALL', genreId: 'nature', genreName: '自然', isActive: true },
+      { pk: 'GENRE#ALL', genreId: 'city', genreName: '街歩き', isActive: true },
+      { pk: 'GENRE#ALL', genreId: 'history', genreName: '歴史', isActive: true },
+      { pk: 'GENRE#ALL', genreId: 'disabled', genreName: '無効', isActive: false },
+      { pk: 'DISTANCE#ALL', distanceKm: 1, isActive: true },
+      { pk: 'DISTANCE#ALL', distanceKm: 10, isActive: true }
+    ];
+
+    /**
+     * @description マスタ参照と、距離に応じて許容範囲内の総距離を返す経路計算を持つスタブを作る
+     * @returns {{repositories: object, calls: object}} スタブと呼び出し記録
+     */
+    const createRandomStub = () => {
+      const stub = createRepositoryStub();
+      const queriedGenreIds = [];
+
+      stub.repositories.listConditions = async () => conditionItems;
+      stub.repositories.queryGenreNumberByGenreId = async (genreId) => {
+        queriedGenreIds.push(genreId);
+        return genreId;
+      };
+      stub.repositories.querySpotCategoryIdsByGenreNumber = async () => ['park', 'garden'];
+
+      // 経路の総距離をプロンプトの目標距離に合わせ、どの距離が選ばれても許容範囲に収める
+      const calculateWalkingRoute = stub.repositories.calculateWalkingRoute;
+      stub.repositories.calculateWalkingRoute = async (request) => {
+        const route = await calculateWalkingRoute(request);
+        const targetKm = Number(stub.calls.prompts.at(-1).match(/目標距離: ([\d.]+) km/)[1]);
+
+        return { ...route, totalDistanceM: targetKm * 1000 };
+      };
+
+      return { ...stub, queriedGenreIds };
+    };
+
+    it('ジャンルのおまかせは有効なジャンルから1件以上を選び、選んだ値を返す', async () => {
+      for (let trial = 0; trial < 20; trial += 1) {
+        const { repositories, queriedGenreIds } = createRandomStub();
+
+        const result = await createRoute(
+          { targetDistanceKm: 3, currentLocation: conditions.currentLocation, isGenreRandom: true },
+          repositories
+        );
+
+        const selectedIds = result.selectedGenres.map((genre) => genre.genreId);
+        assert.ok(selectedIds.length >= 1 && selectedIds.length <= 3);
+        assert.ok(selectedIds.every((id) => ['nature', 'city', 'history'].includes(id)));
+        assert.equal(new Set(selectedIds).size, selectedIds.length);
+        assert.deepEqual([...queriedGenreIds].sort(), [...selectedIds].sort());
+        assert.equal(result.selectedDistanceKm, undefined);
+      }
+    });
+
+    it('距離のおまかせはマスタの最小〜最大から1km単位で選ぶ', async () => {
+      for (let trial = 0; trial < 30; trial += 1) {
+        const { repositories, calls } = createRandomStub();
+
+        const result = await createRoute(
+          { genreId: 'nature', currentLocation: conditions.currentLocation, isDistanceRandom: true },
+          repositories
+        );
+
+        assert.ok(Number.isInteger(result.selectedDistanceKm));
+        assert.ok(result.selectedDistanceKm >= 1 && result.selectedDistanceKm <= 10);
+        assert.match(calls.prompts[0], new RegExp(`目標距離: ${result.selectedDistanceKm} km`));
+        assert.equal(result.selectedGenres, undefined);
+      }
+    });
+
+    it('おまかせを使わない場合はマスタを全件取得しない', async () => {
+      const { repositories } = createRandomStub();
+      let isListed = false;
+      repositories.listConditions = async () => {
+        isListed = true;
+        return conditionItems;
+      };
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.equal(isListed, false);
+      assert.equal(result.selectedGenres, undefined);
+    });
+  });
+
   it('乖離スポットを除外すると最小数を下回る場合は除外しない', async () => {
     // 1スポットだけで、それが乖離大でも、除外すると0件になるため残す
     const { repositories, calls } = createRepositoryStub({

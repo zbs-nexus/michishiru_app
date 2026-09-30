@@ -65,27 +65,39 @@ const validateCurrentLocation = (currentLocation, errorMessages) => {
  *
  * リクエストのキー名は既存の外部仕様に合わせている。値はフロントが送る
  * 英語のジャンルID（genreId。例: food / nature）を受け取る。
+ * おまかせ機能が有効な場合（isGenreRandom / isDistanceRandom）は、
+ * 対応する値が未指定でも許容する。
  * TODO(NZ未採番): `purposeCategory` を用語辞書に沿った `genreId` へ改名する
  * （`naming-conventions.md` の未決定事項 #1）。フロントとの同時変更が必要。
  * @param {object} body リクエストボディ
- * @param {string} [body.purposeCategory] ジャンルID（英語。例: nature）。未指定なら既定値
- * @param {number} [body.targetDistanceKm] 目標距離（km）。未指定なら既定値
+ * @param {string} [body.purposeCategory] ジャンルID（英語。例: nature）。未指定なら既定値またはランダム
+ * @param {number} [body.targetDistanceKm] 目標距離（km）。未指定なら既定値またはランダム
+ * @param {boolean} [body.isGenreRandom] ジャンルをおまかせで選ぶか
+ * @param {boolean} [body.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lat: number, lng: number}} [body.currentLocation] 現在地。未指定なら既定値
  * @returns {{isValid: boolean, errorMessages: string[], value: object|null}} 検証結果と正規化した値
  */
 export const validateCreateRouteRequest = (body = {}) => {
   const errorMessages = [];
 
-  const genreId = body.purposeCategory || DEFAULT_GENRE_ID;
+  const isGenreRandom = Boolean(body.isGenreRandom);
+  const isDistanceRandom = Boolean(body.isDistanceRandom);
 
-  if (typeof genreId !== 'string') {
+  // おまかせでない場合は必須。おまかせの場合は未指定を許容する
+  const genreId = isGenreRandom
+    ? null
+    : (body.purposeCategory || DEFAULT_GENRE_ID);
+
+  if (!isGenreRandom && typeof genreId !== 'string') {
     errorMessages.push('purposeCategoryは文字列で指定してください');
   }
 
-  const rawTargetDistanceKm = body.targetDistanceKm ?? DEFAULT_TARGET_DISTANCE_KM;
-  const targetDistanceKm = Number(rawTargetDistanceKm);
+  const rawTargetDistanceKm = isDistanceRandom
+    ? null
+    : (body.targetDistanceKm ?? DEFAULT_TARGET_DISTANCE_KM);
+  const targetDistanceKm = isDistanceRandom ? null : Number(rawTargetDistanceKm);
 
-  if (!isWithinRange(targetDistanceKm, TARGET_DISTANCE_RANGE_KM)) {
+  if (!isDistanceRandom && !isWithinRange(targetDistanceKm, TARGET_DISTANCE_RANGE_KM)) {
     errorMessages.push(
       `targetDistanceKmが不正です（${TARGET_DISTANCE_RANGE_KM.min}〜${TARGET_DISTANCE_RANGE_KM.max}の数値）`
     );
@@ -98,6 +110,8 @@ export const validateCreateRouteRequest = (body = {}) => {
   return {
     isValid,
     errorMessages,
-    value: isValid ? { genreId, targetDistanceKm, currentLocation } : null
+    value: isValid
+      ? { genreId, targetDistanceKm, currentLocation, isGenreRandom, isDistanceRandom }
+      : null
   };
 };
