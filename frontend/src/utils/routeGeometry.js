@@ -161,3 +161,29 @@ export const calculateAlongRouteDistanceM = ({
 
   return Math.abs(to.alongM - from.alongM);
 };
+
+/**
+ * @description 経路の終点までの残り距離を、折れ線に沿って求める。
+ *
+ * 散歩ルートは開始地点へ戻る周回のため、終点の座標は開始地点と同じになる。
+ * 開始地点を射影すると経路の先頭（距離0の地点）へ吸着してしまい、戻る距離ではなく
+ * 出発してからの距離になってしまうため、終点までの残りとして計算する。
+ * @param {object} conditions 計算条件
+ * @param {object|null} conditions.measure toRouteMeasureで作った測定用データ
+ * @param {{lat: number, lng: number}} conditions.fromPosition 現在の座標
+ * @param {number} conditions.maxDeviationM 経路から離れていても測定を許す上限
+ * @returns {number|null} 終点までの残り距離（メートル）。測定できない場合はnull
+ */
+export const calculateRemainingRouteDistanceM = ({
+  measure,
+  fromPosition,
+  maxDeviationM
+}) => {
+  const from = toRouteProjection(measure, fromPosition);
+
+  if (from === null || from.deviationM > maxDeviationM) {
+    return null;
+  }
+
+  return Math.max(0, measure.totalM - from.alongM);
+};

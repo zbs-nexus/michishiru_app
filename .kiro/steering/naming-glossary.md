@@ -78,6 +78,7 @@ inclusion: always
 | 経路からの離れ | deviationM | 現在地が経路の折れ線からどれだけ離れているか（メートル） |
 | 経路の測定用データ | routeMeasure | 経路の各点までの累積距離をまとめたもの。距離計算に使う |
 | 経路沿いを採用する離れの上限 | MAX_ROUTE_DEVIATION_M | これ以上経路から離れたら直線距離へ切り替える（メートル）。`useRouteProgress.js` の定数 |
+| 経路の残り距離 | remainingRouteDistanceM | 経路の終点（＝開始地点）までの残り距離（メートル） |
 
 ### 検索条件
 

@@ -2,6 +2,7 @@ import { computed, ref, watch } from 'vue';
 import { calculateDistanceM } from '@/utils/geoDistance';
 import {
   calculateAlongRouteDistanceM,
+  calculateRemainingRouteDistanceM,
   toRouteMeasure
 } from '@/utils/routeGeometry';
 
@@ -67,8 +68,18 @@ export const useRouteProgress = ({
   /** 経路の累積距離。ルートが変わったときだけ組み立て直す */
   const routeMeasure = computed(() => toRouteMeasure(geometry.value?.coordinates));
 
-  /** 次の目的地までの直線距離（メートル）。到達判定に使う */
-  const straightDistanceToNextM = computed(() => {
+  /**
+   * 戻り先となる開始地点の座標。
+   * 散歩ルートは周回のため、経路の終点が開始地点にあたる。
+   */
+  const originPosition = computed(() => {
+    const points = routeMeasure.value?.points;
+
+    return points === undefined ? null : points[points.length - 1];
+  });
+
+  /** 次のスポットまでの直線距離（メートル）。到達判定に使う */
+  const straightDistanceToNextSpotM = computed(() => {
     if (nextSpotPosition.value === null) {
       return null;
     }
@@ -77,22 +88,34 @@ export const useRouteProgress = ({
   });
 
   /**
-   * 次の目的地までの距離（メートル）。表示に使う。
-   * 経路に沿って測り、測れない場合は直線距離で代替する。
+   * 向かっている先までの距離（メートル）。表示に使う。
+   * 未到達のスポットがあればそのスポットまで、すべて到達済みなら開始地点までを返す。
+   * いずれも経路に沿って測り、測れない場合は直線距離で代替する。
    */
   const distanceToNextM = computed(() => {
-    if (nextSpotPosition.value === null) {
+    if (nextSpotPosition.value !== null) {
+      const alongRouteM = calculateAlongRouteDistanceM({
+        measure: routeMeasure.value,
+        fromPosition: currentLocation.value,
+        toPosition: nextSpotPosition.value,
+        maxDeviationM: MAX_ROUTE_DEVIATION_M
+      });
+
+      return alongRouteM ?? straightDistanceToNextSpotM.value;
+    }
+
+    // 経路の座標が無い場合は開始地点も分からないため、距離を出さない
+    if (originPosition.value === null) {
       return null;
     }
 
-    const alongRouteM = calculateAlongRouteDistanceM({
+    const remainingM = calculateRemainingRouteDistanceM({
       measure: routeMeasure.value,
       fromPosition: currentLocation.value,
-      toPosition: nextSpotPosition.value,
       maxDeviationM: MAX_ROUTE_DEVIATION_M
     });
 
-    return alongRouteM ?? straightDistanceToNextM.value;
+    return remainingM ?? calculateDistanceM(currentLocation.value, originPosition.value);
   });
 
   /** 到達済みのスポット数 */
@@ -116,7 +139,7 @@ export const useRouteProgress = ({
       return;
     }
 
-    const distanceM = straightDistanceToNextM.value;
+    const distanceM = straightDistanceToNextSpotM.value;
 
     if (distanceM === null || distanceM > ARRIVAL_THRESHOLD_M) {
       return;

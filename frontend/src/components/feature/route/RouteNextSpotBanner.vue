@@ -64,12 +64,18 @@ const distanceLabel = computed(() => {
     role="status"
     aria-live="polite"
   >
-    <p
-      v-if="isCompleted"
-      class="banner-message"
-    >
-      すべての目的地を通過しました。開始地点へ戻ります
-    </p>
+    <template v-if="isCompleted">
+      <div class="banner-header">
+        <span class="banner-label">すべての目的地を通過しました</span>
+        <span
+          v-if="distanceLabel"
+          class="banner-distance"
+        >{{ distanceLabel }}</span>
+      </div>
+      <p class="banner-name">
+        開始地点へ戻ります
+      </p>
+    </template>
 
     <template v-else-if="spotName">
       <div class="banner-header">
