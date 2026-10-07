@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { handler as createPhotoUploadUrlsHandler } from '../backend/functions/createPhotoUploadUrls/handler.js';
 import { handler as createRouteHandler } from '../backend/functions/createRoute/handler.js';
 import { handler as createReviewHandler } from '../backend/functions/createReview/handler.js';
 import { handler as getConditionsHandler } from '../backend/functions/getConditions/handler.js';
@@ -42,6 +43,12 @@ const ROUTE_HANDLERS = [
   // 環境変数 REVIEW_TABLE_NAME が必要になる。
   { method: 'GET', path: '/api/v1/spots', invoke: getSpotHandler },
   { method: 'POST', path: '/api/v1/reviews', invoke: createReviewHandler },
+  // 写真アップロードURL発行。ローカルで叩くにはAWSの認証情報と PHOTO_BUCKET_NAME が必要
+  {
+    method: 'POST',
+    path: '/api/v1/review-photo-uploads',
+    invoke: createPhotoUploadUrlsHandler
+  },
   {
     method: 'POST',
     path: '/api/v1/password-reset-verifications',
