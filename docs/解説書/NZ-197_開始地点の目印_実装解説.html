@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-197 開始地点の目印 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NZ-197 開始地点の目印と現在地の矢印の削除 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026-09-30<br>
+            <strong>🌿 ブランチ:</strong> <code>feature/NZ-197</code>（PR #54 / <code>e2826da</code>）<br>
+            <strong>📝 課題番号:</strong> NZ-197
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>地図上の変更が2つあります。</p>
+        <ol>
+            <li><strong>開始地点の目印を追加:</strong> ルートの出発地（<code>origin</code>）に、緑の丸に「S」と書いたマーカーを立てます。押すと「スタート地点」と表示されます。</li>
+            <li><strong>現在地の矢印を削除:</strong> 現在地マーカー（青い丸）に付いていた「向いている方向」の矢印をなくし、それを計算していたコードも消しました。</li>
+        </ol>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li>ミチシルの散歩は、スポットを回って出発地に戻ってくる形です。どこから出たかが地図で分からないと、帰り道の見当がつきません。</li>
+            <li>スポットのマーカー（青い丸に巡る順の番号）と同じ見た目だと区別できないため、色と文字を変えています。</li>
+            <li>矢印の削除について、コミットには「方向矢印を削除し、未使用になった計算も除去する」とだけあり、詳しい理由は書かれていません。方向はブラウザから取れないことが多く、取れない場合は直前の位置との差から推測していたため、止まっているときや GPS が揺れたときに向きが不安定だった、というのが考えられる理由です（推測です。正確な理由は担当者に確認してください）。</li>
+        </ul>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 経路の先頭の座標を取り出す</strong><br>
+            ルートを作るとき、現在地を出発地として送っています。そのため、経路の形（<code>geometry</code>）の最初の点が開始地点になります。<code>toOriginPosition</code> がこれを取り出します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: マーカーを立てる（または動かす）</strong><br>
+            <code>renderOriginMarker</code> が、まだマーカーがなければ作り、あれば位置だけ動かします。経路がないときはマーカーを消します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 描き直すタイミング</strong><br>
+            地図の読み込みが終わったとき（<code>map.on('load')</code>）と、経路が変わったとき（再作成など）に呼びます。画面を離れるときにはマーカーを片付けます。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/components/feature/route/RouteMap.vue — 開始地点の座標</h3>
+        <div class="code-block"><pre>const toOriginPosition = (geometry) =&gt; {
+  const rawGeometry = geometry === null ? null : toRaw(geometry);
+  const firstPosition = rawGeometry?.coordinates?.[0];
+
+  if (!Array.isArray(firstPosition)) {
+    return null;
+  }
+
+  const lng = Number(firstPosition[0]);
+  const lat = Number(firstPosition[1]);
+  // ...数値でなければ null
+  return [lng, lat];
+};</pre></div>
+        <ul>
+            <li>入力: 経路の形（GeoJSON の <code>LineString</code>）。出力: <code>[経度, 緯度]</code> か <code>null</code>。</li>
+            <li>座標は <code>[経度, 緯度]</code> の順です（地図ライブラリの決まり）。緯度が先ではないので注意してください。</li>
+            <li><code>toRaw</code> は、Vue が監視用に包んだオブジェクトから中身を取り出す関数です。地図ライブラリに Vue の包みを渡さないためです。</li>
+        </ul>
+
+        <h3>RouteMap.vue — マーカーを描く</h3>
+        <div class="code-block"><pre>if (originMarker === null) {
+  originMarker = new Marker({ element: createOriginMarkerElement() })
+    .setLngLat(originPosition)
+    .setPopup(new Popup({ offset: 16 }).setText(ORIGIN_POPUP_TEXT))
+    .addTo(map);
+  return;
+}
+
+// 再作成で別のルートに差し替わった場合は位置だけ更新する
+originMarker.setLngLat(originPosition);</pre></div>
+        <p>毎回作り直さず、2回目以降は位置だけを動かします。表示する文字は定数 <code>ORIGIN_MARKER_LABEL</code>（<code>'S'</code>）と <code>ORIGIN_POPUP_TEXT</code>（<code>'スタート地点'</code>）にまとめています。</p>
+
+        <h3>frontend/src/assets/styles/global.css — .origin-marker</h3>
+        <p>スポットのマーカーより一回り大きい 32px の緑の丸です。地図ライブラリはマーカーをコンポーネントの外側に挿入するので、<code>&lt;style scoped&gt;</code>（そのコンポーネントの中だけに効くスタイル）が届きません。そのため、スポットマーカーと同じく <code>global.css</code> に書いています。</p>
+
+        <h3>矢印の削除で消えたもの</h3>
+        <table>
+            <tr><th>場所</th><th>消えたもの</th></tr>
+            <tr><td><code>useLocationTracking.js</code></td><td><code>heading</code>（向き）、<code>calculateBearing</code>（2点から向きを計算）、<code>previousLocation</code>（前回の位置）</td></tr>
+            <tr><td><code>RouteMap.vue</code></td><td><code>currentHeading</code> プロパティ、<code>updateCurrentLocationHeading</code>、矢印の要素</td></tr>
+            <tr><td><code>RouteNavigationMap.vue</code> / <code>RouteNavigationView.vue</code></td><td><code>currentHeading</code> の受け渡し</td></tr>
+            <tr><td><code>global.css</code></td><td><code>.current-location-arrow</code></td></tr>
+        </table>
+        <p>使わなくなった値を親から子へ渡し続けると、読む人が「どこで使っているのか」と迷うので、受け渡しの途中まで全部消しています。</p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>開始地点は「経路の先頭」から取っている</strong><br>
+            バックエンドが経路の最初の点を出発地にしている、という前提に依存しています。将来「出発地を自由に選べる」ようにする場合などで経路の先頭が出発地でなくなったら、この取り方を見直す必要があります。
+        </div>
+        <div class="important">
+            <strong><code>global.css</code> のコメントが一部古い</strong><br>
+            現在地マーカーの説明に「青い円と方向を示す矢印で構成」というコメントが残っています。矢印はもうないので、次に触るときに直してください。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行します。</li>
+            <li>ルートを作成し、提案画面の地図で、経路の端に緑の「S」マーカーが出ることを確認します。押すと「スタート地点」と出ます。</li>
+            <li>「再作成」を押して、S マーカーが新しい経路の開始位置に移ることを確認します（1つだけ表示され、増えないこと）。</li>
+            <li>案内画面へ進み、現在地の青い丸に矢印が付いていないことを確認します。</li>
+            <li><code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code> を実行します（フロントの自動テストは未導入です）。</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteMap.vue</code></td><td>開始地点マーカーの描画、矢印の削除</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteNavigationMap.vue</code></td><td><code>currentHeading</code> の受け渡しを削除</td></tr>
+                <tr><td><code>frontend/src/composables/useLocationTracking.js</code></td><td>向きの計算を削除</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td><code>heading</code> の受け渡しを削除</td></tr>
+                <tr><td><code>frontend/src/assets/styles/global.css</code></td><td><code>.origin-marker</code> を追加、矢印のスタイルを削除</td></tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
