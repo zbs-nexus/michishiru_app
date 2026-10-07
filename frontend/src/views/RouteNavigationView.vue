@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, nextTick, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
@@ -29,6 +29,15 @@ const reviewPin = ref(null);
 
 /** 口コミ投稿フォームを表示するかどうか */
 const isReviewFormVisible = ref(false);
+
+/** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
+const bannerRef = ref(null);
+
+/** 口コミ投稿フォームの要素。可視範囲の下端を測るために参照する */
+const reviewFormRef = ref(null);
+
+/** ピンを可視範囲の中央へ寄せるための、地図中央からの縦のずれ（ピクセル） */
+const pinOffsetY = ref(0);
 
 const {
   currentLocation,
@@ -62,13 +71,37 @@ onMounted(() => {
 });
 
 /**
- * @description 地図の長押しでピンを立て、口コミ投稿フォームを開く
- * @param {{lng: number, lat: number}} position 長押しされた座標
- * @returns {void}
+ * @description バナーとフォームに挟まれた可視範囲の中央にピンが来るよう、
+ * 地図中央からの縦のずれ（ピクセル）を求める。
+ * 上端はバナーの下端、下端はフォームの高さで決まる。
+ * @returns {number} 地図中央からの縦のずれ（下方向が正）
  */
-const handleLongPressMap = (position) => {
-  reviewPin.value = position;
+const measureVisibleCenterOffsetY = () => {
+  const bannerEl = bannerRef.value?.$el ?? null;
+  const formEl = reviewFormRef.value?.$el ?? null;
+
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
+  const topInsetPx = bannerEl ? bannerEl.getBoundingClientRect().bottom : 0;
+  const bottomInsetPx = formEl ? formEl.offsetHeight : 0;
+
+  return (topInsetPx - bottomInsetPx) / 2;
+};
+
+/**
+ * @description 地図の長押しでピンを立て、口コミ投稿フォームを開く。
+ * フォームを先に開いてから高さを測り、可視範囲の中央にピンが来るよう
+ * オフセットを決めたうえでピンを立てる。
+ * @param {{lng: number, lat: number}} position 長押しされた座標
+ * @returns {Promise<void>}
+ */
+const handleLongPressMap = async (position) => {
   isReviewFormVisible.value = true;
+
+  // フォームが描画されてから高さを測る
+  await nextTick();
+  pinOffsetY.value = measureVisibleCenterOffsetY();
+
+  reviewPin.value = position;
 };
 
 /**
@@ -122,6 +155,7 @@ const handleConfirmEnd = () => {
     :has-content-padding="false"
   >
     <RouteNextSpotBanner
+      ref="bannerRef"
       :spot-name="nextSpot?.name ?? null"
       :distance-to-next-m="distanceToNextM"
       :is-completed="isCompleted"
@@ -136,11 +170,13 @@ const handleConfirmEnd = () => {
       :tracking-error="trackingError"
       :is-long-press-enabled="true"
       :pin-position="reviewPin"
+      :pin-offset-y="pinOffsetY"
       @long-press-map="handleLongPressMap"
     />
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
+      ref="reviewFormRef"
       :genre-options="genreOptions"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
