@@ -12,6 +12,7 @@ import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
 import { useGenreOptions } from '@/composables/useGenreOptions';
 import { useReviewPosting } from '@/composables/useReviewPosting';
+import { useMyReviews } from '@/composables/useMyReviews';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkRecord } from '@/composables/useWalkRecord';
 import { useRouteStore } from '@/stores/routeStore';
@@ -59,7 +60,9 @@ const { genreOptions, loadGenreOptions } = useGenreOptions();
 // 口コミの場所解決と投稿
 const {
   existingSpot,
+  isOwner,
   userRating,
+  existingPhotos,
   isResolving,
   isPosting,
   errorMessage: reviewErrorMessage,
@@ -67,6 +70,12 @@ const {
   post: postReviewContent,
   reset: resetReview
 } = useReviewPosting();
+
+// 自分が投稿した口コミ（地図のオレンジピン）
+const { myReviews, loadMyReviews } = useMyReviews();
+
+/** 自分の口コミのオレンジピンを表示するか（既定は表示） */
+const showMyReviews = ref(true);
 
 // 画面上部に出す一時メッセージ（投稿成功・エラー）
 const {
@@ -105,7 +114,17 @@ onMounted(() => {
   startTracking();
   // フォームを開いたときに待たせないよう、先にジャンルを取得しておく
   loadGenreOptions();
+  // 自分の口コミをオレンジピンで出すために取得する
+  loadMyReviews();
 });
+
+/**
+ * @description 自分の口コミのオレンジピンの表示/非表示を切り替える
+ * @returns {void}
+ */
+const toggleMyReviews = () => {
+  showMyReviews.value = !showMyReviews.value;
+};
 
 /**
  * @description バナーとフォームに挟まれた可視範囲の中央にピンが来るよう、
@@ -153,6 +172,13 @@ const handleLongPressMap = async (position) => {
 };
 
 /**
+ * @description オレンジピンをタップしたとき、その場所の口コミフォーム（本人編集）を開く
+ * @param {{lng: number, lat: number}} position タップした場所の座標
+ * @returns {Promise<void>}
+ */
+const handleSelectMyReview = (position) => handleLongPressMap(position);
+
+/**
  * @description 口コミ投稿フォームを閉じ、立てたピンを消す
  * @returns {void}
  */
@@ -178,6 +204,8 @@ const handleSubmitReview = async (review) => {
 
   handleCloseReview();
   showMessage('口コミを投稿しました', 'success');
+  // 新規・編集を地図のオレンジピンへ反映する
+  loadMyReviews();
 };
 
 /**
@@ -237,8 +265,22 @@ const handleConfirmEnd = () => {
       :is-long-press-enabled="true"
       :pin-position="reviewPin"
       :pin-offset-y="pinOffsetY"
+      :my-review-spots="myReviews"
+      :show-my-reviews="showMyReviews"
       @long-press-map="handleLongPressMap"
+      @select-my-review="handleSelectMyReview"
     />
+
+    <button
+      class="my-reviews-toggle"
+      :class="{ 'is-on': showMyReviews }"
+      type="button"
+      :aria-pressed="showMyReviews"
+      @click="toggleMyReviews"
+    >
+      <span class="my-reviews-toggle-dot" />
+      自分の口コミ
+    </button>
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
@@ -246,7 +288,9 @@ const handleConfirmEnd = () => {
       :genre-options="genreOptions"
       :pin-position="reviewPin"
       :existing-spot="existingSpot"
+      :is-owner="isOwner"
       :initial-rating="userRating"
+      :existing-photos="existingPhotos"
       :is-resolving="isResolving"
       :is-posting="isPosting"
       @submit-review="handleSubmitReview"
@@ -280,5 +324,44 @@ const handleConfirmEnd = () => {
  */
 .primary-btn.full-width {
   bottom: 44px;
+}
+
+/*
+ * 自分の口コミピンの表示切り替えボタン。
+ * 次の目的地バナー（top: 12px・中央）とズームコントロール（右上）に重ならないよう左上に置く。
+ */
+.my-reviews-toggle {
+  position: fixed;
+  top: 84px;
+  left: 12px;
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-gray);
+  background: var(--white);
+  border: none;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.my-reviews-toggle.is-on {
+  color: var(--text-dark);
+}
+
+.my-reviews-toggle-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #D8DEE4;
+}
+
+/* オン状態はオレンジの丸でピンの色と対応づける */
+.my-reviews-toggle.is-on .my-reviews-toggle-dot {
+  background: #F39C12;
 }
 </style>

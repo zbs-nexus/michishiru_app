@@ -52,10 +52,20 @@ defineProps({
   pinOffsetY: {
     type: Number,
     default: 0
+  },
+  /** 自分が投稿した口コミの場所の一覧 */
+  myReviewSpots: {
+    type: Array,
+    default: () => []
+  },
+  /** 自分の口コミのオレンジピンを表示するかどうか */
+  showMyReviews: {
+    type: Boolean,
+    default: false
   }
 });
 
-defineEmits(['longPressMap']);
+defineEmits(['longPressMap', 'selectMyReview']);
 </script>
 
 <template>
@@ -70,7 +80,10 @@ defineEmits(['longPressMap']);
         :is-long-press-enabled="isLongPressEnabled"
         :pin-position="pinPosition"
         :pin-offset-y="pinOffsetY"
+        :my-review-spots="myReviewSpots"
+        :show-my-reviews="showMyReviews"
         @long-press-map="$emit('longPressMap', $event)"
+        @select-my-review="$emit('selectMyReview', $event)"
       />
     </div>
     <div

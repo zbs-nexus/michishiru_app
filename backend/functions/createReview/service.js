@@ -74,18 +74,16 @@ const postFirstReview = async (input, repository) => {
 };
 
 /**
- * @description 既存の場所への2回目以降（または別ユーザーの初投稿・自分の編集）を処理する
+ * @description 自分の評価を追加または更新する（集計も反映する）
  * @param {object} params パラメータ
- * @param {object} params.spot 既存の場所
+ * @param {string} params.spotId 場所のID
  * @param {number} params.rating 評価
  * @param {string} params.userId ユーザーID
+ * @param {string} params.now 現在時刻（ISO文字列）
  * @param {object} repository データアクセス
- * @returns {Promise<object>} 投稿結果
- * @throws {ApplicationError} 保存に失敗した場合
+ * @returns {Promise<void>}
  */
-const postSubsequentReview = async ({ spot, rating, userId }, repository) => {
-  const { spotId } = spot;
-  const now = new Date().toISOString();
+const upsertOwnRating = async ({ spotId, rating, userId, now }, repository) => {
   const existingReview = await repository.getUserReview(spotId, userId);
 
   if (existingReview === null) {
@@ -100,8 +98,67 @@ const postSubsequentReview = async ({ spot, rating, userId }, repository) => {
       now
     });
   }
+};
 
-  const updatedSpot = await repository.getSpotById(spotId);
+/**
+ * @description 既存の場所への2回目以降（他ユーザーの投稿・評価のみ）を処理する
+ * @param {object} params パラメータ
+ * @param {object} params.spot 既存の場所
+ * @param {number} params.rating 評価
+ * @param {string} params.userId ユーザーID
+ * @param {object} repository データアクセス
+ * @returns {Promise<object>} 投稿結果
+ * @throws {ApplicationError} 保存に失敗した場合
+ */
+const postSubsequentReview = async ({ spot, rating, userId }, repository) => {
+  const now = new Date().toISOString();
+
+  await upsertOwnRating({ spotId: spot.spotId, rating, userId, now }, repository);
+
+  const updatedSpot = await repository.getSpotById(spot.spotId);
+
+  return { isFirstReview: false, spot: toSpotView(updatedSpot) };
+};
+
+/**
+ * @description 作成者本人による既存の場所の編集を処理する。
+ * 名前・ジャンル・写真を上書きし、評価も更新する。
+ * 外した写真はS3の実体も削除する（経費削減）。
+ * @param {object} params パラメータ
+ * @param {object} params.spot 既存の場所（現在の写真キーを含む）
+ * @param {object} params.input 投稿内容
+ * @param {object} repository データアクセス
+ * @returns {Promise<object>} 投稿結果
+ * @throws {ApplicationError} 名前・ジャンルが無い、または保存に失敗した場合
+ */
+const editOwnedSpot = async ({ spot, input }, repository) => {
+  const { rating, spotName, genreId, genreName, photoKeys, userId } = input;
+
+  if (spotName === null || genreId === null) {
+    throw createValidationError('ロケーション名とジャンルは空にできません');
+  }
+
+  const now = new Date().toISOString();
+  const nextPhotoKeys = photoKeys ?? [];
+
+  await repository.updateSpotMeta({
+    spotId: spot.spotId,
+    spotName,
+    genreId,
+    genreName,
+    photoKeys: nextPhotoKeys,
+    now
+  });
+
+  await upsertOwnRating({ spotId: spot.spotId, rating, userId, now }, repository);
+
+  // 編集で外された写真の実体を削除する（本体更新後のベストエフォート）
+  const removedPhotoKeys = (spot.photoKeys ?? []).filter(
+    (key) => !nextPhotoKeys.includes(key)
+  );
+  await repository.deletePhotos(removedPhotoKeys);
+
+  const updatedSpot = await repository.getSpotById(spot.spotId);
 
   return { isFirstReview: false, spot: toSpotView(updatedSpot) };
 };
@@ -138,6 +195,11 @@ export const createReview = async (
   );
 
   if (existingSpot !== null) {
+    // 作成者本人は名前・ジャンル・写真も編集でき、他ユーザーは評価のみ
+    if (existingSpot.createdByUserId === input.userId) {
+      return editOwnedSpot({ spot: existingSpot, input }, repository);
+    }
+
     return postSubsequentReview(
       { spot: existingSpot, rating: input.rating, userId: input.userId },
       repository

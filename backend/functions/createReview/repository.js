@@ -3,8 +3,10 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   QueryCommand,
-  TransactWriteCommand
+  TransactWriteCommand,
+  UpdateCommand
 } from '@aws-sdk/lib-dynamodb';
+import { DeleteObjectsCommand, S3Client } from '@aws-sdk/client-s3';
 import {
   createConflictError,
   createDataSourceError
@@ -13,6 +15,7 @@ import { logWarn } from '../../shared/utils/logger.js';
 import { toNeighborGeoCells } from '../../shared/utils/geo.js';
 import {
   GSI_GEO_CELL,
+  PHOTO_BUCKET_NAME,
   REVIEW_TABLE_NAME,
   SPOT_SORT_KEY,
   toReviewSortKey
@@ -139,7 +142,8 @@ export const toSpot = (item) => {
     position: { lng: Number(item.position?.lng), lat: Number(item.position?.lat) },
     ratingCount,
     ratingAverage: ratingCount === 0 ? 0 : ratingSum / ratingCount,
-    photoKeys: item.photoKeys ?? []
+    photoKeys: item.photoKeys ?? [],
+    createdByUserId: item.createdByUserId ?? null
   };
 };
 
@@ -337,4 +341,91 @@ export const updateReviewRating = async ({ spotId, userId, rating, delta, now })
       ]
     })
   );
+};
+
+/**
+ * @description 場所メタ（名前・ジャンル・写真）を更新する（作成者本人の編集）。
+ * 集計（評価）は別途 addReview / updateReviewRating で扱う。
+ * @param {object} params パラメータ
+ * @param {string} params.spotId 場所のID
+ * @param {string} params.spotName ロケーション名
+ * @param {string} params.genreId ジャンルID
+ * @param {string|null} params.genreName ジャンル名
+ * @param {string[]} params.photoKeys 更新後の写真キー
+ * @param {string} params.now 現在時刻（ISO文字列）
+ * @returns {Promise<void>}
+ * @throws {ApplicationError} データストアへのアクセスに失敗した場合
+ */
+export const updateSpotMeta = async ({
+  spotId,
+  spotName,
+  genreId,
+  genreName,
+  photoKeys,
+  now
+}) => {
+  try {
+    await getDocumentClient().send(
+      new UpdateCommand({
+        TableName: REVIEW_TABLE_NAME,
+        Key: { spotId, sk: SPOT_SORT_KEY },
+        UpdateExpression:
+          'SET spotName = :spotName, genreId = :genreId, genreName = :genreName, photoKeys = :photoKeys, updatedAt = :now',
+        ConditionExpression: 'attribute_exists(spotId)',
+        ExpressionAttributeValues: {
+          ':spotName': spotName,
+          ':genreId': genreId,
+          ':genreName': genreName,
+          ':photoKeys': photoKeys,
+          ':now': now
+        }
+      })
+    );
+  } catch (error) {
+    throw createDataSourceError('場所情報の更新に失敗しました', {
+      errorName: error.name
+    });
+  }
+};
+
+/** S3クライアントの生成は1度だけ行う */
+let s3Client = null;
+
+/**
+ * @description S3クライアントを取得する
+ * @returns {S3Client} 生成済みのクライアント
+ */
+const getS3Client = () => {
+  if (s3Client === null) {
+    s3Client = new S3Client({});
+  }
+
+  return s3Client;
+};
+
+/**
+ * @description 不要になった写真の実体をS3から削除する（経費削減のため）。
+ * 本体（DynamoDB）の更新は済んでいる前提のベストエフォート処理で、
+ * 失敗しても投稿自体は成功とみなせるよう、例外にせず警告ログに留める。
+ * @param {string[]} photoKeys 削除する写真キー
+ * @returns {Promise<void>}
+ */
+export const deletePhotos = async (photoKeys) => {
+  if (photoKeys.length === 0) {
+    return;
+  }
+
+  try {
+    await getS3Client().send(
+      new DeleteObjectsCommand({
+        Bucket: PHOTO_BUCKET_NAME,
+        Delete: { Objects: photoKeys.map((key) => ({ Key: key })) }
+      })
+    );
+  } catch (error) {
+    logWarn('不要になった写真の削除に失敗しました', {
+      errorName: error.name,
+      count: photoKeys.length
+    });
+  }
 };

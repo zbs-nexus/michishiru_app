@@ -30,8 +30,25 @@ export const useReviewPosting = () => {
     resolvedSpot.value?.exists ? resolvedSpot.value.spot : null
   );
 
+  /** 呼び出し元がその場所の作成者か（本人なら名前・ジャンル・写真も編集できる） */
+  const isOwner = computed(() => resolvedSpot.value?.isOwner ?? false);
+
   /** 呼び出し元がその場所に既に付けている評価。無ければ0 */
   const userRating = computed(() => resolvedSpot.value?.userReview?.rating ?? 0);
+
+  /** 既存の写真（キーと表示URLの対）。本人編集で削除候補として扱う */
+  const existingPhotos = computed(() => {
+    const spot = existingSpot.value;
+
+    if (!spot) {
+      return [];
+    }
+
+    const keys = spot.photoKeys ?? [];
+    const urls = spot.photoUrls ?? [];
+
+    return keys.map((key, index) => ({ key, url: urls[index] ?? '' }));
+  });
 
   /**
    * @description 長押し位置に投稿済みの場所があるかを解決する
@@ -63,23 +80,27 @@ export const useReviewPosting = () => {
    * @param {string|null} payload.spotName ロケーション名（初回のみ）
    * @param {string|null} payload.genreId ジャンルID（初回のみ）
    * @param {string|null} payload.genreName ジャンル名（初回のみ）
-   * @param {File[]} [payload.photos] アップロードする写真（初回のみ・最大4）
+   * @param {File[]} [payload.photos] 新しくアップロードする写真
+   * @param {string[]} [payload.keptPhotoKeys] 残す既存写真のキー（本人編集時）
    * @returns {Promise<object|null>} 成功時は投稿結果、失敗時はnull
    */
-  const post = async ({ photos = [], ...payload }) => {
+  const post = async ({ photos = [], keptPhotoKeys = [], ...payload }) => {
     isPosting.value = true;
     errorMessage.value = null;
 
     try {
-      let photoKeys = [];
+      let newPhotoKeys = [];
 
       if (photos.length > 0) {
         const uploads = await fetchPhotoUploadUrls(photos.length);
         await Promise.all(
           uploads.map((upload, index) => uploadPhoto(upload.uploadUrl, photos[index]))
         );
-        photoKeys = uploads.map((upload) => upload.key);
+        newPhotoKeys = uploads.map((upload) => upload.key);
       }
+
+      // 残す既存写真＋新規アップロードぶんが、最終的な写真キーになる
+      const photoKeys = [...keptPhotoKeys, ...newPhotoKeys];
 
       return await postReview({ ...payload, photoKeys });
     } catch (error) {
@@ -102,7 +123,9 @@ export const useReviewPosting = () => {
   return {
     resolvedSpot,
     existingSpot,
+    isOwner,
     userRating,
+    existingPhotos,
     isResolving,
     isPosting,
     errorMessage,

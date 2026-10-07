@@ -9,11 +9,10 @@ const PHOTO_MAX_COUNT = 4;
 
 /**
  * @description 画面下部に表示する口コミ投稿フォーム。
- * ロケーション名・ジャンル・5段階評価を入力し、投稿内容をemitで親へ返す。
- *
- * 投稿済みの場所（existingSpot あり）では、名前とジャンルは初回投稿者が決めた値に
- * 固定し、評価のみ入力できる「評価のみモード」になる。
- * ジャンルの選択肢は親（View）がDBから取得して渡す。
+ * 3つのモードがある。
+ * - 新規: 未投稿の場所。ロケーション名・ジャンル・評価・写真を入力して作成する。
+ * - 本人編集: 作成者本人が既存の場所を開いたとき。名前・ジャンル・写真・評価を編集できる。
+ * - 評価のみ: 他ユーザーが作った場所。名前・ジャンルは固定表示で、評価だけ付けられる。
  */
 const props = defineProps({
   /** ジャンルの選択肢（検索条件マスタ由来）。{ value, label, icon } の配列 */
@@ -26,18 +25,25 @@ const props = defineProps({
     type: Object,
     default: null
   },
-  /**
-   * 投稿済みの既存の場所。ある場合は評価のみモードになり、
-   * 名前・ジャンルは固定表示にする。未投稿の場所の場合はnull。
-   */
+  /** 投稿済みの既存の場所。未投稿の場合はnull */
   existingSpot: {
     type: Object,
     default: null
+  },
+  /** 呼び出し元がその場所の作成者か（本人なら名前・ジャンル・写真も編集できる） */
+  isOwner: {
+    type: Boolean,
+    default: false
   },
   /** 呼び出し元がこの場所に既に付けている評価。初期値として反映する */
   initialRating: {
     type: Number,
     default: 0
+  },
+  /** 既存の写真（{ key, url } の配列）。本人編集で削除候補として扱う */
+  existingPhotos: {
+    type: Array,
+    default: () => []
   },
   /** 場所の解決中かどうか（投稿ボタンを押せないようにする） */
   isResolving: {
@@ -65,11 +71,29 @@ const selectedGenreId = ref(null);
 /** 選択中の評価（0は未選択） */
 const rating = ref(props.initialRating);
 
-/** 選択中の写真（アップロード前のFile。初回投稿のみ） */
+/** 新しくアップロードする写真（File） */
 const photos = ref([]);
 
-/** 評価のみモードか（投稿済みの場所） */
-const isRatingOnly = computed(() => props.existingSpot !== null);
+/** 残す既存写真（{ key, url }）。本人編集で削除すると減る */
+const keptPhotos = ref([]);
+
+/** 拡大表示中の写真URL。nullのときは非表示 */
+const viewingPhotoUrl = ref(null);
+
+/** 投稿ボタン押下時の未入力エラー。満たしていればnull */
+const validationMessage = ref(null);
+
+/** 評価のみモードか（他ユーザーが作った場所） */
+const isRatingOnly = computed(() => props.existingSpot !== null && !props.isOwner);
+
+/** 本人編集モードか（自分が作った既存の場所） */
+const isEditing = computed(() => props.existingSpot !== null && props.isOwner);
+
+/** フォームの見出し */
+const formTitle = computed(() => (isEditing.value ? '口コミを編集' : '口コミを投稿'));
+
+/** 追加できる新規写真の残り枠（既存の残しぶんを差し引く） */
+const newPhotoRoom = computed(() => PHOTO_MAX_COUNT - keptPhotos.value.length);
 
 /** 評価のみモードで固定表示するジャンル（アイコン・名称） */
 const existingGenre = computed(() => {
@@ -97,7 +121,7 @@ const averageLabel = computed(() => {
 });
 
 /**
- * @description 入力内容を初期状態へ戻す（評価は既存評価があればその値にする）
+ * @description 入力内容を初期状態へ戻す（新規の場所向けの既定値）
  * @returns {void}
  */
 const resetInputs = () => {
@@ -105,9 +129,25 @@ const resetInputs = () => {
   selectedGenreId.value = null;
   rating.value = props.initialRating;
   photos.value = [];
+  keptPhotos.value = [];
+  validationMessage.value = null;
 };
 
-// ピンが別の場所に立て直されたら、前の場所の入力を持ち越さないようにする
+/**
+ * @description 本人編集のとき、既存の値をフォームへ反映する
+ * @returns {void}
+ */
+const prefillForEditing = () => {
+  if (!isEditing.value) {
+    return;
+  }
+
+  spotName.value = props.existingSpot.spotName ?? '';
+  selectedGenreId.value = props.existingSpot.genreId ?? null;
+  keptPhotos.value = [...props.existingPhotos];
+};
+
+// ピンが別の場所に立て直されたら、前の場所の入力を持ち越さない
 watch(
   () => props.pinPosition,
   () => {
@@ -115,7 +155,16 @@ watch(
   }
 );
 
-// 場所の解決後に既存評価が分かったら、評価の初期値へ反映する
+// 場所の解決後に既存情報が分かったら、本人編集ならプリフィルする
+watch(
+  () => props.existingSpot,
+  () => {
+    resetInputs();
+    prefillForEditing();
+  }
+);
+
+// 解決後に既存評価が分かったら、評価の初期値へ反映する
 watch(
   () => props.initialRating,
   (value) => {
@@ -123,20 +172,37 @@ watch(
   }
 );
 
-/** 投稿できる状態か */
-const canSubmit = computed(() => {
-  if (props.isPosting || props.isResolving || rating.value <= 0) {
-    return false;
-  }
-
-  // 評価のみモードは評価だけで投稿できる
-  if (isRatingOnly.value) {
-    return true;
-  }
-
-  // 初回はロケーション名とジャンルも必要
-  return spotName.value.trim().length > 0 && selectedGenreId.value !== null;
+// 入力が変わったら未入力エラーを消す（直したのに警告が残らないように）
+watch([spotName, selectedGenreId, rating], () => {
+  validationMessage.value = null;
 });
+
+/** 送信中・解決中は投稿ボタンを押せないようにする（二重送信・解決前の送信を防ぐ） */
+const isBusy = computed(() => props.isPosting || props.isResolving);
+
+/**
+ * @description 未入力の必須項目から、投稿できない理由のメッセージを組み立てる。
+ * 新規・本人編集はロケーション名・ジャンル・評価、評価のみモードは評価が必須。
+ * @returns {string|null} 不足があればメッセージ、満たしていればnull
+ */
+const buildValidationMessage = () => {
+  const missing = [];
+
+  if (!isRatingOnly.value) {
+    if (spotName.value.trim().length === 0) {
+      missing.push('ロケーション名');
+    }
+    if (selectedGenreId.value === null) {
+      missing.push('ジャンル');
+    }
+  }
+
+  if (rating.value <= 0) {
+    missing.push('5段階評価');
+  }
+
+  return missing.length > 0 ? `${missing.join('・')}を入力してください` : null;
+};
 
 /**
  * @description ジャンルを選択する
@@ -148,14 +214,51 @@ const handleSelectGenre = (genreId) => {
 };
 
 /**
+ * @description 残す既存写真から1枚を取り除く（本人編集）
+ * @param {number} index 取り除く位置
+ * @returns {void}
+ */
+const handleRemoveKeptPhoto = (index) => {
+  keptPhotos.value = keptPhotos.value.filter((_, position) => position !== index);
+};
+
+/**
+ * @description 写真を原寸で拡大表示する
+ * @param {string} url 表示する写真のURL
+ * @returns {void}
+ */
+const openPhotoViewer = (url) => {
+  viewingPhotoUrl.value = url;
+};
+
+/**
+ * @description 拡大表示を閉じる
+ * @returns {void}
+ */
+const closePhotoViewer = () => {
+  viewingPhotoUrl.value = null;
+};
+
+/**
  * @description 入力内容を投稿として親へ通知する。
- * 評価のみモードでは名前・ジャンルを送らない（nullにする）。
+ * 評価のみモードでは名前・ジャンル・写真を送らない。
+ * 本人編集・新規では、残す既存写真のキーと新規写真を渡す。
  * @returns {void}
  */
 const handleSubmit = () => {
-  if (!canSubmit.value) {
+  if (isBusy.value) {
     return;
   }
+
+  // 必須が欠けていればエラーを表示して送らない
+  const message = buildValidationMessage();
+
+  if (message !== null) {
+    validationMessage.value = message;
+    return;
+  }
+
+  validationMessage.value = null;
 
   if (isRatingOnly.value) {
     emit('submitReview', {
@@ -163,7 +266,8 @@ const handleSubmit = () => {
       genreId: null,
       genreName: null,
       rating: rating.value,
-      photos: []
+      photos: [],
+      keptPhotoKeys: []
     });
     return;
   }
@@ -177,7 +281,8 @@ const handleSubmit = () => {
     genreId: selectedGenreId.value,
     genreName: selectedGenre?.label ?? null,
     rating: rating.value,
-    photos: photos.value
+    photos: photos.value,
+    keptPhotoKeys: keptPhotos.value.map((photo) => photo.key)
   });
 };
 </script>
@@ -191,7 +296,7 @@ const handleSubmit = () => {
   >
     <div class="review-form-header">
       <h3 class="review-form-title">
-        口コミを投稿
+        {{ formTitle }}
       </h3>
       <button
         class="review-form-close"
@@ -203,7 +308,7 @@ const handleSubmit = () => {
       </button>
     </div>
 
-    <!-- 投稿済みの場所: 名前・ジャンルは固定表示にし、評価のみ受け付ける -->
+    <!-- 評価のみモード（他ユーザーが作った場所）: 名前・ジャンルは固定表示 -->
     <template v-if="isRatingOnly">
       <div class="review-existing">
         <p class="review-existing-name">
@@ -224,17 +329,24 @@ const handleSubmit = () => {
             v-for="(url, index) in existingSpot.photoUrls"
             :key="index"
           >
-            <img
-              :src="url"
-              alt=""
-              class="review-existing-photo"
+            <button
+              class="review-existing-photo-btn"
+              type="button"
+              aria-label="写真を拡大表示"
+              @click="openPhotoViewer(url)"
             >
+              <img
+                :src="url"
+                alt=""
+                class="review-existing-photo"
+              >
+            </button>
           </li>
         </ul>
       </div>
     </template>
 
-    <!-- 未投稿の場所: ロケーション名とジャンルを入力する -->
+    <!-- 新規・本人編集: ロケーション名・ジャンル・写真を入力/編集する -->
     <template v-else>
       <div class="review-field">
         <label
@@ -283,12 +395,56 @@ const handleSubmit = () => {
 
       <div class="review-field">
         <span class="review-label">写真（最大{{ PHOTO_MAX_COUNT }}枚・任意）</span>
-        <ReviewPhotoInput
-          v-model="photos"
-          :max-count="PHOTO_MAX_COUNT"
-        />
+        <div class="review-photos">
+          <!-- 本人編集で残している既存写真（削除可・タップで拡大） -->
+          <ul
+            v-if="keptPhotos.length > 0"
+            class="kept-photo-list"
+          >
+            <li
+              v-for="(photo, index) in keptPhotos"
+              :key="photo.key"
+              class="kept-photo-item"
+            >
+              <button
+                class="kept-photo-btn"
+                type="button"
+                aria-label="写真を拡大表示"
+                @click="openPhotoViewer(photo.url)"
+              >
+                <img
+                  :src="photo.url"
+                  alt=""
+                  class="kept-photo-thumb"
+                >
+              </button>
+              <button
+                class="kept-photo-remove"
+                type="button"
+                aria-label="写真を削除"
+                @click="handleRemoveKeptPhoto(index)"
+              >
+                ×
+              </button>
+            </li>
+          </ul>
+
+          <ReviewPhotoInput
+            v-model="photos"
+            :max-count="newPhotoRoom"
+            @view="openPhotoViewer"
+          />
+        </div>
       </div>
     </template>
+
+    <p
+      v-if="validationMessage"
+      class="review-error"
+      role="alert"
+    >
+      {{ validationMessage }}
+    </p>
 
     <div class="review-footer">
       <div class="review-rating">
@@ -298,11 +454,35 @@ const handleSubmit = () => {
 
       <BaseButton
         class="review-submit"
-        :is-disabled="!canSubmit"
+        :is-disabled="isBusy"
         @click="handleSubmit"
       >
         投稿
       </BaseButton>
+    </div>
+
+    <!-- 写真の原寸表示（ライトボックス） -->
+    <div
+      v-if="viewingPhotoUrl"
+      class="photo-viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="写真の拡大表示"
+      @click="closePhotoViewer"
+    >
+      <img
+        :src="viewingPhotoUrl"
+        alt=""
+        class="photo-viewer-image"
+      >
+      <button
+        class="photo-viewer-close"
+        type="button"
+        aria-label="閉じる"
+        @click="closePhotoViewer"
+      >
+        ×
+      </button>
     </div>
   </div>
 </template>
@@ -423,7 +603,64 @@ const handleSubmit = () => {
   color: var(--text-gray);
 }
 
-/* 投稿済みの場所の固定表示（名前・ジャンル・平均） */
+/* 写真欄（既存の残しぶん＋新規追加） */
+.review-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.kept-photo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.kept-photo-item {
+  position: relative;
+  width: 56px;
+  height: 56px;
+}
+
+.kept-photo-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.kept-photo-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #DDE3E8;
+}
+
+.kept-photo-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--white);
+  background: rgba(45, 62, 80, 0.9);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+/* 投稿済みの場所に付いている写真のサムネイル */
 .review-existing {
   margin-bottom: 12px;
 }
@@ -449,7 +686,6 @@ const handleSubmit = () => {
   gap: 4px;
 }
 
-/* 投稿済みの場所に付いている写真のサムネイル */
 .review-existing-photos {
   display: flex;
   flex-wrap: wrap;
@@ -459,12 +695,30 @@ const handleSubmit = () => {
   list-style: none;
 }
 
-.review-existing-photo {
+.review-existing-photo-btn {
+  display: block;
   width: 56px;
   height: 56px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.review-existing-photo {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   border-radius: 8px;
   border: 1px solid #DDE3E8;
+}
+
+/* 投稿ボタン押下時の未入力エラー */
+.review-error {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #D93025;
 }
 
 /* 評価と投稿ボタンを1行に並べ、全幅ボタンの分の高さを節約する */
@@ -490,6 +744,41 @@ const handleSubmit = () => {
   width: auto;
   min-width: 88px;
   padding: 12px 20px;
+}
+
+/* 写真の原寸表示（ライトボックス）。フォームより手前に全画面で出す */
+.photo-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+
+.photo-viewer-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.photo-viewer-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--white);
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
 }
 
 @keyframes review-form-slide-in {

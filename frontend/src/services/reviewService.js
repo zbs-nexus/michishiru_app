@@ -68,6 +68,25 @@ export const resolveSpot = async ({ lng, lat }) => {
 };
 
 /**
+ * @description 自分が投稿した口コミ一覧（地図のオレンジピン用）を取得する
+ * @returns {Promise<Array<{spotId: string, position: {lng: number, lat: number}, spotName: string, rating: number}>>} 口コミ一覧
+ * @throws {Error} 通信に失敗した場合、またはセッションが失効している場合
+ */
+export const fetchMyReviews = async () => {
+  const idToken = await fetchIdToken();
+
+  const response = await fetch(`${API_BASE_PATH}/my-reviews`, {
+    headers: { Authorization: idToken }
+  });
+
+  await ensureUsableResponse(response);
+
+  const { reviews } = await response.json();
+
+  return reviews;
+};
+
+/**
  * @description 口コミを投稿する。
  * 初回投稿は spotName / genreId / genreName を伴い、2回目以降は評価のみを送る
  * （名前・ジャンルは null で送り、サーバー側で無視される）。

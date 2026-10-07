@@ -105,7 +105,8 @@ export const toSpot = (item) => {
     position: { lng: Number(item.position?.lng), lat: Number(item.position?.lat) },
     ratingCount,
     ratingAverage: ratingCount === 0 ? 0 : ratingSum / ratingCount,
-    photoKeys: item.photoKeys ?? []
+    photoKeys: item.photoKeys ?? [],
+    createdByUserId: item.createdByUserId ?? null
   };
 };
 

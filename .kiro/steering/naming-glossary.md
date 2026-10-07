@@ -142,6 +142,8 @@ inclusion: always
 | 写真 | photo | 口コミに添える画像。場所あたり最大4枚、初回投稿時のみ設定する |
 | 写真キー | photoKeys | S3に保存した写真のオブジェクトキーの配列 |
 | 写真表示URL | photoUrls | 写真表示用の署名付きGET URLの配列（getSpotが返す） |
+| 作成者本人か | isOwner | 呼び出し元がその場所の作成者か。本人は名前・ジャンル・写真も編集できる |
+| 自分の口コミ一覧 | myReviews | 自分が投稿した口コミ（場所つき）。地図のオレンジピン表示に使う |
 | ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
 | 丸めセル | geoCell | 近接する場所を同一視するためのグリッドのセルキー。半径40mの候補絞り込みに使う |
 
@@ -328,6 +330,7 @@ inclusion: always
 | 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
 | 2026/10/07 | 口コミ投稿のバックエンド実装に伴い「口コミ」へ `ratingAverage` / `ratingCount` / `geoCell` を追加（半径40mで同じ場所とみなし、場所ごとに評価を集計する） |
 | 2026/10/07 | 口コミ写真（場所あたり最大4枚・初回投稿時・S3）の実装に伴い「口コミ」へ `photo` / `photoKeys` / `photoUrls` を追加 |
+| 2026/10/07 | 本人編集・自分の口コミのオレンジピン表示の実装に伴い「口コミ」へ `isOwner` / `myReviews` を追加 |
 | 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |
 | 2026/10/07 | API の認可（Cognito オーソライザー）の実装に伴い「認証」へ `idToken` / `sub` を追加 |
 | 2026/10/07 | マスコット（フクロウのキャラクター）の導入に伴い「マスコット」の節を新設。`mascot` / `mascotLevel` / `mascotName` / `mascotImage` / `mascotLevels` / `DEFAULT_MASCOT_LEVEL` / `MASCOT_MIN_LEVEL` / `MASCOT_MAX_LEVEL` / `speechBubble` / `MascotAvatar` / `placement` / `size` / `isDecorative` / `hasLevelLabel` を登録。`character` / `balloon` / `avatar` 単独を禁止 |
