@@ -143,13 +143,15 @@ const distanceScaleLabels = computed(() => [
   margin-bottom: 0;
 }
 
+/* おまかせの札。選ぶと紫のインクで塗られる */
 .random-icon-btn {
   width: 2rem;
   height: 2rem;
-  border: 2px solid #ddd;
+  border: 2px solid var(--border-gold);
   border-radius: 50%;
-  background-color: white;
-  color: #666;
+  background-color: var(--surface);
+  color: var(--text-gray);
+  font-family: var(--font-display);
   font-size: 1.2rem;
   font-weight: bold;
   cursor: pointer;
@@ -157,18 +159,18 @@ const distanceScaleLabels = computed(() => [
 }
 
 .random-icon-btn:hover {
-  border-color: #999;
-  background-color: #f5f5f5;
+  border-color: var(--accent-gold);
+  background-color: var(--bg-deep);
 }
 
 .random-icon-btn.selected {
-  border-color: #1f5fa8;
-  background-color: #1f5fa8;
-  color: white;
+  border-color: var(--accent-gold);
+  background-color: var(--primary-color);
+  color: var(--white);
 }
 
 .random-message {
-  color: #1f5fa8;
+  color: var(--primary-color);
   font-weight: bold;
 }
 </style>
