@@ -204,6 +204,8 @@ inclusion: always
 | ログイン済みかどうか | isSignedIn | - |
 | パスワードを表示中かどうか | isPasswordVisible | 目のアイコンでパスワードを平文表示しているかどうか |
 | 表示ボタンを出せるかどうか | isPasswordRevealAvailable | エラー直後は false にし、入力が修正されるまで表示ボタンを出さない |
+| IDトークン | idToken | Cognito が発行する、ユーザーの属性（sub など）を含むトークン。API の認可で Authorization ヘッダーに載せる |
+| ユーザーの一意なID | sub | Cognito が発行する不変のユーザー識別子。ユーザー名は変更され得るためデータのキーにはこちらを使う |
 
 `logout` は使わない（`signOut` に統一）。`register` / `signup`（大文字なし）も使わない。
 `forgotPassword` / `reissuePassword` も使わない（`resetPassword` に統一）。Cognito は新しいパスワードを発行せず利用者に決めさせるため、「再発行」ではなく「再設定」と呼ぶ。
@@ -292,3 +294,4 @@ inclusion: always
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
 | 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
 | 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |
+| 2026/10/07 | API の認可（Cognito オーソライザー）の実装に伴い「認証」へ `idToken` / `sub` を追加 |

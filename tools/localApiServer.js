@@ -17,6 +17,15 @@ const PORT = Number(process.env.LOCAL_API_PORT ?? 3001);
 const HOST = '127.0.0.1';
 
 /**
+ * ローカル開発で認可済みとみなすユーザーの識別子（CognitoのsubにあたるID）。
+ * 本番のデータと見分けが付くよう、実在しそうなUUID形式にはしない。
+ */
+const LOCAL_DEV_USER_SUB = 'local-dev-user';
+
+/** ローカル開発で認可済みとみなすユーザー名 */
+const LOCAL_DEV_USERNAME = 'local-dev';
+
+/**
  * パスとLambdaハンドラの対応。
  * createRoute は Location Service と Bedrock を実際に呼び出すため、
  * ローカルで叩くにはAWSの認証情報（`AWS_PROFILE` 等）が必要になる。
@@ -63,7 +72,21 @@ const buildEvent = (request, requestUrl, body) => ({
   path: requestUrl.pathname,
   queryStringParameters: Object.fromEntries(requestUrl.searchParams.entries()),
   headers: request.headers,
-  body
+  body,
+  // 本番ではAPI GatewayのCognitoオーソライザーが検証した結果をここへ入れる。
+  // このハーネスは認可を模倣するだけで検証はしない（Authorizationヘッダーの中身は見ない）。
+  // そうしてよい理由は、127.0.0.1でのみ待ち受けており、tools/配下でデプロイ対象外のため。
+  // 本番の認可はAPI Gatewayが行う。
+  // 後続のタスクでLambdaが event.requestContext.authorizer.claims.sub を読むため、
+  // ローカルでも同じ形のイベントを渡しておく。
+  requestContext: {
+    authorizer: {
+      claims: {
+        sub: LOCAL_DEV_USER_SUB,
+        'cognito:username': LOCAL_DEV_USERNAME
+      }
+    }
+  }
 });
 
 const server = createServer(async (request, response) => {
