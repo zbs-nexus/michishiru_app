@@ -628,6 +628,46 @@ body {
   border-radius: 50%;
 }
 
+/*
+ * 自分が投稿した口コミのオレンジのピン。
+ * RouteMap.vue が動的に生成し、MapLibre がコンポーネントの外側へ挿入するため、
+ * 他のマーカーと同じ理由でグローバルに定義している。
+ * 赤（長押し）・青（スポット）・緑（開始）と色で見分ける。しずく型は location-pin と同じ構造。
+ */
+.my-review-pin {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.my-review-pin-head {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  background: #F39C12;
+  border: 3px solid var(--white);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  box-shadow: var(--shadow);
+}
+
+.my-review-pin-head::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
+  background: var(--white);
+  border-radius: 50%;
+}
+
 /* ルート情報カード */
 .route-info-card {
   background: var(--white);

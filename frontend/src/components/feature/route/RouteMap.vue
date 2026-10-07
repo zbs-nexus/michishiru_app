@@ -84,10 +84,20 @@ const props = defineProps({
   pinOffsetY: {
     type: Number,
     default: 0
+  },
+  /** 自分が投稿した口コミの場所（{ spotId, position, spotName } の配列） */
+  myReviewSpots: {
+    type: Array,
+    default: () => []
+  },
+  /** 自分の口コミのオレンジピンを表示するかどうか */
+  showMyReviews: {
+    type: Boolean,
+    default: false
   }
 });
 
-const emit = defineEmits(['longPressMap']);
+const emit = defineEmits(['longPressMap', 'selectMyReview']);
 
 /** ルートの経路を保持するソースのID */
 const ROUTE_SOURCE_ID = 'route';
@@ -123,6 +133,7 @@ let markers = [];
 let originMarker = null;
 let currentLocationMarker = null;
 let pinMarker = null;
+let myReviewMarkers = [];
 let recenterControl = null;
 
 /**
@@ -407,6 +418,55 @@ const renderPinMarker = () => {
 };
 
 /**
+ * @description 自分の口コミ（オレンジピン）のDOM要素を作る。
+ * 回転がMapLibreの位置transformと競合しないよう、内側の要素で回転させる。
+ * @returns {HTMLElement} マーカーとして使う要素
+ */
+const createMyReviewMarkerElement = () => {
+  const container = document.createElement('div');
+  container.className = 'my-review-pin';
+
+  const head = document.createElement('div');
+  head.className = 'my-review-pin-head';
+  container.appendChild(head);
+
+  return container;
+};
+
+/**
+ * @description 自分の口コミのオレンジピンを描き直す。
+ * 表示オフのときは消す。ピンをタップするとその場所を親へ通知する。
+ * @returns {void}
+ */
+const renderMyReviewMarkers = () => {
+  myReviewMarkers.forEach((marker) => marker.remove());
+  myReviewMarkers = [];
+
+  if (!props.showMyReviews) {
+    return;
+  }
+
+  myReviewMarkers = props.myReviewSpots
+    .filter(
+      (spot) =>
+        Number.isFinite(spot.position?.lng) && Number.isFinite(spot.position?.lat)
+    )
+    .map((spot) => {
+      const element = createMyReviewMarkerElement();
+
+      element.addEventListener('click', (event) => {
+        // 地図のクリックや長押し判定に伝播させない
+        event.stopPropagation();
+        emit('selectMyReview', { lng: spot.position.lng, lat: spot.position.lat });
+      });
+
+      return new Marker({ element, anchor: 'bottom' })
+        .setLngLat([spot.position.lng, spot.position.lat])
+        .addTo(map);
+    });
+};
+
+/**
  * @description ルート全体とスポットが収まる位置まで地図を寄せる
  * @returns {void}
  */
@@ -529,6 +589,7 @@ onMounted(() => {
     renderSpotMarkers();
     renderCurrentLocationMarker();
     renderPinMarker();
+    renderMyReviewMarkers();
     fitToRoute();
   });
 });
@@ -574,6 +635,19 @@ watch(
   { deep: true }
 );
 
+// 自分の口コミピンの一覧・表示切り替えに追従する
+watch(
+  () => [props.myReviewSpots, props.showMyReviews],
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    renderMyReviewMarkers();
+  },
+  { deep: true }
+);
+
 onBeforeUnmount(() => {
   markers.forEach((marker) => marker.remove());
   markers = [];
@@ -585,6 +659,8 @@ onBeforeUnmount(() => {
   }
   pinMarker?.remove();
   pinMarker = null;
+  myReviewMarkers.forEach((marker) => marker.remove());
+  myReviewMarkers = [];
   // コントロールは map.remove() で破棄されるため、参照だけ落とす
   recenterControl = null;
   map?.remove();

@@ -19,7 +19,7 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['update:modelValue']);
+const emit = defineEmits(['update:modelValue', 'view']);
 
 /** プレビュー用のオブジェクトURL。modelValueに追従して作り直す */
 const previewUrls = ref([]);
@@ -82,11 +82,18 @@ const handleRemove = (index) => {
         :key="url"
         class="photo-item"
       >
-        <img
-          :src="url"
-          alt=""
-          class="photo-thumb"
+        <button
+          class="photo-thumb-btn"
+          type="button"
+          aria-label="写真を拡大表示"
+          @click="$emit('view', url)"
         >
+          <img
+            :src="url"
+            alt=""
+            class="photo-thumb"
+          >
+        </button>
         <button
           class="photo-remove"
           type="button"
@@ -136,6 +143,16 @@ const handleRemove = (index) => {
   position: relative;
   width: 56px;
   height: 56px;
+}
+
+.photo-thumb-btn {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
 }
 
 .photo-thumb {
