@@ -19,6 +19,7 @@ const createSpot = (overrides = {}) => ({
   ratingCount: 2,
   ratingAverage: 4.5,
   photoKeys: [],
+  createdByUserId: 'owner-1',
   ...overrides
 });
 
@@ -39,17 +40,21 @@ describe('getSpot', () => {
     assert.equal(result.userReview, null);
   });
 
-  it('認証済みなら呼び出し元の既存評価も返す', async () => {
+  it('認証済みなら呼び出し元の既存評価と作成者かどうかを返す', async () => {
     const repository = {
       findNearbySpots: async () => [createSpot()],
       getUserReview: async () => ({ rating: 3 }),
       createPhotoViewUrls: async () => []
     };
 
-    const result = await getSpot({ position: POSITION, userId: 'user-1' }, repository);
+    const owner = await getSpot({ position: POSITION, userId: 'owner-1' }, repository);
+    assert.equal(owner.isOwner, true);
+    assert.equal(owner.userReview.rating, 3);
+    // 他ユーザーのIDは返さない
+    assert.equal(owner.spot.createdByUserId, undefined);
 
-    assert.equal(result.exists, true);
-    assert.equal(result.userReview.rating, 3);
+    const other = await getSpot({ position: POSITION, userId: 'user-2' }, repository);
+    assert.equal(other.isOwner, false);
   });
 
   it('半径40mより遠い候補しかなければ exists:false を返す', async () => {

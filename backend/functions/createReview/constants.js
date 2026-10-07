@@ -6,6 +6,9 @@
 /** 口コミ（場所メタ＋口コミ）を格納するテーブル名 */
 export const REVIEW_TABLE_NAME = process.env.REVIEW_TABLE_NAME ?? '';
 
+/** 口コミ写真を格納するS3バケット名（本人編集で削除された写真の実体を消す） */
+export const PHOTO_BUCKET_NAME = process.env.PHOTO_BUCKET_NAME ?? '';
+
 /** 近接するスポットをセルで引くためのGSI名 */
 export const GSI_GEO_CELL = 'GSI-GeoCell';
 

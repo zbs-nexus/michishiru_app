@@ -34,6 +34,16 @@ const createRepositoryStub = (overrides = {}) => {
       overrides.updateReviewRating ??
       (async (arg) => {
         calls.updateReviewRating = arg;
+      }),
+    updateSpotMeta:
+      overrides.updateSpotMeta ??
+      (async (arg) => {
+        calls.updateSpotMeta = arg;
+      }),
+    deletePhotos:
+      overrides.deletePhotos ??
+      (async (arg) => {
+        calls.deletePhotos = arg;
       })
   };
 };
@@ -51,6 +61,8 @@ const createSpot = (overrides = {}) => ({
   position: POSITION,
   ratingCount: 1,
   ratingAverage: 5,
+  photoKeys: [],
+  createdByUserId: 'owner-1',
   ...overrides
 });
 
@@ -148,6 +160,61 @@ describe('createReview', () => {
     assert.ok(repository.calls.updateReviewRating);
     assert.equal(repository.calls.updateReviewRating.delta, 3);
     assert.equal(repository.calls.addReview, undefined);
+  });
+
+  it('作成者本人は名前・ジャンル・写真を更新し、外した写真を削除する', async () => {
+    const repository = createRepositoryStub({
+      findNearbySpots: async () => [
+        createSpot({ photoKeys: ['review-photos/old', 'review-photos/keep'] })
+      ],
+      getUserReview: async () => ({ rating: 4 }),
+      getSpotById: async () => createSpot({ ratingCount: 1, ratingAverage: 5 })
+    });
+
+    await createReview(
+      {
+        position: POSITION,
+        rating: 5,
+        spotName: '新名称',
+        genreId: 'city',
+        genreName: '街歩き',
+        photoKeys: ['review-photos/keep', 'review-photos/new'],
+        userId: 'owner-1'
+      },
+      repository
+    );
+
+    assert.ok(repository.calls.updateSpotMeta);
+    assert.equal(repository.calls.updateSpotMeta.spotName, '新名称');
+    assert.equal(repository.calls.updateSpotMeta.genreId, 'city');
+    // 外した写真（old）だけ削除、keep は残す
+    assert.deepEqual(repository.calls.deletePhotos, ['review-photos/old']);
+    // 評価も更新される（4 → 5）
+    assert.ok(repository.calls.updateReviewRating);
+  });
+
+  it('作成者以外は名前・ジャンルを変更できず評価のみになる', async () => {
+    const repository = createRepositoryStub({
+      findNearbySpots: async () => [createSpot({ createdByUserId: 'owner-1' })],
+      getUserReview: async () => null,
+      getSpotById: async () => createSpot({ ratingCount: 2, ratingAverage: 4 })
+    });
+
+    await createReview(
+      {
+        position: POSITION,
+        rating: 4,
+        spotName: '別の名前',
+        genreId: 'city',
+        genreName: '街歩き',
+        photoKeys: [],
+        userId: 'user-2'
+      },
+      repository
+    );
+
+    assert.equal(repository.calls.updateSpotMeta, undefined);
+    assert.ok(repository.calls.addReview);
   });
 
   it('ユーザーIDが無い場合はUNAUTHORIZEDを投げる', async () => {

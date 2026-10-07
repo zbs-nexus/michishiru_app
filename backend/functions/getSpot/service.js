@@ -35,5 +35,10 @@ export const getSpot = async ({ position, userId }, repository = spotRepository)
   const userReview =
     userId === null ? null : await repository.getUserReview(spot.spotId, userId);
 
-  return { exists: true, spot: { ...spot, photoUrls }, userReview };
+  // 呼び出し元がこの場所の作成者か（本人なら名前・ジャンル・写真も編集できる）。
+  // 他ユーザーのIDは外へ出さないよう、createdByUserId は返却から除く
+  const { createdByUserId, ...publicSpot } = spot;
+  const isOwner = userId !== null && createdByUserId === userId;
+
+  return { exists: true, spot: { ...publicSpot, photoUrls }, isOwner, userReview };
 };
