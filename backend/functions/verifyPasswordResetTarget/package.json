@@ -1,0 +1,11 @@
+{
+  "name": "verify-password-reset-target",
+  "version": "1.0.0",
+  "description": "パスワード再設定の対象（ユーザー名とメールアドレスの組み合わせ）を照合するLambda関数",
+  "private": true,
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1128.0"
+  }
+}

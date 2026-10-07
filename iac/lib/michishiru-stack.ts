@@ -276,10 +276,51 @@ export class MichishiruStack extends cdk.Stack {
 
       conditionTable.grantReadData(getConditionsFn);
 
+      // Lambda: verifyPasswordResetTarget ハンドラ
+      // （パスワード再設定の前に、ユーザー名とメールアドレスの組み合わせを照合する）
+      // ブラウザからはユーザーの登録情報を参照できないため、サーバー側で確かめる。
+      // Cognito のクライアントがランタイムに同梱されている保証がないため、バンドルする。
+      const verifyPasswordResetTargetFn = new nodejs.NodejsFunction(
+        this,
+        'VerifyPasswordResetTargetFunction',
+        {
+          runtime: lambda.Runtime.NODEJS_LATEST,
+          entry: path.join(
+            backendDir,
+            'functions',
+            'verifyPasswordResetTarget',
+            'handler.js'
+          ),
+          handler: 'handler',
+          projectRoot: backendDir,
+          depsLockFilePath: path.join(backendDir, 'package-lock.json'),
+          memorySize: 256,
+          timeout: cdk.Duration.seconds(10),
+          environment: {
+            USER_POOL_ID: userPool.userPoolId
+          },
+          bundling: {
+            externalModules: [],
+            minify: true,
+            sourceMap: false
+          }
+        }
+      );
+
+      // 照合に必要な読み取りだけを、作成したユーザープールに限って許可する
+      verifyPasswordResetTargetFn.addToRolePolicy(
+        new iam.PolicyStatement({
+          sid: 'ReadUserForPasswordReset',
+          actions: ['cognito-idp:AdminGetUser'],
+          resources: [userPool.userPoolArn]
+        })
+      );
+
       // API Gateway
-      //   GET  /api/v1/routes     既存ルートの取得
-      //   POST /api/v1/routes     条件からルートを生成
-      //   GET  /api/v1/conditions 検索条件マスタの取得
+      //   GET  /api/v1/routes                      既存ルートの取得
+      //   POST /api/v1/routes                      条件からルートを生成
+      //   GET  /api/v1/conditions                  検索条件マスタの取得
+      //   POST /api/v1/password-reset-verifications ユーザー名とメールアドレスの照合
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
         description: 'ミチシル ルート取得 API',
@@ -300,6 +341,15 @@ export class MichishiruStack extends cdk.Stack {
       conditionsResource.addMethod(
         'GET',
         new apigateway.LambdaIntegration(getConditionsFn)
+      );
+
+      // POST /api/v1/password-reset-verifications
+      const passwordResetVerificationsResource = v1Resource.addResource(
+        'password-reset-verifications'
+      );
+      passwordResetVerificationsResource.addMethod(
+        'POST',
+        new apigateway.LambdaIntegration(verifyPasswordResetTargetFn)
       );
 
       apiOrigin = new origins.RestApiOrigin(api);

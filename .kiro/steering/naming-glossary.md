@@ -78,6 +78,12 @@ inclusion: always
 | 経路からの離れ | deviationM | 現在地が経路の折れ線からどれだけ離れているか（メートル） |
 | 経路の測定用データ | routeMeasure | 経路の各点までの累積距離をまとめたもの。距離計算に使う |
 | 経路沿いを採用する離れの上限 | MAX_ROUTE_DEVIATION_M | これ以上経路から離れたら直線距離へ切り替える（メートル）。`useRouteProgress.js` の定数 |
+| 実績の総距離 | totalDistanceM | 実際に歩いた距離（メートル）。GPSの軌跡から積算する |
+| 測位できたかどうか | hasLocationFix | 一度でも現在地を採用できたか。できていない場合は実績を計測できない |
+| 区間距離 | segmentDistanceM | 前回採用した地点から現在地までの距離（メートル） |
+| 採用する最小区間距離 | MIN_SEGMENT_DISTANCE_M | これを下回る移動はGPSのゆらぎとみなして積算しない。`useWalkRecord.js` の定数 |
+| 採用する最大区間距離 | MAX_SEGMENT_DISTANCE_M | これを上回る移動は測位の飛びとみなして積算しない。`useWalkRecord.js` の定数 |
+| 距離を積算できる精度の上限 | MAX_MEASURABLE_ACCURACY_M | これより精度が悪い測位では距離を積算しない（メートル）。`useWalkRecord.js` の定数。現在地の採用を決める `MAX_ACCEPTABLE_ACCURACY_M` とは目的が別 |
 
 ### 検索条件
 
@@ -118,6 +124,9 @@ inclusion: always
 | 案内 | navigation | ルートに沿って歩く際の画面・機能 |
 | 再作成 | regenerate | 同じ条件で別のルートを作り直すこと |
 | ロード中 | loading | 処理中の状態 |
+| 散歩の開始時刻 | startedAt | 案内を開始した時刻 |
+| 散歩の終了時刻 | endedAt | 案内を終了した時刻 |
+| 経過時間 | elapsedMinutes | 案内の開始から終了までの時間（分） |
 
 ### 口コミ
 
@@ -190,7 +199,10 @@ inclusion: always
 | パスワード再設定（画面・行為） | resetPassword | 画面名は「パスワードの再設定」、コード上は `resetPassword`（`/password-reset` / `isResettingPassword`） |
 | パスワード再設定の確認 | confirmResetPassword | 確認コードと新しいパスワードで再設定を確定すること |
 | 新しいパスワード | newPassword | 再設定で利用者が決めるパスワード |
+| 確認パスワード | passwordConfirmation | 打ち間違いを防ぐため、パスワードをもう一度入力させる欄 |
+| 入力チェックの結果 | fieldErrors | 項目名をキーに、エラー文言を持つオブジェクト。エラーが無い項目は持たない |
 | ログイン済みかどうか | isSignedIn | - |
+| パスワードを表示中かどうか | isPasswordVisible | 表示ボタンでパスワードを平文表示しているかどうか |
 
 `logout` は使わない（`signOut` に統一）。`register` / `signup`（大文字なし）も使わない。
 `forgotPassword` / `reissuePassword` も使わない（`resetPassword` に統一）。Cognito は新しいパスワードを発行せず利用者に決めさせるため、「再発行」ではなく「再設定」と呼ぶ。
@@ -274,6 +286,8 @@ inclusion: always
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
 | 2026/09/30 | ユーザー登録画面の追加に伴い「認証」の節を新設。未登録だったログイン関連の語（login / signIn / signOut / isSignedIn / username / password）と、登録で使う語（signUp / email / confirmationCode / confirmSignUp）を登録。`logout` / `register` を禁止 |
 | 2026/09/30 | パスワード再設定画面の追加に伴い「認証」へ `resetPassword` / `confirmResetPassword` / `newPassword` を登録。`forgotPassword` / `reissuePassword` を禁止し、「再発行」ではなく「再設定」と呼ぶことを明記 |
+| 2026/09/30 | 認証フォームの入力チェック追加に伴い「認証」へ `passwordConfirmation` / `fieldErrors` / `isPasswordVisible` を登録 |
 | 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
 | 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
+| 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |
