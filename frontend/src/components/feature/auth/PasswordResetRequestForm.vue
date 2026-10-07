@@ -85,11 +85,6 @@ const handleSubmit = () => {
     novalidate
     @submit.prevent="handleSubmit"
   >
-    <p class="auth-note">
-      登録済みのユーザー名と、そのユーザーに登録したメールアドレスを入力してください。
-      組み合わせが一致した場合に、パスワードを再設定するための確認コードを送ります。
-    </p>
-
     <div class="auth-field">
       <label
         class="auth-label"

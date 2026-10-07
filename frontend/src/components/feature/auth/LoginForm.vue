@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
+import PasswordVisibilityButton from '@/components/feature/auth/PasswordVisibilityButton.vue';
 import {
   PASSWORD_MAX_LENGTH,
   USERNAME_MAX_LENGTH
@@ -62,19 +63,20 @@ watch(
 );
 
 /**
- * @description ユーザー名が修正されたら、その項目のエラーを消す
+ * @description 修正された項目のエラーを消す
+ * @param {string} fieldName 項目名
  * @returns {void}
  */
-const handleUsernameInput = () => {
-  fieldErrors.value.username = null;
+const clearFieldError = (fieldName) => {
+  fieldErrors.value[fieldName] = null;
 };
 
 /**
- * @description パスワードが修正されたら、エラーを消して表示ボタンを使えるようにする
+ * @description パスワードが修正されたら、エラーを消して表示ボタンを出せるようにする
  * @returns {void}
  */
 const handlePasswordInput = () => {
-  fieldErrors.value.password = null;
+  clearFieldError('password');
   enablePasswordReveal();
 };
 
@@ -133,7 +135,7 @@ const handleSubmit = () => {
         :disabled="isSigningIn"
         :aria-invalid="fieldErrors.username !== null"
         aria-describedby="login-username-error"
-        @input="handleUsernameInput"
+        @input="clearFieldError('username')"
       >
       <span
         v-if="fieldErrors.username"
@@ -163,16 +165,12 @@ const handleSubmit = () => {
           @input="handlePasswordInput"
         >
         <!-- エラーが出た後は、入力が修正されるまでこのボタンを出さない -->
-        <button
+        <PasswordVisibilityButton
           v-if="isPasswordRevealAvailable"
-          class="auth-reveal-btn"
-          type="button"
-          :aria-pressed="isPasswordVisible"
-          :disabled="isSigningIn"
-          @click="togglePasswordVisibility"
-        >
-          {{ isPasswordVisible ? '非表示' : '表示' }}
-        </button>
+          :is-password-visible="isPasswordVisible"
+          :is-disabled="isSigningIn"
+          @toggle-visibility="togglePasswordVisibility"
+        />
       </div>
       <span
         v-if="fieldErrors.password"

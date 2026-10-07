@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
+import PasswordVisibilityButton from '@/components/feature/auth/PasswordVisibilityButton.vue';
 import {
   CONFIRMATION_CODE_LENGTH,
   PASSWORD_MAX_LENGTH,
@@ -37,14 +38,9 @@ const props = defineProps({
 
 const emit = defineEmits(['submitPasswordReset', 'resendCode']);
 
-const {
-  isPasswordVisible,
-  isPasswordRevealAvailable,
-  passwordInputType,
-  togglePasswordVisibility,
-  disablePasswordReveal,
-  enablePasswordReveal
-} = usePasswordVisibility();
+// 表示の状態は欄ごとに持つ。片方を平文にしても、もう片方は隠したままにする
+const newPasswordVisibility = usePasswordVisibility();
+const passwordConfirmationVisibility = usePasswordVisibility();
 
 /** 入力中の確認コード */
 const confirmationCode = ref('');
@@ -62,12 +58,21 @@ const fieldErrors = ref({
   passwordConfirmation: null
 });
 
+/**
+ * @description 両方のパスワード欄の表示ボタンを隠す
+ * @returns {void}
+ */
+const disableAllPasswordReveal = () => {
+  newPasswordVisibility.disablePasswordReveal();
+  passwordConfirmationVisibility.disablePasswordReveal();
+};
+
 // 再設定に失敗したときも、修正されるまで表示ボタンを出さない
 watch(
   () => props.errorMessage,
   (message) => {
     if (message !== null) {
-      disablePasswordReveal();
+      disableAllPasswordReveal();
     }
   }
 );
@@ -82,14 +87,23 @@ const clearFieldError = (fieldName) => {
 };
 
 /**
- * @description パスワードが修正されたら、エラーを消して表示ボタンを使えるようにする。
+ * @description 新しいパスワードが修正されたら、エラーを消して表示ボタンを出せるようにする。
  * 確認パスワードとの一致も取り直すため、両方のエラーを消す。
  * @returns {void}
  */
 const handlePasswordInput = () => {
   clearFieldError('newPassword');
   clearFieldError('passwordConfirmation');
-  enablePasswordReveal();
+  newPasswordVisibility.enablePasswordReveal();
+};
+
+/**
+ * @description 確認パスワードが修正されたときの処理
+ * @returns {void}
+ */
+const handlePasswordConfirmationInput = () => {
+  clearFieldError('passwordConfirmation');
+  passwordConfirmationVisibility.enablePasswordReveal();
 };
 
 /**
@@ -110,7 +124,7 @@ const handleSubmit = () => {
   };
 
   if (!hasNoFieldError(fieldErrors.value)) {
-    disablePasswordReveal();
+    disableAllPasswordReveal();
     return;
   }
 
@@ -174,7 +188,7 @@ const handleSubmit = () => {
         <input
           id="password-reset-new-password"
           v-model="newPassword"
-          :type="passwordInputType"
+          :type="newPasswordVisibility.passwordInputType.value"
           name="newPassword"
           autocomplete="new-password"
           :maxlength="PASSWORD_MAX_LENGTH"
@@ -184,16 +198,13 @@ const handleSubmit = () => {
           @input="handlePasswordInput"
         >
         <!-- エラーが出た後は、入力が修正されるまでこのボタンを出さない -->
-        <button
-          v-if="isPasswordRevealAvailable"
-          class="auth-reveal-btn"
-          type="button"
-          :aria-pressed="isPasswordVisible"
-          :disabled="isResettingPassword"
-          @click="togglePasswordVisibility"
-        >
-          {{ isPasswordVisible ? '非表示' : '表示' }}
-        </button>
+        <PasswordVisibilityButton
+          v-if="newPasswordVisibility.isPasswordRevealAvailable.value"
+          :is-password-visible="newPasswordVisibility.isPasswordVisible.value"
+          :is-disabled="isResettingPassword"
+          label="新しいパスワード"
+          @toggle-visibility="newPasswordVisibility.togglePasswordVisibility"
+        />
       </div>
       <span
         id="password-reset-new-password-hint"
@@ -213,18 +224,31 @@ const handleSubmit = () => {
         class="auth-label"
         for="password-reset-password-confirmation"
       >新しいパスワード（確認）</label>
-      <input
-        id="password-reset-password-confirmation"
-        v-model="passwordConfirmation"
-        :type="passwordInputType"
-        name="passwordConfirmation"
-        autocomplete="new-password"
-        :maxlength="PASSWORD_MAX_LENGTH"
-        :disabled="isResettingPassword"
-        :aria-invalid="fieldErrors.passwordConfirmation !== null"
-        aria-describedby="password-reset-password-confirmation-error"
-        @input="clearFieldError('passwordConfirmation')"
-      >
+      <div class="auth-password">
+        <input
+          id="password-reset-password-confirmation"
+          v-model="passwordConfirmation"
+          :type="passwordConfirmationVisibility.passwordInputType.value"
+          name="passwordConfirmation"
+          autocomplete="new-password"
+          :maxlength="PASSWORD_MAX_LENGTH"
+          :disabled="isResettingPassword"
+          :aria-invalid="fieldErrors.passwordConfirmation !== null"
+          aria-describedby="password-reset-password-confirmation-error"
+          @input="handlePasswordConfirmationInput"
+        >
+        <PasswordVisibilityButton
+          v-if="passwordConfirmationVisibility.isPasswordRevealAvailable.value"
+          :is-password-visible="
+            passwordConfirmationVisibility.isPasswordVisible.value
+          "
+          :is-disabled="isResettingPassword"
+          label="確認パスワード"
+          @toggle-visibility="
+            passwordConfirmationVisibility.togglePasswordVisibility
+          "
+        />
+      </div>
       <span
         v-if="fieldErrors.passwordConfirmation"
         id="password-reset-password-confirmation-error"
