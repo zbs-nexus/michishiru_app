@@ -94,7 +94,28 @@ describe('PasswordResetConfirmForm', () => {
     );
   });
 
-  test('エラー後は新しいパスワードを修正するまで表示ボタンを出さない', async () => {
+  test('初期状態では両方のパスワードを隠して表示する', () => {
+    const wrapper = mount(PasswordResetConfirmForm);
+
+    expect(
+      wrapper.find('#password-reset-new-password').attributes('type')
+    ).toBe('password');
+    expect(
+      wrapper.find('#password-reset-password-confirmation').attributes('type')
+    ).toBe('password');
+  });
+
+  test('目のアイコンで新しいパスワードを平文にできる', async () => {
+    const wrapper = mount(PasswordResetConfirmForm);
+
+    await wrapper.findAll('.password-visibility-btn')[0].trigger('click');
+
+    expect(
+      wrapper.find('#password-reset-new-password').attributes('type')
+    ).toBe('text');
+  });
+
+  test('エラー後は新しいパスワードを修正するまでアイコンを出さない', async () => {
     const wrapper = mount(PasswordResetConfirmForm);
 
     await submitWith(wrapper, {
@@ -102,13 +123,13 @@ describe('PasswordResetConfirmForm', () => {
       newPassword: '',
       passwordConfirmation: ''
     });
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.password-visibility-btn')).toHaveLength(0);
 
     await wrapper.find('#password-reset-code').setValue('123456');
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.password-visibility-btn')).toHaveLength(0);
 
     await wrapper.find('#password-reset-new-password').setValue('Abcdef1!');
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.password-visibility-btn')).toHaveLength(1);
   });
 
   test('確認コードの再送を親へ知らせる', async () => {

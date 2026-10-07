@@ -120,18 +120,32 @@ describe('SignUpForm', () => {
     );
   });
 
-  test('表示ボタンはパスワードと確認パスワードの両方に効く', async () => {
+  test('初期状態では両方のパスワードを隠して表示する', () => {
     const wrapper = mount(SignUpForm);
 
-    await wrapper.find('.auth-reveal-btn').trigger('click');
+    expect(wrapper.find('#sign-up-password').attributes('type')).toBe(
+      'password'
+    );
+    expect(
+      wrapper.find('#sign-up-password-confirmation').attributes('type')
+    ).toBe('password');
+  });
+
+  test('表示切替は欄ごとに独立している', async () => {
+    const wrapper = mount(SignUpForm);
+    const buttons = wrapper.findAll('.password-visibility-btn');
+
+    expect(buttons).toHaveLength(2);
+
+    await buttons[0].trigger('click');
 
     expect(wrapper.find('#sign-up-password').attributes('type')).toBe('text');
     expect(
       wrapper.find('#sign-up-password-confirmation').attributes('type')
-    ).toBe('text');
+    ).toBe('password');
   });
 
-  test('エラー後はパスワードを修正するまで表示ボタンを出さない', async () => {
+  test('エラー後はパスワードを修正するまでアイコンを出さない', async () => {
     const wrapper = mount(SignUpForm);
 
     await submitWith(wrapper, {
@@ -140,12 +154,13 @@ describe('SignUpForm', () => {
       password: '',
       passwordConfirmation: ''
     });
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.password-visibility-btn')).toHaveLength(0);
 
     await wrapper.find('#sign-up-username').setValue('michishiru');
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.password-visibility-btn')).toHaveLength(0);
 
+    // 直した欄のアイコンだけが戻る
     await wrapper.find('#sign-up-password').setValue('Abcdef1!');
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.password-visibility-btn')).toHaveLength(1);
   });
 });

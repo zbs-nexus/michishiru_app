@@ -1,9 +1,10 @@
 <script setup>
-import { computed } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
 import logoImage from '@/assets/images/logo.png';
+import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import LoginForm from '@/components/feature/auth/LoginForm.vue';
+import { useToastMessage } from '@/composables/useToastMessage';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -17,17 +18,19 @@ const authStore = useAuthStore();
 // ユーザー登録画面から移ってきた場合に、前の画面のエラーを引き継がないよう消す
 authStore.clearErrorMessage();
 
-/**
- * ユーザー登録を終えて戻ってきたかどうか。
- * 登録完了を伝えるためだけの表示で、状態は持ち越さずクエリで判断する。
- */
-const hasRegistered = computed(() => route.query.registered === '1');
+const {
+  message: toastMessage,
+  showMessage,
+  hideMessage
+} = useToastMessage();
 
-/**
- * パスワードを再設定して戻ってきたかどうか。
- * hasRegistered と同じ理由で、状態は持ち越さずクエリで判断する。
- */
-const hasResetPassword = computed(() => route.query.reset === '1');
+// ユーザー登録またはパスワード再設定を終えて戻ってきた場合は、
+// 画面上部のポップアップで知らせる。状態は持ち越さずクエリで判断する
+if (route.query.registered === '1') {
+  showMessage('ユーザー登録が完了しました。登録した内容でログインしてください。');
+} else if (route.query.reset === '1') {
+  showMessage('パスワードを再設定しました。新しいパスワードでログインしてください。');
+}
 
 /**
  * @description 入力された資格情報でサインインし、成功したらホームへ進む。
@@ -50,6 +53,12 @@ const handleLogin = async ({ username, password }) => {
       <div class="header-bg" />
     </template>
 
+    <BaseToast
+      v-if="toastMessage"
+      :message="toastMessage"
+      @close="hideMessage"
+    />
+
     <div class="logo-header">
       <div class="logo-icon">
         <img
@@ -68,22 +77,6 @@ const handleLogin = async ({ username, password }) => {
     <h2 class="section-title">
       ログイン
     </h2>
-
-    <p
-      v-if="hasRegistered"
-      class="auth-note completed-note"
-      role="status"
-    >
-      ユーザー登録が完了しました。登録した内容でログインしてください。
-    </p>
-
-    <p
-      v-else-if="hasResetPassword"
-      class="auth-note completed-note"
-      role="status"
-    >
-      パスワードを再設定しました。新しいパスワードでログインしてください。
-    </p>
 
     <LoginForm
       :is-signing-in="authStore.isSigningIn"
@@ -108,11 +101,6 @@ const handleLogin = async ({ username, password }) => {
 </template>
 
 <style scoped>
-/* フォームとの間隔を空ける。auth-note 自体は余白を持たないため、ここで足す */
-.completed-note {
-  margin-bottom: 16px;
-}
-
 /* 2行並ぶため、2行目の余白を詰める */
 .auth-switch + .auth-switch {
   margin-top: 8px;
