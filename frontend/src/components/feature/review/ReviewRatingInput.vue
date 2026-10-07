@@ -52,12 +52,12 @@ const handleSelect = (value) => {
 <style scoped>
 .rating-input {
   display: flex;
-  gap: 4px;
+  gap: 2px;
 }
 
 .rating-star {
   padding: 2px;
-  font-size: 32px;
+  font-size: 28px;
   line-height: 1;
   color: #D8DEE4;
   background: transparent;

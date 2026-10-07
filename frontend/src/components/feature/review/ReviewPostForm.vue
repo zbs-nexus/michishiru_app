@@ -137,17 +137,20 @@ const handleSubmit = () => {
       </div>
     </div>
 
-    <div class="review-field">
-      <span class="review-label">評価</span>
-      <ReviewRatingInput v-model="rating" />
-    </div>
+    <div class="review-footer">
+      <div class="review-rating">
+        <span class="review-label review-label-inline">評価</span>
+        <ReviewRatingInput v-model="rating" />
+      </div>
 
-    <BaseButton
-      :is-disabled="!canSubmit"
-      @click="handleSubmit"
-    >
-      投稿する
-    </BaseButton>
+      <BaseButton
+        class="review-submit"
+        :is-disabled="!canSubmit"
+        @click="handleSubmit"
+      >
+        投稿
+      </BaseButton>
+    </div>
   </div>
 </template>
 
@@ -167,7 +170,7 @@ const handleSubmit = () => {
   max-width: 430px;
   max-height: 85vh;
   overflow-y: auto;
-  padding: 16px 20px 20px;
+  padding: 10px 20px 16px;
   background: var(--white);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.2);
@@ -178,7 +181,7 @@ const handleSubmit = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .review-form-title {
@@ -205,15 +208,20 @@ const handleSubmit = () => {
 }
 
 .review-field {
-  margin-bottom: 18px;
+  margin-bottom: 12px;
 }
 
 .review-label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-dark);
+}
+
+/* 評価の行では、ラベルを星の左に小さく添える */
+.review-label-inline {
+  margin-bottom: 0;
 }
 
 /* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
@@ -243,12 +251,47 @@ const handleSubmit = () => {
 .genre-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  gap: 8px;
+}
+
+/* 全画面地図の上に重ねるフォームなので、ホームより少し詰めて高さを抑える */
+.genre-grid .select-btn {
+  padding: 10px 6px;
+}
+
+.genre-grid .btn-icon {
+  margin-bottom: 2px;
+  font-size: 20px;
 }
 
 .review-hint {
   font-size: 12px;
   color: var(--text-gray);
+}
+
+/* 評価と投稿ボタンを1行に並べ、全幅ボタンの分の高さを節約する */
+.review-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.review-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * 投稿ボタンは行内に収まる幅にしつつ、押しやすい高さ（約44px）を保つ。
+ * BaseButtonのルート要素に review-submit クラスが合流するため、primary-btn と併せて指定する。
+ */
+.review-submit.primary-btn {
+  width: auto;
+  min-width: 88px;
+  padding: 12px 20px;
 }
 
 @keyframes review-form-slide-in {
