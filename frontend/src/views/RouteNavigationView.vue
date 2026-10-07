@@ -194,6 +194,7 @@ const handleConfirmEnd = () => {
       v-if="isReviewFormVisible"
       ref="reviewFormRef"
       :genre-options="genreOptions"
+      :pin-position="reviewPin"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
     />

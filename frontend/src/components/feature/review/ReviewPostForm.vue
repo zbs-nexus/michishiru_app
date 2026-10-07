@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ReviewRatingInput from '@/components/feature/review/ReviewRatingInput.vue';
 
@@ -14,6 +14,11 @@ const props = defineProps({
   genreOptions: {
     type: Array,
     required: true
+  },
+  /** 対象のピンの座標 { lng, lat }。別の場所に変わったら入力をリセットする */
+  pinPosition: {
+    type: Object,
+    default: null
   }
 });
 
@@ -30,6 +35,24 @@ const selectedGenreId = ref(null);
 
 /** 選択中の評価（0は未選択） */
 const rating = ref(0);
+
+/**
+ * @description 入力内容を初期状態へ戻す
+ * @returns {void}
+ */
+const resetInputs = () => {
+  spotName.value = '';
+  selectedGenreId.value = null;
+  rating.value = 0;
+};
+
+// ピンが別の場所に立て直されたら、前の場所の入力を持ち越さないようにする
+watch(
+  () => props.pinPosition,
+  () => {
+    resetInputs();
+  }
+);
 
 /** 投稿できる状態か。名前・ジャンル・評価がすべてそろったら有効にする */
 const canSubmit = computed(
