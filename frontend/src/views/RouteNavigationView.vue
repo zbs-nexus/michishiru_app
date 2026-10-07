@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
@@ -8,7 +8,9 @@ import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vu
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
+import { useWalkRecord } from '@/composables/useWalkRecord';
 import { useRouteStore } from '@/stores/routeStore';
+import { useWalkStore } from '@/stores/walkStore';
 
 /**
  * @description ルート案内を表示する画面。
@@ -18,6 +20,7 @@ import { useRouteStore } from '@/stores/routeStore';
  */
 const router = useRouter();
 const routeStore = useRouteStore();
+const walkStore = useWalkStore();
 
 /** 終了確認モーダルを表示するかどうか */
 const isEndConfirmVisible = ref(false);
@@ -36,15 +39,26 @@ const spots = computed(() => routeStore.currentRoute?.spots ?? []);
 /** 経路の形。次の目的地までの距離を道に沿って測るために渡す */
 const geometry = computed(() => routeStore.currentRoute?.geometry ?? null);
 
-const { nextSpot, distanceToNextM, isCompleted } = useRouteProgress({
+const { nextSpot, distanceToNextM, visitedSpotIds, isCompleted } = useRouteProgress({
   spots,
   currentLocation,
   accuracy,
   geometry
 });
 
+// 距離の積算は公開する状態を持たず、現在地のwatchでwalkStoreへ直接書き込む
+useWalkRecord({ currentLocation, accuracy });
+
+// 到達状況をストアへ写し、結果画面でも巡ったスポット数が読めるようにする。
+// useRouteProgressは配列を丸ごと差し替えるためdeepは不要
+watch(visitedSpotIds, (spotIds) => {
+  walkStore.setVisitedSpotIds(spotIds);
+});
+
 // 追跡の停止はuseLocationTracking側で画面の破棄時に行われる
 onMounted(() => {
+  // 初期化は追跡より先に行う。順序が逆だと初回の測位で積んだ距離がリセットで消える
+  walkStore.startWalk();
   startTracking();
 });
 
@@ -70,6 +84,8 @@ const handleCancelEnd = () => {
  */
 const handleConfirmEnd = () => {
   isEndConfirmVisible.value = false;
+  // 結果画面が所要時間を読むため、遷移前に終了時刻を確定させる
+  walkStore.endWalk();
   router.push({ name: 'walk-result' });
 };
 </script>
