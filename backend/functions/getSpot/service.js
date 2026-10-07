@@ -28,9 +28,12 @@ export const getSpot = async ({ position, userId }, repository = spotRepository)
     return { exists: false };
   }
 
+  // 写真は非公開バケットにあるため、表示用の署名付きURLを付けて返す
+  const photoUrls = await repository.createPhotoViewUrls(spot.photoKeys ?? []);
+
   // 認証済みなら、呼び出し元が既にこの場所へ投稿しているかを合わせて返す
   const userReview =
     userId === null ? null : await repository.getUserReview(spot.spotId, userId);
 
-  return { exists: true, spot, userReview };
+  return { exists: true, spot: { ...spot, photoUrls }, userReview };
 };

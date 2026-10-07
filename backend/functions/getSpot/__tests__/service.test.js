@@ -23,23 +23,27 @@ const createSpot = (overrides = {}) => ({
 });
 
 describe('getSpot', () => {
-  it('半径40m以内に場所があれば exists:true と場所を返す', async () => {
+  it('半径40m以内に場所があれば exists:true と場所を返し、写真の表示URLを付ける', async () => {
     const repository = {
-      findNearbySpots: async () => [createSpot()],
-      getUserReview: async () => null
+      findNearbySpots: async () => [createSpot({ photoKeys: ['review-photos/a'] })],
+      getUserReview: async () => null,
+      createPhotoViewUrls: async (keys) =>
+        keys.map((key) => `https://example.com/${key}?signed`)
     };
 
     const result = await getSpot({ position: POSITION, userId: null }, repository);
 
     assert.equal(result.exists, true);
     assert.equal(result.spot.spotName, '中央公園');
+    assert.equal(result.spot.photoUrls.length, 1);
     assert.equal(result.userReview, null);
   });
 
   it('認証済みなら呼び出し元の既存評価も返す', async () => {
     const repository = {
       findNearbySpots: async () => [createSpot()],
-      getUserReview: async () => ({ rating: 3 })
+      getUserReview: async () => ({ rating: 3 }),
+      createPhotoViewUrls: async () => []
     };
 
     const result = await getSpot({ position: POSITION, userId: 'user-1' }, repository);
@@ -54,7 +58,8 @@ describe('getSpot', () => {
       findNearbySpots: async () => [
         createSpot({ position: { lng: 139.7, lat: 35.681 } })
       ],
-      getUserReview: async () => null
+      getUserReview: async () => null,
+      createPhotoViewUrls: async () => []
     };
 
     const result = await getSpot({ position: POSITION, userId: 'user-1' }, repository);
@@ -65,7 +70,8 @@ describe('getSpot', () => {
   it('候補が無ければ exists:false を返す', async () => {
     const repository = {
       findNearbySpots: async () => [],
-      getUserReview: async () => null
+      getUserReview: async () => null,
+      createPhotoViewUrls: async () => []
     };
 
     const result = await getSpot({ position: POSITION, userId: null }, repository);

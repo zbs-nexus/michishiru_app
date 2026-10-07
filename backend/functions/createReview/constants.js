@@ -21,6 +21,9 @@ export const MAX_RATING = 5;
 /** ロケーション名の最大文字数 */
 export const SPOT_NAME_MAX_LENGTH = 30;
 
+/** 1つの場所に付けられる写真の最大枚数（初回投稿時のみ設定） */
+export const PHOTO_MAX_COUNT = 4;
+
 /**
  * @description ユーザーの口コミ行のソートキーを組み立てる
  * @param {string} userId ユーザーID

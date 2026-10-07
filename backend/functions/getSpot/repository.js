@@ -1,10 +1,14 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, GetCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import { GetObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createDataSourceError } from '../../shared/utils/errorHandler.js';
 import { logWarn } from '../../shared/utils/logger.js';
 import { toNeighborGeoCells } from '../../shared/utils/geo.js';
 import {
   GSI_GEO_CELL,
+  PHOTO_BUCKET_NAME,
+  PHOTO_VIEW_URL_EXPIRES_S,
   REVIEW_TABLE_NAME,
   SPOT_SORT_KEY,
   toReviewSortKey
@@ -165,4 +169,48 @@ export const getUserReview = async (spotId, userId) => {
   );
 
   return response.Item ? { rating: Number(response.Item.rating) } : null;
+};
+
+/** S3クライアントの生成は1度だけ行い、呼び出しごとに作らない */
+let s3Client = null;
+
+/**
+ * @description S3クライアントを取得する
+ * @returns {S3Client} 生成済みのクライアント
+ */
+const getS3Client = () => {
+  if (s3Client === null) {
+    s3Client = new S3Client({});
+  }
+
+  return s3Client;
+};
+
+/**
+ * @description 写真キーの一覧から、表示用の署名付きGET URLを発行する。
+ * バケットは非公開のため、ブラウザはこのURLで画像を取得する。
+ * @param {string[]} photoKeys 写真のオブジェクトキー
+ * @returns {Promise<string[]>} 署名付きのGET URLの一覧
+ * @throws {ApplicationError} URLの発行に失敗した場合
+ */
+export const createPhotoViewUrls = async (photoKeys) => {
+  if (photoKeys.length === 0) {
+    return [];
+  }
+
+  try {
+    return await Promise.all(
+      photoKeys.map((key) =>
+        getSignedUrl(
+          getS3Client(),
+          new GetObjectCommand({ Bucket: PHOTO_BUCKET_NAME, Key: key }),
+          { expiresIn: PHOTO_VIEW_URL_EXPIRES_S }
+        )
+      )
+    );
+  } catch (error) {
+    throw createDataSourceError('写真の表示URLの発行に失敗しました', {
+      errorName: error.name
+    });
+  }
 };

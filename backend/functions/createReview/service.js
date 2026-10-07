@@ -31,7 +31,8 @@ const toSpotView = (spot) => ({
   genreName: spot.genreName ?? null,
   position: spot.position,
   ratingCount: spot.ratingCount,
-  ratingAverage: spot.ratingAverage
+  ratingAverage: spot.ratingAverage,
+  photoKeys: spot.photoKeys ?? []
 });
 
 /**
@@ -42,13 +43,14 @@ const toSpotView = (spot) => ({
  * @throws {ApplicationError} 名前・ジャンルが無い、または保存に失敗した場合
  */
 const postFirstReview = async (input, repository) => {
-  const { position, rating, spotName, genreId, genreName, userId } = input;
+  const { position, rating, spotName, genreId, genreName, photoKeys, userId } = input;
 
   // 初回はロケーション名とジャンルが必須（2回目以降は評価のみのため）
   if (spotName === null || genreId === null) {
     throw createValidationError('初回投稿にはロケーション名とジャンルが必要です');
   }
 
+  // 写真は場所ごとに初回投稿時のみ設定する（2回目以降は評価のみ）
   const spot = {
     spotId: randomUUID(),
     spotName,
@@ -56,7 +58,7 @@ const postFirstReview = async (input, repository) => {
     genreName,
     position,
     geoCell: toGeoCell(position),
-    photoKeys: []
+    photoKeys: photoKeys ?? []
   };
 
   await repository.createSpotWithReview({
@@ -112,6 +114,7 @@ const postSubsequentReview = async ({ spot, rating, userId }, repository) => {
  * @param {string|null} input.spotName ロケーション名（初回のみ必須）
  * @param {string|null} input.genreId ジャンルID（初回のみ必須）
  * @param {string|null} input.genreName ジャンル名
+ * @param {string[]} [input.photoKeys] 写真キー（初回のみ・最大4）
  * @param {string|null} input.userId 投稿者のユーザーID
  * @param {object} [repository] データアクセス（テスト用に差し替え可能）
  * @param {{retried?: boolean}} [options] 内部用。競合時の再試行フラグ

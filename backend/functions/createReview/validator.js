@@ -1,6 +1,7 @@
 import {
   MAX_RATING,
   MIN_RATING,
+  PHOTO_MAX_COUNT,
   SPOT_NAME_MAX_LENGTH
 } from './constants.js';
 
@@ -67,6 +68,35 @@ const validateSpotName = (spotName, errorMessages) => {
 };
 
 /**
+ * @description 写真キーの配列を検証する。未指定は空配列として扱う（写真は任意）。
+ * @param {*} photoKeys 入力の写真キー配列
+ * @param {string[]} errorMessages エラーの蓄積先
+ * @returns {string[]} 正規化した写真キーの配列
+ */
+const validatePhotoKeys = (photoKeys, errorMessages) => {
+  if (photoKeys === undefined || photoKeys === null) {
+    return [];
+  }
+
+  if (!Array.isArray(photoKeys)) {
+    errorMessages.push('photoKeysは配列で指定してください');
+    return [];
+  }
+
+  if (photoKeys.length > PHOTO_MAX_COUNT) {
+    errorMessages.push(`写真は${PHOTO_MAX_COUNT}枚までです`);
+    return [];
+  }
+
+  if (!photoKeys.every((key) => typeof key === 'string' && key.length > 0)) {
+    errorMessages.push('photoKeysの要素は空でない文字列で指定してください');
+    return [];
+  }
+
+  return photoKeys;
+};
+
+/**
  * @description 口コミ投稿リクエストのボディを検証する
  * @param {object} body リクエストボディ
  * @returns {{isValid: boolean, errorMessages: string[], value: object|null}} 検証結果
@@ -93,11 +123,15 @@ export const validateCreateReviewRequest = (body = {}) => {
       ? null
       : String(body.genreName);
 
+  const photoKeys = validatePhotoKeys(body.photoKeys, errorMessages);
+
   const isValid = errorMessages.length === 0;
 
   return {
     isValid,
     errorMessages,
-    value: isValid ? { position, rating, spotName, genreId, genreName } : null
+    value: isValid
+      ? { position, rating, spotName, genreId, genreName, photoKeys }
+      : null
   };
 };

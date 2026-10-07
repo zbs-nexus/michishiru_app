@@ -62,4 +62,27 @@ describe('validateCreateReviewRequest', () => {
 
     assert.equal(result.isValid, false);
   });
+
+  it('写真キーは未指定なら空配列、4枚までは受理する', () => {
+    const empty = validateCreateReviewRequest(createBody());
+    assert.deepEqual(empty.value.photoKeys, []);
+
+    const four = validateCreateReviewRequest(
+      createBody({ photoKeys: ['a', 'b', 'c', 'd'] })
+    );
+    assert.equal(four.isValid, true);
+    assert.equal(four.value.photoKeys.length, 4);
+  });
+
+  it('写真キーが5枚以上・文字列以外の場合は不正とする', () => {
+    assert.equal(
+      validateCreateReviewRequest(createBody({ photoKeys: ['a', 'b', 'c', 'd', 'e'] }))
+        .isValid,
+      false
+    );
+    assert.equal(
+      validateCreateReviewRequest(createBody({ photoKeys: [1, 2] })).isValid,
+      false
+    );
+  });
 });
