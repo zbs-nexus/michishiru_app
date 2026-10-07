@@ -1,0 +1,82 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "label": "低精度の測位が続く区間は検知されない",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        "frontend/src/views/RouteNavigationView.vue"
+      ],
+      "detail": "useLocationTracking.handlePositionUpdate は精度の採否に関わらず trackingError を null へ戻すが、useWalkRecord のガード③は accuracy > 100m では距離を積まない。この差の区間（測位は届くが距離にならない）はタイマーが張られず欠落として記録されないため、実績が大きく足りていても measurementStatus が complete を返す。段階3bで lastDistanceAddedAt を判定に加えるか、精度の継続的な悪化を別の検知口として扱う。"
+    },
+    {
+      "label": "エラーの点滅でタイマーが毎回捨てられる",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        "frontend/src/views/RouteNavigationView.vue"
+      ],
+      "detail": "watch(trackingError, ...) は message === null で clearGapTimer() するため、しきい値（60秒）未満で復帰を繰り返す断続的な不調は永久に記録されない。中断の累積時間を持つか、復帰の回数を見る案を段階3bで検討する。"
+    },
+    {
+      "label": "実損ゼロの非表示でも partial が確定する",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        "frontend/src/views/RouteNavigationView.vue",
+        "frontend/src/views/WalkResultView.vue"
+      ],
+      "detail": "handleVisibilityChange は非表示の継続時間だけで欠落を記録するため、立ち止まっている間に60秒以上画面を隠すと失われた距離がなくても注記が出る。しきい値方式（案E）の受け入れ済みの副作用だが、注記の文言が「実際より短く表示されている」と断定的なため体感と合わない場面が残る。"
+    },
+    {
+      "label": "待ち合わせ中の release → request でロックが残らない",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        "frontend/src/composables/useScreenWakeLock.js"
+      ],
+      "detail": "isRequesting が立っている間の requestScreenWakeLock() は isReleaseRequested をクリアせず return するため、直前に releaseScreenWakeLock() が呼ばれていると解決したロックは捨てられ再取得も走らない。View は解放を自前で呼ばないため到達しないが、releaseScreenWakeLock を公開し JSDoc で「呼び出し側で取得済みかどうかを見張る必要はない」と保証しているので、解放要求の後に再要求が来たら取り直す形にするか JSDoc で順序の前提を明記する。"
+    },
+    {
+      "label": "しきい値の定数が二重定義",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        "frontend/src/views/RouteNavigationView.vue",
+        "frontend/src/views/__tests__/RouteNavigationView.test.js"
+      ],
+      "detail": "MEASUREMENT_GAP_THRESHOLD_MS が View とテストの両方に 60000 として書かれている。View から export するか constants/ へ出して1か所にする。値の不一致はテストが失敗して気付けるため黙って壊れはしない。"
+    },
+    {
+      "label": "用語辞書の説明が実装と食い違う",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        ".kiro/steering/naming-glossary.md"
+      ],
+      "detail": "lastDistanceAddedAt の説明が「計測が途切れていないかの判定に使う」だが、walkStore.js のコメントどおり本段階では記録のみで判定に使っていない。「段階3bの判定材料として記録する」等へ直す。"
+    },
+    {
+      "label": "未テストの経路",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        "frontend/src/composables/__tests__/useScreenWakeLock.test.js",
+        "frontend/src/views/__tests__/RouteNavigationView.test.js",
+        "frontend/src/views/WalkResultView.vue"
+      ],
+      "detail": "Wake Lock の release イベントで isScreenAwake が false へ戻り sentinel が捨てられること（スタブの addEventListener は vi.fn() のままでリスナーを呼んでいない）、画面復帰時に requestScreenWakeLock() が呼び直されること、WalkResultView が measurementStatus ごとに注記を出し分けることにテストが無い。3つ目は利用者が直接見る出力で本段階の成果物そのもの。"
+    },
+    {
+      "label": "plan.md が実装に追いついていない",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "files": [
+        ".agents/tasks/plan.md"
+      ],
+      "detail": "手順4が即時 markMeasurementGap() のままで、しきい値方式の実装と食い違う。変更の経緯は verification.md にしか残っていないため、計画側も更新しておく。"
+    }
+  ],
+  "reviewDoc": "c:\\ミチシル開発\\michishiru_app\\.agents\\tasks\\measurement-review.md"
+}

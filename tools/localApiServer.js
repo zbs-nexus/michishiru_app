@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { handler as createPhotoUploadUrlsHandler } from '../backend/functions/createPhotoUploadUrls/handler.js';
 import { handler as createRouteHandler } from '../backend/functions/createRoute/handler.js';
 import { handler as createReviewHandler } from '../backend/functions/createReview/handler.js';
+import { handler as createWalkResultHandler } from '../backend/functions/createWalkResult/handler.js';
 import { handler as getConditionsHandler } from '../backend/functions/getConditions/handler.js';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
 import { handler as getSpotHandler } from '../backend/functions/getSpot/handler.js';
@@ -35,6 +36,9 @@ const LOCAL_DEV_USERNAME = 'local-dev';
  * ローカルで叩くにはAWSの認証情報（`AWS_PROFILE` 等）が必要になる。
  * verifyPasswordResetTarget も Cognito を呼ぶため、認証情報と
  * 環境変数 `USER_POOL_ID` が必要になる。
+ * createWalkResult は DynamoDB へ書き込むため、ローカルで実際に保存するには
+ * 認証情報と環境変数 `WALK_RESULT_TABLE_NAME`（例: `WalkResult-dev`）が必要になる。
+ * 未設定の場合は 503（DATA_SOURCE_ERROR）を返し、フロントは退避キューへ積む。
  */
 const ROUTE_HANDLERS = [
   { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
@@ -50,6 +54,11 @@ const ROUTE_HANDLERS = [
     method: 'POST',
     path: '/api/v1/review-photo-uploads',
     invoke: createPhotoUploadUrlsHandler
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/walk-results',
+    invoke: createWalkResultHandler
   },
   {
     method: 'POST',

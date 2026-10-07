@@ -5,10 +5,10 @@
 export const ERROR_CODES = {
   /** 入力値が不正 */
   VALIDATION_ERROR: 'VALIDATION_ERROR',
+  /** 認証されていない（Cognitoのトークンが無い・無効。利用者を特定できない） */
+  UNAUTHORIZED: 'UNAUTHORIZED',
   /** 条件に合うデータが存在しない */
   ROUTE_NOT_FOUND: 'ROUTE_NOT_FOUND',
-  /** 認証されていない（Cognitoのトークンが無い・無効） */
-  UNAUTHORIZED: 'UNAUTHORIZED',
   /** 競合（同じ場所の初回投稿が同時に行われた等） */
   REVIEW_CONFLICT: 'REVIEW_CONFLICT',
   /** データストアへのアクセスに失敗 */
@@ -20,6 +20,7 @@ export const ERROR_CODES = {
 /** エラーコードとHTTPステータスコードの対応 */
 export const ERROR_STATUS_CODES = {
   [ERROR_CODES.VALIDATION_ERROR]: 400,
+  [ERROR_CODES.UNAUTHORIZED]: 401,
   [ERROR_CODES.ROUTE_NOT_FOUND]: 404,
   [ERROR_CODES.UNAUTHORIZED]: 401,
   [ERROR_CODES.REVIEW_CONFLICT]: 409,
