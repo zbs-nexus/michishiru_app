@@ -1,7 +1,9 @@
 import { createServer } from 'node:http';
 import { handler as createRouteHandler } from '../backend/functions/createRoute/handler.js';
+import { handler as createReviewHandler } from '../backend/functions/createReview/handler.js';
 import { handler as getConditionsHandler } from '../backend/functions/getConditions/handler.js';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
+import { handler as getSpotHandler } from '../backend/functions/getSpot/handler.js';
 import { handler as verifyPasswordResetTargetHandler } from '../backend/functions/verifyPasswordResetTarget/handler.js';
 
 /**
@@ -27,12 +29,24 @@ const ROUTE_HANDLERS = [
   { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
   { method: 'POST', path: '/api/v1/routes', invoke: createRouteHandler },
   { method: 'GET', path: '/api/v1/conditions', invoke: getConditionsHandler },
+  // 口コミ系はDynamoDBへアクセスするため、ローカルで叩くにはAWSの認証情報と
+  // 環境変数 REVIEW_TABLE_NAME が必要になる。
+  { method: 'GET', path: '/api/v1/spots', invoke: getSpotHandler },
+  { method: 'POST', path: '/api/v1/reviews', invoke: createReviewHandler },
   {
     method: 'POST',
     path: '/api/v1/password-reset-verifications',
     invoke: verifyPasswordResetTargetHandler
   }
 ];
+
+/**
+ * ローカルでの口コミ投稿者。
+ * 本番は API Gateway の Cognito オーソライザーが検証済みのクレームを渡すが、
+ * ローカルにはオーソライザーが無いため、ヘッダ x-debug-user-id（無ければ既定値）で代用する。
+ * この代用はローカルハーネス限定で、デプロイ対象には含めない。
+ */
+const LOCAL_DEBUG_USER_ID = 'local-dev-user';
 
 /**
  * @description リクエストボディを文字列として読み切る
@@ -63,6 +77,14 @@ const buildEvent = (request, requestUrl, body) => ({
   path: requestUrl.pathname,
   queryStringParameters: Object.fromEntries(requestUrl.searchParams.entries()),
   headers: request.headers,
+  // 本番の Cognito オーソライザー相当のクレームを模す（ローカル限定）
+  requestContext: {
+    authorizer: {
+      claims: {
+        sub: request.headers['x-debug-user-id'] ?? LOCAL_DEBUG_USER_ID
+      }
+    }
+  },
   body
 });
 
