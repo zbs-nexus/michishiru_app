@@ -2,6 +2,7 @@ import { createServer } from 'node:http';
 import { handler as createRouteHandler } from '../backend/functions/createRoute/handler.js';
 import { handler as getConditionsHandler } from '../backend/functions/getConditions/handler.js';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
+import { handler as verifyPasswordResetTargetHandler } from '../backend/functions/verifyPasswordResetTarget/handler.js';
 
 /**
  * @description ローカル開発用のAPIハーネス。
@@ -19,11 +20,18 @@ const HOST = '127.0.0.1';
  * パスとLambdaハンドラの対応。
  * createRoute は Location Service と Bedrock を実際に呼び出すため、
  * ローカルで叩くにはAWSの認証情報（`AWS_PROFILE` 等）が必要になる。
+ * verifyPasswordResetTarget も Cognito を呼ぶため、認証情報と
+ * 環境変数 `USER_POOL_ID` が必要になる。
  */
 const ROUTE_HANDLERS = [
   { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
   { method: 'POST', path: '/api/v1/routes', invoke: createRouteHandler },
-  { method: 'GET', path: '/api/v1/conditions', invoke: getConditionsHandler }
+  { method: 'GET', path: '/api/v1/conditions', invoke: getConditionsHandler },
+  {
+    method: 'POST',
+    path: '/api/v1/password-reset-verifications',
+    invoke: verifyPasswordResetTargetHandler
+  }
 ];
 
 /**

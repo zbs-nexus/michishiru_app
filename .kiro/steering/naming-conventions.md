@@ -99,6 +99,7 @@ inclusion: always
 
 | 場所 | ツール | 対象パターン |
 |---|---|---|
+| `frontend/` | Vitest（jsdom） | `src/**/__tests__/**/*.test.js` |
 | `backend/` | Node.js 標準テストランナー | `functions/**/__tests__/**/*.test.js` |
 | `iac/` | Jest | `**/*.test.ts` |
 
@@ -332,7 +333,7 @@ TypeScript を使うのは `iac/` のみ。型・インターフェース・CDK�
 | # | 項目 | 何が決まっていないか | 影響 |
 |---|---|---|---|
 | 3 | 課題番号 `NZ-X` の採番 | 番号の出どころ（課題管理ツール・採番担当）が未定義 | ブランチ名とコミットメッセージに使う。現在は採番なしのブランチ・コミットが混在している |
-| 4 | フロントエンドのテストツール | `frontend/` にテストツール・テストが存在しない | `git-workflow.md` の「PR前提条件」を満たせない。候補は Vitest（Vite と同系列のため設定が最小） |
+| 4 | `develop` 向けPRでフロントのテストを走らせるか | Vitest を導入し `frontend` に `npm test` を用意したが、`ci.yml` / `checks.yml` からは呼んでいない | CIに組み込むとPRの通過条件が変わるため、チームで合意してから接続する |
 
 ### 次に決めたい
 
@@ -348,6 +349,7 @@ TypeScript を使うのは `iac/` のみ。型・インターフェース・CDK�
 | AWS上のLambda物理名 | 指定しない（CDKの自動生成に任せる）。`iac-rules.md` 参照 | 2026/09/02 |
 | テストの配置 | `backend/` は `__tests__/`、`iac/` は `test/`。各エコシステムの標準に合わせ統一しない | 2026/09/02 |
 | ドキュメントの日本語ファイル名 | `docs/` 配下は日本語名を許容。コード・設定ファイルは英語のみ | 2026/09/02 |
+| フロントエンドのテストツール | Vitest（jsdom + `@vue/test-utils`）。設定は `frontend/vite.config.js` の `test`、実行は `frontend` で `npm test`。配置は対象の隣の `__tests__/`、ファイル名は `<対象>.test.js` | 2026/09/30 |
 | DynamoDBテーブル名の環境識別子 | 後置（`Route-dev`）。`back-data-access.md` 参照 | 2026/09/02 |
 
 ---

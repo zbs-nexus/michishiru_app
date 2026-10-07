@@ -30,24 +30,29 @@ const isConfirming = ref(false);
  */
 const targetUsername = ref('');
 
+/** 入力されたメールアドレス。再送でも組み合わせを確かめるため保持する */
+const targetEmail = ref('');
+
 /** 確認コードの送信先（マスクされた形）。取得できない場合はnull */
 const codeDeliveryDestination = ref(null);
 
 /**
  * @description 確認コードを送り、コードと新しいパスワードの入力へ進む。
+ * ユーザー名とメールアドレスの組み合わせが一致しない場合は進まない。
  * 失敗の理由はストアが保持し、フォーム側に表示される。
- * @param {{username: string}} inputs 入力されたユーザー名
+ * @param {{username: string, email: string}} inputs 入力されたユーザー名とメールアドレス
  * @returns {Promise<void>}
  */
-const handlePasswordResetRequest = async ({ username }) => {
+const handlePasswordResetRequest = async ({ username, email }) => {
   const { isSucceeded, codeDeliveryDestination: destination } =
-    await authStore.resetPassword(username);
+    await authStore.resetPassword(username, email);
 
   if (!isSucceeded) {
     return;
   }
 
   targetUsername.value = username;
+  targetEmail.value = email;
   codeDeliveryDestination.value = destination;
   isConfirming.value = true;
 };
@@ -76,7 +81,7 @@ const handlePasswordReset = async ({ confirmationCode, newPassword }) => {
  */
 const handleResendCode = async () => {
   const { isSucceeded, codeDeliveryDestination: destination } =
-    await authStore.resetPassword(targetUsername.value);
+    await authStore.resetPassword(targetUsername.value, targetEmail.value);
 
   if (isSucceeded) {
     codeDeliveryDestination.value = destination;

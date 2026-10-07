@@ -312,6 +312,44 @@ body {
   background: var(--bg-light);
 }
 
+/* 入力チェックに引っかかった欄は枠を赤くして、どこを直すかを分かりやすくする */
+.auth-field input[aria-invalid="true"] {
+  border-color: #D93025;
+}
+
+.auth-field input[aria-invalid="true"]:focus {
+  outline-color: #D93025;
+}
+
+/* パスワード欄と「表示」ボタンを横に並べる */
+.auth-password {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.auth-password input {
+  flex: 1;
+  /* 入力欄を縮められるようにする（flexの既定では縮まない） */
+  min-width: 0;
+}
+
+.auth-reveal-btn {
+  flex-shrink: 0;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-color);
+  background: var(--white);
+  border: 1px solid #DDE3E8;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.auth-reveal-btn:hover {
+  background: var(--bg-light);
+}
+
 .auth-error {
   font-size: 13px;
   color: #D93025;

@@ -146,9 +146,16 @@ Q: アプリ全体で使う固定値か？              → constants/
 
 ## テストの配置
 
-フロントエンドのテストツールは未決定（`naming-conventions.md` の「未決定事項」を参照）。決定後、本節に配置ルールを追記する。
+テストツールは Vitest（jsdom + `@vue/test-utils`）。実行は `frontend` で `npm test`。
 
-決定までの暫定方針として、ファイル名は `〇〇.test.js` とする（バックエンド・IaC と揃えるため）。
+| 項目 | 内容 |
+|---|---|
+| 配置 | 対象ファイルの隣に `__tests__/` を作る（例: `src/utils/__tests__/`、`src/components/feature/auth/__tests__/`） |
+| ファイル名 | `<対象>.test.js`（`.spec` は使わない） |
+| 対象パターン | `src/**/__tests__/**/*.test.js` |
+| 設定 | `frontend/vite.config.js` の `test` |
+
+`describe` / `test` / `expect` はグローバルに頼らず `vitest` から import する（どこから来た関数か追えるようにするため）。
 
 ---
 
