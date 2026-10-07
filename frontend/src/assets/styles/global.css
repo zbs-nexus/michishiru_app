@@ -5,23 +5,61 @@
   box-sizing: border-box;
 }
 
+/*
+ * 配色はマスコット（フクロウ）に合わせたファンタジー寄りの古地図・羊皮紙調。
+ * 紙の色（--bg-light / --surface）に金の縁取り（--border-gold）と
+ * 紫のインク（--primary-color）を重ねる、の3点で全画面の印象を揃える。
+ */
 :root {
-  --primary-color: #2D3E50;
-  --primary-light: #3D5A73;
-  --accent-green: #4A7C59;
+  /* 紫のインク。見出し・主要ボタン・つまみに使う */
+  --primary-color: #45356B;
+  --primary-light: #5F4C91;
+  /* 森の緑。開始地点マーカーと案内バナーの帯に使う */
+  --accent-green: #3F7A5C;
+  /* 金。飾りと縁取り専用。明るい面の文字色には使わない（コントラストが足りない） */
+  --accent-gold: #B8862B;
+  --border-gold: #DCC48A;
   /* ルートを示す青。mapDefaults.js の ROUTE_LINE_COLOR と同値にする */
   --route-blue: #1A73E8;
-  --bg-light: #F5F9FB;
-  --bg-map: #E8F0E8;
-  --text-dark: #2D3E50;
-  --text-gray: #6B7B8A;
+  /* 羊皮紙。画面の地の色 */
+  --bg-light: #FBF4E4;
+  --bg-deep: #F1E3C8;
+  --bg-map: #E4EDDC;
+  /* カードや吹き出しの面。紙より少し明るいクリーム */
+  --surface: #FFFCF4;
+  --surface-alert: #FDF0EE;
+  --text-dark: #3A2E20;
+  --text-gray: #6B5B46;
+  --danger: #B3372B;
+  /* マーカーの縁取りなど、純白が必要な箇所に使う */
   --white: #ffffff;
-  --shadow: 0 2px 10px rgba(0,0,0,0.1);
+  --shadow: 0 2px 10px rgba(74,58,36,0.14);
+  --shadow-raised: 0 10px 28px rgba(74,58,36,0.2);
+  /*
+   * 見出し用の書体。解星特ミン（Kaisei Tokumin）の太字で、
+   * 石碑に彫られた文字のような重さを出す。
+   * 配信は自前（main.js が @fontsource から読み込む）。外部CDNへは取りに行かない。
+   * 読み込めなかった場合は端末の明朝へ落ちるよう候補を並べている。
+   * 別の書体へ変えたいときは、ここと main.js の2か所だけ直せばよい。
+   */
+  --font-display: 'Kaisei Tokumin', 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'Noto Serif JP', 'Georgia', serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
 }
 
+/*
+ * 地の紙。薄い格子で紙の繊維を表し、四隅に向かって少し沈ませて
+ * 古い紙のように見せる。模様は固定して、スクロールしても紙が動かないようにする。
+ */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
-  background: var(--bg-light);
+  font-family: var(--font-body);
+  background-color: var(--bg-light);
+  background-image:
+    radial-gradient(circle at 18% 10%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 45%),
+    radial-gradient(circle at 85% 92%, rgba(184,134,43,0.08) 0%, rgba(184,134,43,0) 55%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40'%3E%3Cg fill='none' stroke='%23B8862B' stroke-width='0.5' opacity='0.09'%3E%3Cpath d='M0 10H40'/%3E%3Cpath d='M0 30H40'/%3E%3Cpath d='M10 0V40'/%3E%3Cpath d='M30 0V40'/%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat, repeat;
+  background-size: cover, cover, 40px 40px;
+  background-attachment: fixed;
   color: var(--text-dark);
   min-height: 100vh;
   max-width: 430px;
@@ -41,10 +79,23 @@ body {
   flex-direction: column;
 }
 
-/* ヘッダー背景 */
+/*
+ * ヘッダー背景。夜明けの空から羊皮紙へ溶けるグラデーションに、
+ * 星と遠くの森を散らして物語の冒頭のように見せる。
+ */
 .header-bg {
-  height: 120px;
-  background: linear-gradient(180deg, #D4E5D4 0%, #E8F0E8 50%, var(--bg-light) 100%);
+  height: 168px;
+  background-color: var(--bg-light);
+  background-image:
+    /* 星 */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23C8972F' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%235F4C91' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
+    /* 遠くの森 */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 40'%3E%3Cg fill='%23A9BE9B'%3E%3Cpath d='M12 40L22 14l10 26z'/%3E%3Cpath d='M34 40L46 8l12 32z'/%3E%3Cpath d='M60 40L70 16l10 24z'/%3E%3Cpath d='M82 40L96 10l14 30z'/%3E%3C/g%3E%3C/svg%3E"),
+    linear-gradient(180deg, #E7DCF2 0%, #F3E8DC 48%, var(--bg-light) 100%);
+  background-position: 16% 26%, 76% 18%, 50% 100%, 0 0;
+  background-size: 14px 14px, 10px 10px, 100% 44px, cover;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
   position: absolute;
   top: 0;
   left: 0;
@@ -67,35 +118,64 @@ body {
   padding-top: 10px;
 }
 
-.logo-icon svg {
+/* ロゴは金の縁で囲み、紙に貼った封蝋のように見せる */
+.logo-icon img {
   display: block;
+  border-radius: 12px;
+  border: 2px solid var(--border-gold);
+  box-shadow: var(--shadow);
 }
 
 .logo-text h1 {
-  font-size: 24px;
+  font-family: var(--font-display);
+  font-size: 25px;
   font-weight: 700;
+  letter-spacing: 0.06em;
   color: var(--primary-color);
 }
 
 .logo-text p {
   font-size: 12px;
+  letter-spacing: 0.02em;
   color: var(--text-gray);
 }
 
-/* セクションタイトル */
+/*
+ * セクションタイトル。見出しの下に金の罫線を引いて章の始まりを示す。
+ * 罫線は中央が濃く両端が消えるグラデーションにして、紙に馴染ませる。
+ */
 .section-title {
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
+  letter-spacing: 0.04em;
   margin-bottom: 24px;
-  color: var(--text-dark);
+  padding-bottom: 10px;
+  color: var(--primary-color);
+  background-image: linear-gradient(90deg, var(--accent-gold), rgba(184,134,43,0) 85%);
+  background-position: 0 100%;
+  background-size: 100% 2px;
+  background-repeat: no-repeat;
 }
 
 .page-title {
+  font-family: var(--font-display);
   font-size: 22px;
   font-weight: 700;
+  letter-spacing: 0.08em;
   margin-bottom: 20px;
-  color: var(--text-dark);
+  color: var(--primary-color);
   text-align: center;
+}
+
+/* 章見出しの左右に添える金の飾り */
+.page-title::before,
+.page-title::after {
+  content: '❖';
+  margin: 0 10px;
+  font-size: 13px;
+  color: var(--accent-gold);
+  vertical-align: 2px;
 }
 
 /* 入力セクション */
@@ -104,10 +184,12 @@ body {
 }
 
 .input-section h3 {
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
   margin-bottom: 12px;
-  color: var(--text-dark);
+  color: var(--primary-color);
 }
 
 /* ボタングリッド */
@@ -117,26 +199,30 @@ body {
   gap: 10px;
 }
 
+/* 選択ボタンは紙の札。選ぶと金の縁と淡い光がつく */
 .select-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 16px 8px;
-  border: 2px solid #E0E5E9;
-  border-radius: 12px;
-  background: var(--white);
+  border: 2px solid var(--border-gold);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .select-btn:hover {
-  border-color: var(--primary-color);
+  border-color: var(--accent-gold);
+  transform: translateY(-2px);
 }
 
 .select-btn.selected {
   border-color: var(--primary-color);
-  background: #F0F4F8;
+  background: linear-gradient(180deg, var(--surface) 0%, var(--bg-deep) 100%);
+  box-shadow: 0 0 0 3px rgba(184,134,43,0.22), var(--shadow);
 }
 
 .btn-icon {
@@ -157,7 +243,8 @@ body {
 .distance-value {
   display: block;
   text-align: center;
-  font-size: 28px;
+  font-family: var(--font-display);
+  font-size: 30px;
   font-weight: 700;
   color: var(--primary-color);
   margin-bottom: 8px;
@@ -189,16 +276,17 @@ body {
 .distance-slider::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 3px;
-  background: #E0E5E9;
+  background: linear-gradient(90deg, var(--border-gold), var(--bg-deep));
 }
 
 .distance-slider::-moz-range-track {
   height: 6px;
   border-radius: 3px;
-  background: #E0E5E9;
+  background: linear-gradient(90deg, var(--border-gold), var(--bg-deep));
 }
 
 /* スライダーのつまみ */
+/* つまみは紫のインクに白い縁、さらに金の輪をかけて羅針盤のように見せる */
 .distance-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -207,8 +295,8 @@ body {
   margin-top: -9px;
   border-radius: 50%;
   background: var(--primary-color);
-  border: 3px solid var(--white);
-  box-shadow: var(--shadow);
+  border: 3px solid var(--surface);
+  box-shadow: 0 0 0 2px var(--accent-gold), var(--shadow);
 }
 
 .distance-slider::-moz-range-thumb {
@@ -216,8 +304,8 @@ body {
   height: 24px;
   border-radius: 50%;
   background: var(--primary-color);
-  border: 3px solid var(--white);
-  box-shadow: var(--shadow);
+  border: 3px solid var(--surface);
+  box-shadow: 0 0 0 2px var(--accent-gold), var(--shadow);
 }
 
 /* スライダーの目盛り */
@@ -232,26 +320,34 @@ body {
 
 .hint {
   font-size: 12px;
+  line-height: 1.7;
   color: var(--text-gray);
   margin-top: 8px;
 }
 
-/* ボタン */
+/*
+ * ボタン。紫のインクに金の縁を回し、巻物の留め具のように見せる。
+ * 文字は明朝＋字間を広げて、ボタンというより「宣言」に見せる。
+ */
 .primary-btn {
   width: 100%;
   padding: 16px;
-  font-size: 16px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   color: var(--white);
-  background: var(--primary-color);
-  border: none;
-  border-radius: 12px;
+  background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-color) 100%);
+  border: 2px solid var(--border-gold);
+  border-radius: 14px;
+  box-shadow: var(--shadow-raised);
   cursor: pointer;
-  transition: background 0.2s;
+  transition: filter 0.2s, transform 0.2s;
 }
 
 .primary-btn:hover {
-  background: var(--primary-light);
+  filter: brightness(1.12);
+  transform: translateY(-1px);
 }
 
 .primary-btn.full-width {
@@ -266,13 +362,21 @@ body {
 
 .secondary-btn {
   padding: 14px 24px;
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   color: var(--primary-color);
-  background: var(--white);
+  background: var(--surface);
   border: 2px solid var(--primary-color);
-  border-radius: 12px;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
   cursor: pointer;
+  transition: background 0.2s;
+}
+
+.secondary-btn:hover {
+  background: var(--bg-deep);
 }
 
 /* 認証フォーム（ログイン・ユーザー登録で共通） */
@@ -298,13 +402,14 @@ body {
 .auth-field input {
   padding: 14px;
   font-size: 16px;
-  border: 1px solid #DDE3E8;
+  border: 1px solid var(--border-gold);
   border-radius: 10px;
-  background: var(--white);
+  background: var(--surface);
+  color: var(--text-dark);
 }
 
 .auth-field input:focus {
-  outline: 2px solid var(--route-blue);
+  outline: 2px solid var(--primary-color);
   outline-offset: 1px;
 }
 
@@ -314,11 +419,11 @@ body {
 
 /* 入力チェックに引っかかった欄は枠を赤くして、どこを直すかを分かりやすくする */
 .auth-field input[aria-invalid="true"] {
-  border-color: #D93025;
+  border-color: var(--danger);
 }
 
 .auth-field input[aria-invalid="true"]:focus {
-  outline-color: #D93025;
+  outline-color: var(--danger);
 }
 
 /* パスワード欄。右端に表示切替のボタンを重ねるため、位置の基準にする */
@@ -342,7 +447,7 @@ body {
 
 .auth-error {
   font-size: 13px;
-  color: #D93025;
+  color: var(--danger);
 }
 
 .auth-note {
@@ -360,13 +465,17 @@ body {
 }
 
 .auth-switch a {
-  font-weight: 600;
-  color: var(--route-blue);
+  font-weight: 700;
+  color: var(--primary-color);
 }
 
-/* ローディング画面 */
-#screen-loading {
-  background: linear-gradient(180deg, #E8F0E8 0%, #F0F5F0 50%, #F5F9FB 100%);
+/*
+ * ローディング画面。
+ * RouteLoadingOverlay が .screen に is-loading を付けて使う。
+ * 夜明けの空から羊皮紙へ移るグラデーションで、旅立ちの前の時間を表す。
+ */
+.screen.is-loading {
+  background: linear-gradient(180deg, #E7DCF2 0%, #F3E8DC 55%, var(--bg-light) 100%);
   justify-content: center;
   align-items: center;
   text-align: center;
@@ -377,35 +486,39 @@ body {
 .loading-bg {
   position: absolute;
   inset: 0;
-  background-image: 
-    /* 左上のビル */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 50'%3E%3Crect fill='%23B8C8D8' x='5' y='10' width='30' height='40' rx='2'/%3E%3Crect fill='%23E8F0F8' x='10' y='15' width='6' height='6'/%3E%3Crect fill='%23E8F0F8' x='20' y='15' width='6' height='6'/%3E%3Crect fill='%23E8F0F8' x='10' y='25' width='6' height='6'/%3E%3Crect fill='%23E8F0F8' x='20' y='25' width='6' height='6'/%3E%3C/svg%3E"),
-    /* 右上のビル */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 35 45'%3E%3Crect fill='%23A8B8C8' x='5' y='5' width='25' height='40' rx='2'/%3E%3Crect fill='%23D8E8F0' x='10' y='10' width='5' height='5'/%3E%3Crect fill='%23D8E8F0' x='18' y='10' width='5' height='5'/%3E%3Crect fill='%23D8E8F0' x='10' y='20' width='5' height='5'/%3E%3Crect fill='%23D8E8F0' x='18' y='20' width='5' height='5'/%3E%3C/svg%3E"),
-    /* 木 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 40'%3E%3Ccircle fill='%23C8D8C8' cx='15' cy='15' r='12'/%3E%3Crect fill='%23A89888' x='12' y='25' width='6' height='12'/%3E%3C/svg%3E"),
-    /* 足跡 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 25'%3E%3Cellipse fill='%23D0E0E8' cx='10' cy='15' rx='6' ry='8'/%3E%3Ccircle fill='%23D0E0E8' cx='6' cy='5' r='3'/%3E%3Ccircle fill='%23D0E0E8' cx='14' cy='5' r='3'/%3E%3C/svg%3E"),
-    /* 雲 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 25'%3E%3Cellipse fill='%23E8F0F8' cx='25' cy='15' rx='20' ry='10'/%3E%3Cellipse fill='%23E8F0F8' cx='15' cy='12' rx='12' ry='8'/%3E%3Cellipse fill='%23E8F0F8' cx='35' cy='12' rx='12' ry='8'/%3E%3C/svg%3E"),
-    /* ベンチ */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 20'%3E%3Crect fill='%23C8D0D8' x='5' y='5' width='30' height='4' rx='1'/%3E%3Crect fill='%23A8B0B8' x='8' y='9' width='3' height='8'/%3E%3Crect fill='%23A8B0B8' x='29' y='9' width='3' height='8'/%3E%3C/svg%3E");
-  background-position: 
-    5% 15%,
-    90% 10%,
-    15% 85%,
-    75% 75%,
-    50% 90%,
-    85% 80%;
-  background-size: 
-    60px 75px,
-    50px 65px,
-    40px 55px,
-    25px 30px,
-    70px 35px,
-    50px 25px;
+  background-image:
+    /* 三日月 */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%23E8C86A' d='M24 2a18 18 0 1 0 0 36 23 23 0 0 1 0-36z'/%3E%3C/svg%3E"),
+    /* 金の星 */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23C8972F' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
+    /* 紫の星 */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%235F4C91' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
+    /* 針葉樹 */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 40'%3E%3Cpath fill='%235E8A64' d='M15 2l9 14H6z'/%3E%3Cpath fill='%236C9A70' d='M15 12l10 16H5z'/%3E%3Crect fill='%238A6E52' x='13' y='28' width='4' height='9'/%3E%3C/svg%3E"),
+    /* きのこ */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath fill='%23C06A5A' d='M15 3c7 0 11 5 11 9H4c0-4 4-9 11-9z'/%3E%3Crect fill='%23EFE3CF' x='11' y='12' width='8' height='12' rx='3'/%3E%3C/svg%3E"),
+    /* ランタン */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 34'%3E%3Cpath fill='none' stroke='%238A6E52' stroke-width='2' d='M12 2v5'/%3E%3Crect fill='%23E8C86A' x='5' y='8' width='14' height='16' rx='4'/%3E%3Crect fill='%238A6E52' x='3' y='24' width='18' height='3' rx='1'/%3E%3C/svg%3E"),
+    /* 羽根 */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 36'%3E%3Cpath fill='%23D9CBB2' d='M10 1c6 7 6 20 0 34C4 21 4 8 10 1z'/%3E%3C/svg%3E");
+  background-position:
+    86% 8%,
+    14% 16%,
+    72% 26%,
+    12% 86%,
+    78% 82%,
+    48% 92%,
+    26% 70%;
+  background-size:
+    46px 46px,
+    16px 16px,
+    11px 11px,
+    44px 58px,
+    30px 30px,
+    26px 37px,
+    18px 32px;
   background-repeat: no-repeat;
-  opacity: 0.6;
+  opacity: 0.75;
 }
 
 .loading-content {
@@ -416,51 +529,46 @@ body {
   align-items: center;
 }
 
-.logo-icon.large {
-  margin-bottom: 12px;
-}
-
-.logo-icon.large svg {
-  display: block;
-}
-
 .loading-content h2 {
+  font-family: var(--font-display);
   font-size: 28px;
+  letter-spacing: 0.1em;
   color: var(--primary-color);
-  margin-bottom: 4px;
+  margin-bottom: 36px;
 }
 
-.subtitle {
-  font-size: 12px;
-  color: var(--text-gray);
-  margin-bottom: 50px;
-}
-
+/* 吹き出しの中に入るため、画面見出しより小さくして行間を詰める */
 .loading-text {
-  font-size: 22px;
+  font-family: var(--font-display);
+  font-size: 18px;
   font-weight: 700;
+  letter-spacing: 0.06em;
   color: var(--primary-color);
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .loading-subtext {
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-gray);
   line-height: 1.8;
-  margin-bottom: 30px;
 }
 
+/* マスコットの下に置くため、吹き出しとの間を空ける */
 .loading-dots {
   display: flex;
   justify-content: center;
   gap: 10px;
+  margin-top: 30px;
 }
 
+/* 道に落ちた灯りのように、金色の点が順に光る */
 .loading-dots span {
-  width: 12px;
-  height: 12px;
-  background: #A4B8C4;
+  width: 10px;
+  height: 10px;
+  background: var(--accent-gold);
   border-radius: 50%;
+  box-shadow: 0 0 6px rgba(184,134,43,0.6);
   animation: pulse 1.5s infinite;
 }
 
@@ -475,12 +583,14 @@ body {
   50% { opacity: 1; transform: scale(1); }
 }
 
-/* マップ表示 */
-.map-preview, .map-display {
+/* マップ表示。古地図らしく金の枠で囲む */
+.map-preview {
   background: var(--bg-map);
+  border: 2px solid var(--border-gold);
   border-radius: 16px;
   overflow: hidden;
   margin-bottom: 16px;
+  box-shadow: var(--shadow);
 }
 
 /*
@@ -543,7 +653,7 @@ body {
   color: var(--white);
   font-size: 15px;
   font-weight: bold;
-  box-shadow: var(--shadow);
+  box-shadow: 0 0 0 2px var(--accent-gold), var(--shadow);
   cursor: pointer;
 }
 
@@ -628,42 +738,58 @@ body {
   border-radius: 50%;
 }
 
-/* ルート情報カード */
-.route-info-card {
-  background: var(--white);
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  gap: 12px;
+/*
+ * 自分が投稿した口コミのオレンジのピン。
+ * RouteMap.vue が動的に生成し、MapLibre がコンポーネントの外側へ挿入するため、
+ * 他のマーカーと同じ理由でグローバルに定義している。
+ * 赤（長押し）・青（スポット）・緑（開始）と色で見分ける。しずく型は location-pin と同じ構造。
+ */
+.my-review-pin {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+.my-review-pin-head {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  background: #F39C12;
+  border: 3px solid var(--white);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  transform-origin: center;
   box-shadow: var(--shadow);
 }
 
-.route-icon {
-  font-size: 32px;
+.my-review-pin-head::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
+  background: var(--white);
+  border-radius: 50%;
 }
 
-.route-details h3 {
-  font-size: 16px;
-  margin-bottom: 4px;
-}
-
-.route-details p {
-  font-size: 12px;
-  color: var(--text-gray);
-}
-
-.duration {
-  margin-top: 4px;
-}
-
-/* 下部アクション */
+/*
+ * 下部アクション。
+ * 画面の下端に敷く紙。上辺に金の罫線を引いて、地図と操作の境目を示す。
+ */
 .bottom-actions {
   padding: 16px 20px 24px;
-  background: var(--white);
+  background: var(--surface);
+  border-top: 2px solid var(--border-gold);
   display: flex;
   gap: 12px;
   align-items: center;
-  box-shadow: 0 -2px 10px rgba(0,0,0,0.05);
+  box-shadow: 0 -4px 14px rgba(74,58,36,0.1);
 }
 
 .distance-display {
@@ -678,9 +804,10 @@ body {
 }
 
 .distance-display .value {
+  font-family: var(--font-display);
   font-size: 28px;
   font-weight: 700;
-  color: var(--text-dark);
+  color: var(--primary-color);
 }
 
 .distance-display .value small {
@@ -700,52 +827,7 @@ body {
   width: 100%;
 }
 
-/* ルートサマリー */
-.route-summary {
-  background: var(--white);
-  border-radius: 12px;
-  padding: 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  box-shadow: var(--shadow);
-}
-
-.shoe-icon {
-  font-size: 24px;
-}
-
-.route-summary .label {
-  flex: 1;
-  font-size: 14px;
-  color: var(--text-gray);
-}
-
-.route-summary .distance {
-  font-size: 28px;
-  font-weight: 700;
-}
-
-.route-summary .distance small {
-  font-size: 14px;
-  font-weight: 400;
-}
-
-/* ナビゲーション画面 */
-#screen-navigation {
-  position: relative;
-}
-
-/* ルート詳細画面 */
-#screen-route {
-  position: relative;
-  padding-bottom: 80px;
-}
-
-#screen-route .content {
-  padding-bottom: 80px;
-}
-
+/* ナビゲーション画面の地図 */
 .navigation-map {
   flex: 1;
   position: relative;
@@ -756,44 +838,26 @@ body {
   inset: 0;
 }
 
-.nav-controls {
-  position: absolute;
-  right: 16px;
-  bottom: 100px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.nav-ctrl-btn {
-  width: 44px;
-  height: 44px;
-  background: var(--white);
-  border: none;
-  border-radius: 50%;
-  font-size: 18px;
-  box-shadow: var(--shadow);
-  cursor: pointer;
-}
-
 /* ポップアップ */
 .popup {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(40,30,55,0.55);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
 }
 
-.popup.hidden {
-  display: none;
-}
-
+/*
+ * 確認ポップアップ。羊皮紙に二重の金枠を回して、
+ * 読み上げるべき言葉が書かれた札のように見せる。
+ */
 .popup-content {
-  background: var(--white);
+  background: var(--surface);
+  border: 2px solid var(--border-gold);
   border-radius: 16px;
+  box-shadow: 0 0 0 4px rgba(255,252,244,0.5), var(--shadow-raised);
   padding: 24px;
   margin: 20px;
   text-align: center;
@@ -801,8 +865,12 @@ body {
 }
 
 .popup-content p {
+  font-family: var(--font-display);
   font-size: 18px;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  color: var(--primary-color);
   margin-bottom: 20px;
 }
 
@@ -811,30 +879,42 @@ body {
   gap: 12px;
 }
 
+/*
+ * 確認ポップアップのボタン。
+ * 2つのボタンは同じ幅（flex: 1）になるため、文字数の多い方（「キャンセル」）が
+ * 折り返しやすい。字間と左右の余白を詰めたうえで折り返しを禁止し、
+ * ラベルが途中で切れないようにする。
+ */
 .popup-btn {
   flex: 1;
-  padding: 12px 16px;
-  font-size: 14px;
-  font-weight: 600;
-  border-radius: 8px;
+  padding: 12px 10px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  border-radius: 10px;
   cursor: pointer;
 }
 
 .popup-btn.primary {
-  background: var(--primary-color);
+  background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-color) 100%);
   color: var(--white);
-  border: none;
+  border: 2px solid var(--border-gold);
 }
 
 .popup-btn.secondary {
-  background: var(--white);
+  background: var(--surface);
   color: var(--text-dark);
-  border: 2px solid #E0E5E9;
+  border: 2px solid var(--border-gold);
 }
 
-/* 結果画面 */
-#screen-result {
-  background: var(--white);
+/*
+ * 結果画面。
+ * WalkResultView が .screen に is-result を付けて使う。
+ * 旅を終えた記録の紙として、中央寄せの羊皮紙にする。
+ */
+.screen.is-result {
   justify-content: center;
   align-items: center;
   text-align: center;
@@ -843,15 +923,21 @@ body {
 }
 
 .result-content {
+  width: 100%;
   padding: 40px 20px;
 }
 
+/*
+ * 紙吹雪の代わりに、降りそそぐ光の粒を流す。
+ * 装飾のみなのでテンプレート側で aria-hidden にしている。
+ */
 .confetti {
   position: absolute;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23A4D4E4' x='10' y='20' width='3' height='8' transform='rotate(30 10 20)'/%3E%3Crect fill='%23E4D4A4' x='80' y='30' width='3' height='8' transform='rotate(-20 80 30)'/%3E%3Crect fill='%23D4E4A4' x='30' y='70' width='3' height='8' transform='rotate(45 30 70)'/%3E%3Crect fill='%23E4A4D4' x='70' y='60' width='3' height='8' transform='rotate(-30 70 60)'/%3E%3C/svg%3E");
-  opacity: 0.5;
-  animation: confetti-fall 3s linear infinite;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='%23C8972F'%3E%3Cpath d='M18 14l1.2 3.6h3.8l-3.1 2.3 1.2 3.6L18 21.2l-3.1 2.3 1.2-3.6-3.1-2.3h3.8z'/%3E%3Cpath d='M78 34l1 3h3.2l-2.6 1.9 1 3L78 40l-2.6 1.9 1-3-2.6-1.9h3.2z'/%3E%3C/g%3E%3Cg fill='%235F4C91'%3E%3Cpath d='M34 72l1 3h3.2l-2.6 1.9 1 3L34 78l-2.6 1.9 1-3-2.6-1.9h3.2z'/%3E%3Ccircle cx='62' cy='58' r='1.6'/%3E%3C/g%3E%3Ccircle fill='%23E8C86A' cx='48' cy='26' r='1.8'/%3E%3Ccircle fill='%23E8C86A' cx='88' cy='78' r='1.5'/%3E%3C/svg%3E");
+  opacity: 0.65;
+  animation: confetti-fall 6s linear infinite;
+  pointer-events: none;
 }
 
 @keyframes confetti-fall {
@@ -859,35 +945,24 @@ body {
   to { background-position: 0 100px; }
 }
 
-.result-logo {
-  position: relative;
-  margin-bottom: 24px;
-}
-
-.sparkles {
-  position: absolute;
-  top: -10px;
-  right: -10px;
-  font-size: 20px;
-}
-
-.result-content h2 {
-  font-size: 28px;
-  color: var(--primary-color);
-  margin-bottom: 32px;
-}
-
+/*
+ * 実績の一覧。羊皮紙の枠に金の区切り線を入れて、旅の記録として見せる。
+ */
 .result-stats {
-  background: var(--bg-light);
+  position: relative;
+  background: var(--surface);
+  border: 2px solid var(--border-gold);
   border-radius: 16px;
-  padding: 24px;
+  box-shadow: var(--shadow);
+  padding: 20px 24px;
+  text-align: left;
 }
 
 .stat-item {
   display: flex;
   justify-content: space-between;
   padding: 12px 0;
-  border-bottom: 1px solid #E0E5E9;
+  border-bottom: 1px solid var(--border-gold);
 }
 
 .stat-item:last-child {
@@ -895,12 +970,15 @@ body {
 }
 
 .stat-label {
+  font-size: 14px;
   color: var(--text-gray);
 }
 
 .stat-value {
-  font-weight: 600;
-  color: var(--text-dark);
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--primary-color);
 }
 
 /* レスポンシブ調整 */
@@ -919,5 +997,18 @@ body {
   
   .select-btn span:last-child {
     font-size: 10px;
+  }
+}
+
+/* 動きを減らす設定の場合は、装飾の動きを止める */
+@media (prefers-reduced-motion: reduce) {
+  .confetti,
+  .loading-dots span {
+    animation: none;
+  }
+
+  .select-btn:hover,
+  .primary-btn:hover {
+    transform: none;
   }
 }

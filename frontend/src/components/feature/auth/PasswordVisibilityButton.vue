@@ -97,7 +97,7 @@ defineEmits(['toggleVisibility']);
 }
 
 .password-visibility-btn:disabled {
-  color: #B8C4CE;
+  color: var(--border-gold);
   cursor: default;
 }
 </style>

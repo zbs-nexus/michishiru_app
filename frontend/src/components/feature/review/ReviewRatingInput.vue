@@ -59,7 +59,7 @@ const handleSelect = (value) => {
   padding: 2px;
   font-size: 28px;
   line-height: 1;
-  color: #D8DEE4;
+  color: var(--border-gold);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -71,7 +71,7 @@ const handleSelect = (value) => {
 }
 
 .rating-star.is-filled {
-  color: #F5B301;
+  color: var(--accent-gold);
 }
 
 .rating-star:focus-visible {

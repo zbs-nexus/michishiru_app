@@ -26,6 +26,34 @@ import {
 const NO_VALID_SESSION_MESSAGE =
   'ログインの有効期限が切れました。もう一度ログインしてください';
 
+/**
+ * デザイン確認用のダミートークン（開発時のみ）。
+ * ローカルAPIハーネスはトークンを検証しないため、形だけ揃っていれば通る。
+ * 本物と見間違えないよう、値そのものに用途を書いておく。
+ */
+const PREVIEW_ID_TOKEN = 'design-preview-dummy-id-token';
+
+/**
+ * ダミートークンを返す状態かどうか。
+ * 既定は false で、デザイン確認用の画面（DesignPreviewView）だけが真にする。
+ */
+let isPreviewIdTokenEnabled = false;
+
+/**
+ * @description 以降の `fetchIdToken` がダミートークンを返すようにする。
+ *
+ * デザイン確認用の画面は Cognito のセッションを作らずログイン済みに見せるため、
+ * このままではAPIの認可でトークンが取れず画面を確認できない。
+ * その回避のための開発時限定の口であり、本番ビルドでは
+ * `import.meta.env.DEV` が false になってこの関数は何もしない。
+ * @returns {void}
+ */
+export const enablePreviewIdToken = () => {
+  if (import.meta.env.DEV) {
+    isPreviewIdTokenEnabled = true;
+  }
+};
+
 /** Cognito が返す例外名と、画面に出す文言の対応 */
 const ERROR_MESSAGES = {
   NotAuthorizedException: 'ユーザー名またはパスワードが違います',
@@ -78,6 +106,15 @@ const PASSWORD_RESET_ERROR_MESSAGES = {
   // メールアドレスが未確認のユーザーは、送信先が無いため再設定できない
   InvalidParameterException:
     'このユーザーはメールアドレスが未確認のため再設定できません。管理者に連絡してください'
+};
+
+/**
+ * サインインで追加の手続きを求められたとき、例外名を読み替える対応。
+ * Amplify v6 は未確認のユーザーに対して UserNotConfirmedException を投げず、
+ * 次の手続き（CONFIRM_SIGN_UP）として返すため、例外として扱う名前へ寄せる。
+ */
+const SIGN_IN_STEP_ERROR_NAMES = {
+  CONFIRM_SIGN_UP: 'UserNotConfirmedException'
 };
 
 /** サインインの対応表に無い例外に使う文言 */
@@ -134,10 +171,11 @@ export const signInWithPassword = async (username, password) => {
     return;
   }
 
-  // MFAや初回パスワード変更など、追加の手続きを求められた場合。
+  // 未確認のユーザー・MFA・初回パスワード変更など、追加の手続きを求められた場合。
   // 対応する画面を用意していないため、失敗として上位へ返す
   const error = new Error(`サインインが完了しませんでした: ${nextStep.signInStep}`);
-  error.name = nextStep.signInStep;
+  error.name =
+    SIGN_IN_STEP_ERROR_NAMES[nextStep.signInStep] ?? nextStep.signInStep;
   throw error;
 };
 
@@ -298,6 +336,11 @@ export const fetchSignedInUsername = async () => {
  * @throws {Error} 未サインイン、またはセッションが失効している場合（name は NoValidSession）
  */
 export const fetchIdToken = async () => {
+  // デザイン確認用の画面から有効にしたときのみ通る。本番ビルドでは条件ごと消える
+  if (import.meta.env.DEV && isPreviewIdTokenEnabled) {
+    return PREVIEW_ID_TOKEN;
+  }
+
   const session = await fetchAuthSession();
   const idToken = session.tokens?.idToken?.toString();
 

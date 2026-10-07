@@ -148,10 +148,42 @@ inclusion: always
 | 口コミ投稿 | postReview | 口コミを投稿すること |
 | 口コミ投稿フォーム | ReviewPostForm | 口コミを入力するフォーム（コンポーネント名） |
 | 評価 | rating | スポットへの5段階評価（1〜5の整数） |
+| 平均評価 | ratingAverage | その場所の評価の平均。合計と件数から算出する |
+| 評価件数 | ratingCount | その場所に付いた口コミ（評価）の件数 |
 | ロケーション名 | spotName | 口コミ対象のスポットの名称。ユーザーが入力する |
+| 写真 | photo | 口コミに添える画像。場所あたり最大4枚、初回投稿時のみ設定する |
+| 写真キー | photoKeys | S3に保存した写真のオブジェクトキーの配列 |
+| 写真表示URL | photoUrls | 写真表示用の署名付きGET URLの配列（getSpotが返す） |
+| 作成者本人か | isOwner | 呼び出し元がその場所の作成者か。本人は名前・ジャンル・写真も編集できる |
+| 自分の口コミ一覧 | myReviews | 自分が投稿した口コミ（場所つき）。地図のオレンジピン表示に使う |
 | ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
+| 丸めセル | geoCell | 近接する場所を同一視するためのグリッドのセルキー。半径40mの候補絞り込みに使う |
 
 `location`（単独）は使わない。口コミ対象の場所の名称は `spotName` に統一する（辞書の「使ってはいけない表記揺れ」で `place` / `location` を `spot` に寄せているため）。
+
+### マスコット
+
+アプリの案内役として各画面に登場するフクロウのキャラクター。画面に表示しているコメントを吹き出しで話させる。
+
+| 日本語 | 英語（コード上） | 説明 |
+|---|---|---|
+| マスコット | mascot | アプリの案内役のフクロウのキャラクター。1画面に1体だけ表示する |
+| マスコットのレベル | mascotLevel | マスコットの成長段階（1〜10）。ユーザーの実績に応じて上がる |
+| マスコットの名前 | mascotName | レベルごとの呼び名（`ミチのタマゴ` / `よちよちヒナ` 等） |
+| マスコットの画像 | mascotImage | レベルごとの姿の画像。未用意のレベルは `null` |
+| マスコットの定義 | mascotLevels | レベルと名前と画像の対応表。`constants/mascotLevels.js` |
+| 既定のマスコットのレベル | DEFAULT_MASCOT_LEVEL | 実績連動が入るまで全画面で使う固定レベル（1） |
+| マスコットのレベルの下限 | MASCOT_MIN_LEVEL | 1 |
+| マスコットのレベルの上限 | MASCOT_MAX_LEVEL | 10 |
+| 吹き出し | speechBubble | マスコットが話しているように見せる枠（コンポーネント名は `MascotSpeechBubble`） |
+| マスコットの立ち絵 | MascotAvatar | 画像とレベル表示だけを担うコンポーネント名 |
+| 吹き出しの並び | placement | マスコットと吹き出しの並べ方（`side` = 横並び / `stacked` = 吹き出しを上） |
+| 吹き出しの種類 | variant | 吹き出しの見た目と読み上げ優先度（`normal` / `alert`） |
+| マスコットの表示サイズ | size | `small` / `medium` / `large` |
+| 装飾としての表示か | isDecorative | 真のとき代替テキストを空にし支援技術から隠す（読み上げの重複を防ぐ） |
+| レベル表示を出すか | hasLevelLabel | 真のとき `Lv.1 ミチのタマゴ` の表示を添える |
+
+`variant` は `BaseToast` でも同名で使っているが、値は別（トーストは `error` / `omakase`）。どちらもその部品の「見た目の種類」を指す語として使う。
 
 ### 地図
 
@@ -243,6 +275,9 @@ inclusion: always
 | development / production | dev / prod | 環境名は短い形に統一 |
 | stg / staging | （使わない） | 環境は dev / prod の2つのみ |
 | env | stage | 環境の区分を指す語は stage に統一（`env` はAWSのアカウント・リージョン指定に使うため） |
+| character / chara | mascot | キャラクターを指す語は mascot に統一 |
+| balloon / tooltip | speechBubble | 吹き出しは speechBubble に統一（tooltip は補助説明の別概念） |
+| avatar（単独） | MascotAvatar | 利用者のアイコンと混同するため、マスコットの立ち絵は接頭辞を付ける |
 
 `spot` は使用可。以前は禁止語だったが、`waypoint` とは別概念のため解禁した（「特に間違えやすい2組」を参照）。
 
@@ -305,8 +340,12 @@ inclusion: always
 | 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
 | 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
+| 2026/10/07 | 口コミ投稿のバックエンド実装に伴い「口コミ」へ `ratingAverage` / `ratingCount` / `geoCell` を追加（半径40mで同じ場所とみなし、場所ごとに評価を集計する） |
+| 2026/10/07 | 口コミ写真（場所あたり最大4枚・初回投稿時・S3）の実装に伴い「口コミ」へ `photo` / `photoKeys` / `photoUrls` を追加 |
+| 2026/10/07 | 本人編集・自分の口コミのオレンジピン表示の実装に伴い「口コミ」へ `isOwner` / `myReviews` を追加 |
 | 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |
 | 2026/10/07 | API の認可（Cognito オーソライザー）の実装に伴い「認証」へ `idToken` / `sub` を追加 |
+| 2026/10/07 | マスコット（フクロウのキャラクター）の導入に伴い「マスコット」の節を新設。`mascot` / `mascotLevel` / `mascotName` / `mascotImage` / `mascotLevels` / `DEFAULT_MASCOT_LEVEL` / `MASCOT_MIN_LEVEL` / `MASCOT_MAX_LEVEL` / `speechBubble` / `MascotAvatar` / `placement` / `size` / `isDecorative` / `hasLevelLabel` を登録。`character` / `balloon` / `avatar` 単独を禁止 |
 | 2026/10/07 | 散歩の計測信頼性の実装に伴い measurementStatus / hasMeasurementGap / lastDistanceAddedAt / isScreenAwake を追加 |
 | 2026/10/07 | 欠落の判定を継続時間のしきい値に変更したことに伴い MEASUREMENT_GAP_THRESHOLD_MS を追加 |
 | 2026/10/07 | 実績のDB保存に伴い walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults を追加 |

@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
+import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
@@ -10,6 +11,9 @@ import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
 import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
 import { useGenreOptions } from '@/composables/useGenreOptions';
+import { useReviewPosting } from '@/composables/useReviewPosting';
+import { useMyReviews } from '@/composables/useMyReviews';
+import { useToastMessage } from '@/composables/useToastMessage';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
 import { useRouteStore } from '@/stores/routeStore';
@@ -62,6 +66,34 @@ const {
 
 // 口コミのジャンルはホーム画面と同じ検索条件マスタから取得する
 const { genreOptions, loadGenreOptions } = useGenreOptions();
+
+// 口コミの場所解決と投稿
+const {
+  existingSpot,
+  isOwner,
+  userRating,
+  existingPhotos,
+  isResolving,
+  isPosting,
+  errorMessage: reviewErrorMessage,
+  resolve: resolveReviewSpot,
+  post: postReviewContent,
+  reset: resetReview
+} = useReviewPosting();
+
+// 自分が投稿した口コミ（地図のオレンジピン）
+const { myReviews, loadMyReviews } = useMyReviews();
+
+/** 自分の口コミのオレンジピンを表示するか（既定は表示） */
+const showMyReviews = ref(true);
+
+// 画面上部に出す一時メッセージ（投稿成功・エラー）
+const {
+  message: toastMessage,
+  variant: toastVariant,
+  showMessage,
+  hideMessage
+} = useToastMessage();
 
 /** 案内対象のスポット。巡る順に並んでいる */
 const spots = computed(() => routeStore.currentRoute?.spots ?? []);
@@ -259,6 +291,8 @@ onMounted(() => {
   startTracking();
   // フォームを開いたときに待たせないよう、先にジャンルを取得しておく
   loadGenreOptions();
+  // 自分の口コミをオレンジピンで出すために取得する
+  loadMyReviews();
   requestScreenWakeLock();
   document.addEventListener('visibilitychange', handleVisibilityChange);
 });
@@ -270,6 +304,14 @@ onBeforeUnmount(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange);
   clearGapTimer();
 });
+
+/**
+ * @description 自分の口コミのオレンジピンの表示/非表示を切り替える
+ * @returns {void}
+ */
+const toggleMyReviews = () => {
+  showMyReviews.value = !showMyReviews.value;
+};
 
 /**
  * @description バナーとフォームに挟まれた可視範囲の中央にピンが来るよう、
@@ -296,6 +338,10 @@ const measureVisibleCenterOffsetY = () => {
  * @returns {Promise<void>}
  */
 const handleLongPressMap = async (position) => {
+  // 前の場所のメッセージ・解決結果を持ち越さない
+  hideMessage();
+  resetReview();
+
   isReviewFormVisible.value = true;
 
   // フォームが描画されてから高さを測る
@@ -303,7 +349,21 @@ const handleLongPressMap = async (position) => {
   pinOffsetY.value = measureVisibleCenterOffsetY();
 
   reviewPin.value = position;
+
+  // 投稿済みの場所なら名前・ジャンルを固定し評価のみにするため、先に解決する
+  const isResolved = await resolveReviewSpot(position);
+
+  if (!isResolved) {
+    showMessage(reviewErrorMessage.value ?? '場所の確認に失敗しました');
+  }
 };
+
+/**
+ * @description オレンジピンをタップしたとき、その場所の口コミフォーム（本人編集）を開く
+ * @param {{lng: number, lat: number}} position タップした場所の座標
+ * @returns {Promise<void>}
+ */
+const handleSelectMyReview = (position) => handleLongPressMap(position);
 
 /**
  * @description 口コミ投稿フォームを閉じ、立てたピンを消す
@@ -312,16 +372,27 @@ const handleLongPressMap = async (position) => {
 const handleCloseReview = () => {
   isReviewFormVisible.value = false;
   reviewPin.value = null;
+  resetReview();
 };
 
 /**
- * @description 口コミの投稿を受け取る。
- * 送信などの内部処理は未実装のため、現時点では投稿内容（ReviewPostFormのsubmitReview
- * が渡す { spotName, genreId, genreName, rating }）は使わず、フォームを閉じてピンを消すだけにする。
- * @returns {void}
+ * @description 口コミを投稿する。
+ * 成功したらフォームを閉じて知らせ、失敗したらフォームを残してエラーを出す。
+ * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @returns {Promise<void>}
  */
-const handleSubmitReview = () => {
+const handleSubmitReview = async (review) => {
+  const result = await postReviewContent({ position: reviewPin.value, ...review });
+
+  if (result === null) {
+    showMessage(reviewErrorMessage.value ?? '口コミの投稿に失敗しました');
+    return;
+  }
+
   handleCloseReview();
+  showMessage('口コミを投稿しました', 'success');
+  // 新規・編集を地図のオレンジピンへ反映する
+  loadMyReviews();
 };
 
 /**
@@ -357,6 +428,13 @@ const handleConfirmEnd = () => {
     v-if="routeStore.currentRoute"
     :has-content-padding="false"
   >
+    <BaseToast
+      v-if="toastMessage"
+      :message="toastMessage"
+      :variant="toastVariant"
+      @close="hideMessage"
+    />
+
     <RouteNextSpotBanner
       ref="bannerRef"
       :spot-name="nextSpot?.name ?? null"
@@ -374,13 +452,34 @@ const handleConfirmEnd = () => {
       :is-long-press-enabled="true"
       :pin-position="reviewPin"
       :pin-offset-y="pinOffsetY"
+      :my-review-spots="myReviews"
+      :show-my-reviews="showMyReviews"
       @long-press-map="handleLongPressMap"
+      @select-my-review="handleSelectMyReview"
     />
+
+    <button
+      class="my-reviews-toggle"
+      :class="{ 'is-on': showMyReviews }"
+      type="button"
+      :aria-pressed="showMyReviews"
+      @click="toggleMyReviews"
+    >
+      <span class="my-reviews-toggle-dot" />
+      自分の口コミ
+    </button>
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
       ref="reviewFormRef"
       :genre-options="genreOptions"
+      :pin-position="reviewPin"
+      :existing-spot="existingSpot"
+      :is-owner="isOwner"
+      :initial-rating="userRating"
+      :existing-photos="existingPhotos"
+      :is-resolving="isResolving"
+      :is-posting="isPosting"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
     />
@@ -395,7 +494,7 @@ const handleConfirmEnd = () => {
 
       <BaseModal
         v-if="isEndConfirmVisible"
-        message="案内を終了しますか？"
+        message="ルート案内を終了しますか？"
         confirm-label="終了する"
         @confirm="handleConfirmEnd"
         @cancel="handleCancelEnd"
@@ -412,5 +511,44 @@ const handleConfirmEnd = () => {
  */
 .primary-btn.full-width {
   bottom: 44px;
+}
+
+/*
+ * 自分の口コミピンの表示切り替えボタン。
+ * 次の目的地バナー（top: 12px・中央）とズームコントロール（右上）に重ならないよう左上に置く。
+ */
+.my-reviews-toggle {
+  position: fixed;
+  top: 84px;
+  left: 12px;
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-gray);
+  background: var(--white);
+  border: none;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.my-reviews-toggle.is-on {
+  color: var(--text-dark);
+}
+
+.my-reviews-toggle-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #D8DEE4;
+}
+
+/* オン状態はオレンジの丸でピンの色と対応づける */
+.my-reviews-toggle.is-on .my-reviews-toggle-dot {
+  background: #F39C12;
 }
 </style>

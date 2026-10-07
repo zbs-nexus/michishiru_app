@@ -159,22 +159,23 @@ describe('MichishiruStack (バックエンド有効)', () => {
     });
   });
 
-  test('ログイン後に呼ぶ4つのメソッドを Cognito 認可で保護する', () => {
+  test('ログイン後に呼ぶ8つのメソッドを Cognito 認可で保護する', () => {
     const methods = Object.values(template.findResources('AWS::ApiGateway::Method'));
     const authorizedMethods = methods.filter(
       (method) => method.Properties?.AuthorizationType === 'COGNITO_USER_POOLS'
     );
 
-    expect(authorizedMethods).toHaveLength(4);
+    expect(authorizedMethods).toHaveLength(8);
 
     for (const method of authorizedMethods) {
       expect(method.Properties?.AuthorizerId).toBeDefined();
     }
 
-    // routes の GET / POST、conditions の GET、walk-results の POST
+    // routes GET/POST、conditions GET、spots GET、reviews POST、
+    // review-photo-uploads POST、my-reviews GET、walk-results POST
     expect(
       authorizedMethods.map((method) => method.Properties?.HttpMethod).sort()
-    ).toEqual(['GET', 'GET', 'POST', 'POST']);
+    ).toEqual(['GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'POST', 'POST']);
   });
 
   test('未認証のメソッドはログイン前に呼ぶ照合APIだけである', () => {
