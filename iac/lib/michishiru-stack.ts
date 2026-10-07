@@ -160,6 +160,32 @@ export class MichishiruStack extends cdk.Stack {
         ]
       });
 
+      // DynamoDB: 口コミ（場所メタ＋口コミ）を格納するテーブル（単一テーブル設計）
+      //   pk=spotId, sk='SPOT'（場所メタ）/ 'REVIEW#<userId>'（各ユーザーの口コミ）
+      const reviewTable = new dynamodb.TableV2(this, 'ReviewTable', {
+        tableName: `Review-${stage}`,
+        partitionKey: { name: 'spotId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+        billing: dynamodb.Billing.onDemand(),
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+        globalSecondaryIndexes: [
+          {
+            // 近接する場所をグリッドのセルで引くための GSI（半径40mの候補絞り込み）。
+            // 場所メタ行のみ geoCell を持つため、口コミ行は含まれない（疎なインデックス）
+            indexName: 'GSI-GeoCell',
+            partitionKey: { name: 'geoCell', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'spotId', type: dynamodb.AttributeType.STRING }
+          },
+          {
+            // ユーザーが投稿した口コミを新しい順に引くための GSI。
+            // 口コミ行のみ userId を持つため、場所メタ行は含まれない（疎なインデックス）
+            indexName: 'GSI-UserReview',
+            partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING }
+          }
+        ]
+      });
+
       // backend は素の ESM JavaScript で、依存する AWS SDK v3 は Lambda ランタイムに
       // 同梱されるため、バンドルせず backend ディレクトリをそのままデプロイする。
       // 複数の関数で同じコード資産を共有する。
@@ -276,6 +302,35 @@ export class MichishiruStack extends cdk.Stack {
 
       conditionTable.grantReadData(getConditionsFn);
 
+      // Lambda: getSpot ハンドラ（長押し位置に既存の口コミ場所があるかを返す）
+      // DynamoDB のみを使うため、ディレクトリをそのまま配置する。
+      const getSpotFn = new lambda.Function(this, 'GetSpotFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        handler: 'functions/getSpot/handler.handler',
+        code: backendCode,
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          REVIEW_TABLE_NAME: reviewTable.tableName
+        }
+      });
+
+      reviewTable.grantReadData(getSpotFn);
+
+      // Lambda: createReview ハンドラ（口コミを投稿し、場所の集計を更新する）
+      const createReviewFn = new lambda.Function(this, 'CreateReviewFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        handler: 'functions/createReview/handler.handler',
+        code: backendCode,
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          REVIEW_TABLE_NAME: reviewTable.tableName
+        }
+      });
+
+      reviewTable.grantReadWriteData(createReviewFn);
+
       // Lambda: verifyPasswordResetTarget ハンドラ
       // （パスワード再設定の前に、ユーザー名とメールアドレスの組み合わせを照合する）
       // ブラウザからはユーザーの登録情報を参照できないため、サーバー側で確かめる。
@@ -320,6 +375,8 @@ export class MichishiruStack extends cdk.Stack {
       //   GET  /api/v1/routes                      既存ルートの取得
       //   POST /api/v1/routes                      条件からルートを生成
       //   GET  /api/v1/conditions                  検索条件マスタの取得
+      //   GET  /api/v1/spots                       長押し位置の既存口コミ場所の解決（要認証）
+      //   POST /api/v1/reviews                     口コミの投稿（要認証）
       //   POST /api/v1/password-reset-verifications ユーザー名とメールアドレスの照合
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
@@ -331,6 +388,23 @@ export class MichishiruStack extends cdk.Stack {
 
       const v1Resource = api.root.addResource('api').addResource('v1');
 
+      // 口コミ系エンドポイントは投稿者を特定するため Cognito 認証を必須にする。
+      // フロントは Amplify のセッションから取得した ID トークンを Authorization ヘッダで送る。
+      const reviewAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(
+        this,
+        'ReviewAuthorizer',
+        {
+          cognitoUserPools: [userPool],
+          authorizerName: `michishiru-review-authorizer-${stage}`
+        }
+      );
+
+      /** 口コミ系メソッドに付ける、Cognito 認証を要求するオプション */
+      const reviewAuthOptions: apigateway.MethodOptions = {
+        authorizer: reviewAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO
+      };
+
       // GET /api/v1/routes
       const routesResource = v1Resource.addResource('routes');
       routesResource.addMethod('GET', new apigateway.LambdaIntegration(getRouteFn));
@@ -341,6 +415,22 @@ export class MichishiruStack extends cdk.Stack {
       conditionsResource.addMethod(
         'GET',
         new apigateway.LambdaIntegration(getConditionsFn)
+      );
+
+      // GET /api/v1/spots（長押し位置の既存口コミ場所を解決する。要認証）
+      const spotsResource = v1Resource.addResource('spots');
+      spotsResource.addMethod(
+        'GET',
+        new apigateway.LambdaIntegration(getSpotFn),
+        reviewAuthOptions
+      );
+
+      // POST /api/v1/reviews（口コミを投稿する。要認証）
+      const reviewsResource = v1Resource.addResource('reviews');
+      reviewsResource.addMethod(
+        'POST',
+        new apigateway.LambdaIntegration(createReviewFn),
+        reviewAuthOptions
       );
 
       // POST /api/v1/password-reset-verifications
@@ -361,6 +451,10 @@ export class MichishiruStack extends cdk.Stack {
       new cdk.CfnOutput(this, 'RouteTableName', {
         value: routeTable.tableName,
         description: 'ルートを格納する DynamoDB テーブル名'
+      });
+      new cdk.CfnOutput(this, 'ReviewTableName', {
+        value: reviewTable.tableName,
+        description: '口コミ（場所メタ＋口コミ）を格納する DynamoDB テーブル名'
       });
     }
 
