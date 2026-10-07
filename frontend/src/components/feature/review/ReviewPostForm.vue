@@ -504,7 +504,8 @@ const handleSubmit = () => {
   max-height: 85vh;
   overflow-y: auto;
   padding: 10px 20px 16px;
-  background: var(--white);
+  background: var(--surface);
+  border-top: 2px solid var(--border-gold);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.2);
   animation: review-form-slide-in 0.2s ease-out;
@@ -537,7 +538,7 @@ const handleSubmit = () => {
 }
 
 .review-form-close:hover {
-  background: #F0F4F8;
+  background: var(--bg-deep);
 }
 
 .review-field {
@@ -562,9 +563,9 @@ const handleSubmit = () => {
   width: 100%;
   padding: 12px 14px;
   font-size: 16px;
-  border: 1px solid #DDE3E8;
+  border: 1px solid var(--border-gold);
   border-radius: 10px;
-  background: var(--white);
+  background: var(--surface);
 }
 
 .review-name-input:focus {

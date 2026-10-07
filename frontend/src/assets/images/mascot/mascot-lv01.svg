@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  マスコット Lv.1「ミチのタマゴ」。
+  これから孵るフクロウの卵で、殻には進む方向を示す矢印が浮かんでいる。
+  レベルが上がると姿が変わるため、画像はレベルごとに1ファイル用意する
+  （対応表は frontend/src/constants/mascotLevels.js）。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 240" width="200" height="240">
+  <defs>
+    <linearGradient id="mascot-lv01-shell" x1="0.2" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#FFFCF6"/>
+      <stop offset="0.5" stop-color="#F7EDDE"/>
+      <stop offset="1" stop-color="#E4D1B9"/>
+    </linearGradient>
+    <linearGradient id="mascot-lv01-arrow" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#E3C3AA"/>
+      <stop offset="1" stop-color="#CFAC91"/>
+    </linearGradient>
+  </defs>
+
+  <!-- 接地を示す影 -->
+  <ellipse cx="100" cy="224" rx="50" ry="9" fill="#8A7254" opacity="0.18"/>
+
+  <!-- 卵の殻 -->
+  <path
+    d="M100 17 C137 17 167 83 167 132 C167 181 137 215 100 215 C63 215 33 181 33 132 C33 83 63 17 100 17 Z"
+    fill="url(#mascot-lv01-shell)"
+    stroke="#6B4F3C"
+    stroke-width="3.5"
+    stroke-linejoin="round"
+  />
+
+  <!-- 殻に浮かぶ上向きの矢印。角は丸めて柔らかく見せる -->
+  <path
+    d="M100 82 L133 123 L116 123 L116 173 L84 173 L84 123 L67 123 Z"
+    fill="url(#mascot-lv01-arrow)"
+    stroke="url(#mascot-lv01-arrow)"
+    stroke-width="8"
+    stroke-linejoin="round"
+  />
+
+  <!-- 光沢 -->
+  <ellipse cx="71" cy="76" rx="12" ry="19" fill="#FFFFFF" opacity="0.55" transform="rotate(-22 71 76)"/>
+</svg>

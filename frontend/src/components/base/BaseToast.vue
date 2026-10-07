@@ -83,9 +83,10 @@ const isError = computed(() => props.variant === 'error');
   max-width: 390px;
   padding: 14px 16px;
   border-radius: 12px;
-  border-left: 4px solid #C0392B;
-  background: var(--white);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  border: 2px solid var(--border-gold);
+  border-left: 4px solid var(--danger);
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgba(58, 46, 32, 0.22);
   animation: toast-slide-in 0.2s ease-out;
 }
 
@@ -124,11 +125,11 @@ const isError = computed(() => props.variant === 'error');
 }
 
 .toast-close-btn:hover {
-  background: #F0F4F8;
+  background: var(--bg-deep);
 }
 
 /*
- * おまかせのお知らせ: アプリの配色（ネイビー・グリーン・ルートの青）で揃え、
+ * おまかせのお知らせ: アプリの配色（羊皮紙・金・紫のインク）で揃え、
  * 左端の色帯ではなくグラデーションの枠と弾むアニメーションでエラーと見分ける
  */
 .toast.is-omakase {
@@ -136,9 +137,9 @@ const isError = computed(() => props.variant === 'error');
   border: 2px solid transparent;
   border-radius: 20px;
   background:
-    linear-gradient(135deg, #FFFFFF 0%, #EEF6F0 100%) padding-box,
-    linear-gradient(135deg, var(--accent-green) 0%, var(--route-blue) 100%) border-box;
-  box-shadow: 0 8px 24px rgba(45, 62, 80, 0.25);
+    linear-gradient(135deg, var(--surface) 0%, var(--bg-deep) 100%) padding-box,
+    linear-gradient(135deg, var(--accent-gold) 0%, var(--primary-light) 100%) border-box;
+  box-shadow: 0 8px 24px rgba(58, 46, 32, 0.28);
   animation: toast-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -147,11 +148,12 @@ const isError = computed(() => props.variant === 'error');
   width: 40px;
   height: 40px;
   border-radius: 12px;
-  box-shadow: 0 3px 8px rgba(45, 62, 80, 0.3);
+  border: 2px solid var(--border-gold);
+  box-shadow: 0 3px 8px rgba(58, 46, 32, 0.32);
   animation: toast-logo-bounce 0.6s ease-out 0.35s;
 }
 
-/* 「おまかせ」の小さなラベル。白文字とグリーンでコントラスト比 4.5:1 以上 */
+/* 「おまかせ」の小さなラベル。白文字と紫のインクでコントラスト比 4.5:1 以上 */
 .toast-label {
   align-self: flex-start;
   padding: 1px 10px;
@@ -159,7 +161,7 @@ const isError = computed(() => props.variant === 'error');
   font-weight: 700;
   letter-spacing: 0.05em;
   color: var(--white);
-  background: var(--accent-green);
+  background: var(--primary-color);
   border-radius: 999px;
 }
 
@@ -169,7 +171,7 @@ const isError = computed(() => props.variant === 'error');
 }
 
 .toast.is-omakase .toast-close-btn:hover {
-  background: rgba(74, 124, 89, 0.12);
+  background: rgba(184, 134, 43, 0.16);
 }
 
 @keyframes toast-slide-in {

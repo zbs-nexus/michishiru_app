@@ -307,7 +307,7 @@ const handleConfirmEnd = () => {
 
       <BaseModal
         v-if="isEndConfirmVisible"
-        message="案内を終了しますか？"
+        message="ルート案内を終了しますか？"
         confirm-label="終了する"
         @confirm="handleConfirmEnd"
         @cancel="handleCancelEnd"
