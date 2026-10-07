@@ -19,11 +19,17 @@ export const useRouteStore = defineStore('route', () => {
   /** 選択した距離（km） */
   const distanceKm = ref(DEFAULT_DISTANCE_KM);
 
+  /** ジャンルでおまかせ機能を使用中かどうか */
+  const isGenreRandom = ref(false);
+
+  /** 距離でおまかせ機能を使用中かどうか */
+  const isDistanceRandom = ref(false);
+
   /** 取得済みのルート */
   const currentRoute = ref(null);
 
-  /** ジャンルが選択済みかどうか */
-  const hasRequiredConditions = computed(() => Boolean(genre.value));
+  /** ジャンルが選択済みかどうか（おまかせを含む） */
+  const hasRequiredConditions = computed(() => Boolean(genre.value) || isGenreRandom.value);
 
   /** ルートを取得済みかどうか */
   const hasRoute = computed(() => currentRoute.value !== null);
@@ -37,6 +43,20 @@ export const useRouteStore = defineStore('route', () => {
   const selectGenre = (value, name) => {
     genre.value = value;
     genreName.value = name;
+    isGenreRandom.value = false;
+  };
+
+  /**
+   * @description ジャンルのおまかせ機能を切り替える
+   * @returns {void}
+   */
+  const toggleGenreRandom = () => {
+    isGenreRandom.value = !isGenreRandom.value;
+    if (isGenreRandom.value) {
+      // おまかせをONにしたら、手動選択をクリア
+      genre.value = null;
+      genreName.value = null;
+    }
   };
 
   /**
@@ -46,6 +66,14 @@ export const useRouteStore = defineStore('route', () => {
    */
   const selectDistance = (value) => {
     distanceKm.value = value;
+  };
+
+  /**
+   * @description 距離のおまかせ機能を切り替える
+   * @returns {void}
+   */
+  const toggleDistanceRandom = () => {
+    isDistanceRandom.value = !isDistanceRandom.value;
   };
 
   /**
@@ -65,6 +93,8 @@ export const useRouteStore = defineStore('route', () => {
     genre.value = null;
     genreName.value = null;
     distanceKm.value = DEFAULT_DISTANCE_KM;
+    isGenreRandom.value = false;
+    isDistanceRandom.value = false;
     currentRoute.value = null;
   };
 
@@ -72,11 +102,15 @@ export const useRouteStore = defineStore('route', () => {
     genre,
     genreName,
     distanceKm,
+    isGenreRandom,
+    isDistanceRandom,
     currentRoute,
     hasRequiredConditions,
     hasRoute,
     selectGenre,
+    toggleGenreRandom,
     selectDistance,
+    toggleDistanceRandom,
     setCurrentRoute,
     resetConditions
   };

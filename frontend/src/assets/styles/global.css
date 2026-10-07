@@ -275,6 +275,67 @@ body {
   cursor: pointer;
 }
 
+/* 認証フォーム（ログイン・ユーザー登録で共通） */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.auth-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-gray);
+}
+
+/* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
+.auth-field input {
+  padding: 14px;
+  font-size: 16px;
+  border: 1px solid #DDE3E8;
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.auth-field input:focus {
+  outline: 2px solid var(--route-blue);
+  outline-offset: 1px;
+}
+
+.auth-field input:disabled {
+  background: var(--bg-light);
+}
+
+.auth-error {
+  font-size: 13px;
+  color: #D93025;
+}
+
+.auth-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-gray);
+}
+
+/* 画面の下に置く「ログインへ」「登録へ」の行き先 */
+.auth-switch {
+  margin-top: 24px;
+  font-size: 13px;
+  text-align: center;
+  color: var(--text-gray);
+}
+
+.auth-switch a {
+  font-weight: 600;
+  color: var(--route-blue);
+}
+
 /* ローディング画面 */
 #screen-loading {
   background: linear-gradient(180deg, #E8F0E8 0%, #F0F5F0 50%, #F5F9FB 100%);
@@ -416,6 +477,27 @@ body {
 }
 
 /*
+ * 地図の開始地点マーカー。
+ * スポットマーカーと同じ理由でグローバルに定義している。
+ * スポット（青い丸に番号）と見分けられるよう、色を緑にして一段大きくしている。
+ */
+.origin-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 3px solid var(--white);
+  background: var(--accent-green);
+  color: var(--white);
+  font-size: 15px;
+  font-weight: bold;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+/*
  * 現在地マーカー（Google Maps風）
  * 青い円と方向を示す矢印で構成。
  * RouteMap.vue が動的に生成するため、グローバルに定義している。
@@ -452,22 +534,6 @@ body {
   background: rgba(66, 133, 244, 0.15);
   border-radius: 50%;
   z-index: 1;
-}
-
-/* 方向を示す矢印 */
-.current-location-arrow {
-  position: absolute;
-  top: -12px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 8px solid transparent;
-  border-right: 8px solid transparent;
-  border-bottom: 16px solid #4285F4;
-  transform-origin: center 24px;
-  z-index: 3;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
 
 /* ルート情報カード */

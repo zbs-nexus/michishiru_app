@@ -6,3 +6,6 @@ node_modules
 # CDK asset staging directory
 .cdk.staging
 cdk.out
+
+# cdk deploy --outputs-file の出力（CIで生成する一時ファイル）
+cdk-outputs.json

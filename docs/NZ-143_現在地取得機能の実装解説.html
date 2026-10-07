@@ -753,7 +753,7 @@ console.<span class="function">log</span>(location);  <span class="comment">// {
         <tr>
           <td><code>useLocationTracking.js</code></td>
           <td><span class="badge badge-new">新規</span></td>
-          <td>リアルタイム位置追跡用の composable</td>
+          <td>リアルタイム位置追跡用の composable（watchPosition使用）</td>
         </tr>
         <tr>
           <td><code>RouteMap.vue</code></td>
@@ -835,13 +835,13 @@ console.<span class="function">log</span>(location);  <span class="comment">// {
         </tr>
         <tr>
           <td><code>startTracking</code></td>
-          <td><code>() =&gt; Promise</code></td>
-          <td>追跡を開始</td>
+          <td><code>() =&gt; void</code></td>
+          <td>追跡を開始（watchPositionを起動）</td>
         </tr>
         <tr>
           <td><code>stopTracking</code></td>
           <td><code>() =&gt; void</code></td>
-          <td>追跡を停止</td>
+          <td>追跡を停止（clearWatchを呼び出し）</td>
         </tr>
       </tbody>
     </table>
@@ -857,9 +857,9 @@ console.<span class="function">log</span>(location);  <span class="comment">// {
       </thead>
       <tbody>
         <tr>
-          <td>更新間隔</td>
-          <td>5秒</td>
-          <td>位置情報の取得間隔</td>
+          <td>更新方式</td>
+          <td><code>watchPosition</code></td>
+          <td>位置が変わるたびに自動で更新</td>
         </tr>
         <tr>
           <td>タイムアウト</td>
@@ -867,7 +867,7 @@ console.<span class="function">log</span>(location);  <span class="comment">// {
           <td>1回の取得の最大待ち時間</td>
         </tr>
         <tr>
-          <td>キャッシュ</td>
+          <td>キャッシュ（maximumAge）</td>
           <td>0秒</td>
           <td>常に最新の位置を取得</td>
         </tr>
@@ -890,13 +890,52 @@ console.<span class="function">log</span>(location);  <span class="comment">// {
     </ol>
 
     <div class="callout callout-info">
-      <div class="callout-title">💡 バッテリー消費について</div>
+      <div class="callout-title">💡 watchPosition を使用した常時同期</div>
       <p>
-        <code>watchPosition</code> ではなく <code>setInterval</code> + <code>getCurrentPosition</code> を
-        使用しているため、更新間隔を明示的に制御でき、バッテリー消費を抑えやすくなっています。
-        必要に応じて更新間隔を10秒に変更することも可能です。
+        <code>watchPosition</code> を使用しているため、ユーザーの位置が変わるたびに
+        自動的にマーカーが更新されます。ブラウザとOSが最適な更新頻度を判断するため、
+        移動中は頻繁に更新され、静止時は更新頻度が下がります。
+        これにより、リアルタイム性とバッテリー消費のバランスが取れた追跡が実現できます。
       </p>
     </div>
+
+    <h3>9.6 watchPosition vs setInterval + getCurrentPosition</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>項目</th>
+          <th>watchPosition（採用）</th>
+          <th>setInterval + getCurrentPosition</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>更新タイミング</td>
+          <td>位置が変わったとき</td>
+          <td>固定間隔（5秒など）</td>
+        </tr>
+        <tr>
+          <td>リアルタイム性</td>
+          <td><strong>高い</strong>（即座に反映）</td>
+          <td>低い（最大で間隔分の遅延）</td>
+        </tr>
+        <tr>
+          <td>静止時の挙動</td>
+          <td>更新頻度が自動で下がる</td>
+          <td>無駄な取得が発生</td>
+        </tr>
+        <tr>
+          <td>バッテリー消費</td>
+          <td>OS最適化により効率的</td>
+          <td>固定間隔のため非効率な場合あり</td>
+        </tr>
+        <tr>
+          <td>実装の複雑さ</td>
+          <td>シンプル</td>
+          <td>タイマー管理が必要</td>
+        </tr>
+      </tbody>
+    </table>
 
     <!-- ========== テスト観点 ========== -->
     <h2>10. テスト観点</h2>
@@ -932,7 +971,7 @@ console.<span class="function">log</span>(location);  <span class="comment">// {
     </div>
 
     <footer>
-      <p>ミチシル開発チーム — 2024年9月作成</p>
+      <p>ミチシル開発チーム — 2026年9月作成・更新</p>
     </footer>
   </div>
 </body>

@@ -67,6 +67,17 @@ inclusion: always
 | 距離 | distance | 2地点間の距離。単位は km |
 | 総距離 | totalDistance | 実際に歩いた散歩全体の距離 |
 | 所要時間 | duration | ルートの移動時間 |
+| 次の目的地 | nextSpot | 案内中にこれから向かうスポット |
+| 次の目的地までの距離 | distanceToNextM | 現在地から次の目的地までの直線距離（メートル） |
+| 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
+| 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
+| 到達判定の距離 | ARRIVAL_THRESHOLD_M | 到達とみなす距離（メートル）。`useRouteProgress.js` の定数 |
+| 距離表示の丸め単位 | DISTANCE_ROUNDING_UNIT_M | 距離表示を丸める単位（メートル）。`RouteNextSpotBanner.vue` の定数 |
+| 採用する測位精度の上限 | MAX_ACCEPTABLE_ACCURACY_M | この値より精度が悪い測位は現在地に採用しない（メートル）。`useLocationTracking.js` の定数 |
+| 経路に沿った距離 | alongRouteDistanceM | 直線距離ではなく、経路の折れ線をたどった距離（メートル） |
+| 経路からの離れ | deviationM | 現在地が経路の折れ線からどれだけ離れているか（メートル） |
+| 経路の測定用データ | routeMeasure | 経路の各点までの累積距離をまとめたもの。距離計算に使う |
+| 経路沿いを採用する離れの上限 | MAX_ROUTE_DEVIATION_M | これ以上経路から離れたら直線距離へ切り替える（メートル）。`useRouteProgress.js` の定数 |
 
 ### 検索条件
 
@@ -148,6 +159,29 @@ inclusion: always
 | 作成日時 | createdAt | データの作成日時 |
 | 更新日時 | updatedAt | データの最終更新日時 |
 
+### 認証
+
+画面の名前は日本語（「ログイン画面」「ユーザー登録画面」）、コード上の名前は Cognito と Amplify の API 名に合わせる。
+
+| 日本語 | 英語（コード上） | 説明 |
+|---|---|---|
+| ログイン（画面・行為） | login | 画面名・URL・ルート名に使う（`/login` / `route name: login`） |
+| サインイン | signIn | ログイン処理そのもの。関数名・状態名に使う（`signIn` / `isSigningIn`） |
+| サインアウト | signOut | ログアウト処理 |
+| ユーザー登録（画面・行為） | signUp | 画面名は「ユーザー登録」、コード上は `signUp`（`/sign-up` / `isSigningUp`） |
+| ユーザー名 | username | Cognito のサインイン識別子 |
+| メールアドレス | email | 確認コードの送信先。Cognito の必須属性 |
+| パスワード | password | - |
+| 確認コード | confirmationCode | ユーザー登録後にメールで届く6桁の数字 |
+| ユーザー登録の確認 | confirmSignUp | 確認コードでユーザーを有効化すること |
+| パスワード再設定（画面・行為） | resetPassword | 画面名は「パスワードの再設定」、コード上は `resetPassword`（`/password-reset` / `isResettingPassword`） |
+| パスワード再設定の確認 | confirmResetPassword | 確認コードと新しいパスワードで再設定を確定すること |
+| 新しいパスワード | newPassword | 再設定で利用者が決めるパスワード |
+| ログイン済みかどうか | isSignedIn | - |
+
+`logout` は使わない（`signOut` に統一）。`register` / `signup`（大文字なし）も使わない。
+`forgotPassword` / `reissuePassword` も使わない（`resetPassword` に統一）。Cognito は新しいパスワードを発行せず利用者に決めさせるため、「再発行」ではなく「再設定」と呼ぶ。
+
 ---
 
 ## 使ってはいけない表記揺れ
@@ -223,4 +257,9 @@ inclusion: always
 | 2026/09/02 | CI/CD導入に伴い「環境とデプロイ」の節を追加（stage / dev / prod / deploy）/ `development`・`staging`・`env` を表記揺れとして禁止 |
 | 2026/09/09 | 地図描画（Step 6）の実装に伴い「地図」へ `geometry` / `coordinates` / `bounds` / `mapStyle` を追加 / 「ルートとスポット」へ `spotId` を追加 |
 | 2026/09/09 | `createRoute`（Places + Bedrock + Routes）の実装に伴い「ルートとスポット」へ `routeTitle` / `conceptStory` / `candidateSpots` / `spotCategory`、「地図」へ `position` を追加 |
+| 2026/09/09 | 案内中の次の目的地表示に伴い「ルートとスポット」へ `nextSpot` / `distanceToNextM` / `visitedSpotIds` / `visitedCount` / `ARRIVAL_THRESHOLD_M` を追加 |
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
+| 2026/09/30 | ユーザー登録画面の追加に伴い「認証」の節を新設。未登録だったログイン関連の語（login / signIn / signOut / isSignedIn / username / password）と、登録で使う語（signUp / email / confirmationCode / confirmSignUp）を登録。`logout` / `register` を禁止 |
+| 2026/09/30 | パスワード再設定画面の追加に伴い「認証」へ `resetPassword` / `confirmResetPassword` / `newPassword` を登録。`forgotPassword` / `reissuePassword` を禁止し、「再発行」ではなく「再設定」と呼ぶことを明記 |
+| 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
+| 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |

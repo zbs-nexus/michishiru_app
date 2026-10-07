@@ -58,7 +58,17 @@ const toResponseBody = (route) => ({
   geometry: {
     type: 'LineString',
     coordinates: route.coordinates
-  }
+  },
+  // おまかせで選んだ条件。おまかせを使っていない項目は含めない
+  ...(route.selectedGenres && {
+    selected_genres: route.selectedGenres.map((genre) => ({
+      genre_id: genre.genreId,
+      genre_name: genre.genreName
+    }))
+  }),
+  ...(route.selectedDistanceKm !== undefined && {
+    selected_distance_km: route.selectedDistanceKm
+  })
 });
 
 /**
@@ -89,7 +99,9 @@ export const handler = async (event) => {
 
   logInfo('ルート作成リクエストを受け付けました', {
     genreId: validationResult.value.genreId,
-    targetDistanceKm: validationResult.value.targetDistanceKm
+    targetDistanceKm: validationResult.value.targetDistanceKm,
+    isGenreRandom: validationResult.value.isGenreRandom,
+    isDistanceRandom: validationResult.value.isDistanceRandom
   });
 
   try {

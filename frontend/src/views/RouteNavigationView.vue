@@ -1,14 +1,19 @@
 <script setup>
-import { ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
+import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
+import { useLocationTracking } from '@/composables/useLocationTracking';
+import { useRouteProgress } from '@/composables/useRouteProgress';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
  * @description ルート案内を表示する画面。
+ * 現在地の追跡はここで開始し、地図と次の目的地バナーの両方へ渡す。
+ * 追跡を1か所にまとめることで、watchPositionが二重に動くのを防ぐ。
  * 終了時は確認モーダルを挟んでから結果画面へ進む。
  */
 const router = useRouter();
@@ -16,6 +21,32 @@ const routeStore = useRouteStore();
 
 /** 終了確認モーダルを表示するかどうか */
 const isEndConfirmVisible = ref(false);
+
+const {
+  currentLocation,
+  accuracy,
+  isTracking,
+  trackingError,
+  startTracking
+} = useLocationTracking();
+
+/** 案内対象のスポット。巡る順に並んでいる */
+const spots = computed(() => routeStore.currentRoute?.spots ?? []);
+
+/** 経路の形。次の目的地までの距離を道に沿って測るために渡す */
+const geometry = computed(() => routeStore.currentRoute?.geometry ?? null);
+
+const { nextSpot, distanceToNextM, isCompleted } = useRouteProgress({
+  spots,
+  currentLocation,
+  accuracy,
+  geometry
+});
+
+// 追跡の停止はuseLocationTracking側で画面の破棄時に行われる
+onMounted(() => {
+  startTracking();
+});
 
 /**
  * @description 終了確認を表示する
@@ -48,9 +79,19 @@ const handleConfirmEnd = () => {
     v-if="routeStore.currentRoute"
     :has-content-padding="false"
   >
+    <RouteNextSpotBanner
+      :spot-name="nextSpot?.name ?? null"
+      :distance-to-next-m="distanceToNextM"
+      :is-completed="isCompleted"
+    />
+
     <RouteNavigationMap
       :geometry="routeStore.currentRoute.geometry"
-      :spots="routeStore.currentRoute.spots"
+      :spots="spots"
+      :current-location="currentLocation"
+      :current-accuracy="accuracy"
+      :is-tracking="isTracking"
+      :tracking-error="trackingError"
     />
 
     <template #footer>
@@ -71,3 +112,14 @@ const handleConfirmEnd = () => {
     </template>
   </DefaultLayout>
 </template>
+
+<style scoped>
+/*
+ * この画面は地図が全画面に広がるため、地図右下の帰属表示（iマーク）と
+ * 終了ボタンが重なる。共通の位置（global.css の bottom: 20px）は
+ * 他の画面でも使うため変えず、この画面だけ上へ寄せる。
+ */
+.primary-btn.full-width {
+  bottom: 44px;
+}
+</style>

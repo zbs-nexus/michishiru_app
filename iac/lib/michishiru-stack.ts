@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
+import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
@@ -70,6 +71,71 @@ export class MichishiruStack extends cdk.Stack {
       // 配信用の成果物のみを置くため、削除時はバケットごと破棄してよい
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true
+    });
+
+    // ---- Cognito: ログイン・ユーザー登録に使うユーザープール ----
+    // フロントエンドが利用するため、withBackend に関係なく常に作成する。
+    // サインインの識別子はユーザー名、メールアドレスは必須属性として確認コードで検証する。
+    const userPool = new cognito.UserPool(this, 'UserPool', {
+      userPoolName: `michishiru-users-${stage}`,
+      // 利用者が自分で登録できるようにする（ユーザー登録画面から signUp を呼ぶ）
+      selfSignUpEnabled: true,
+      signInAliases: { username: true },
+      // 大文字小文字の違いで別ユーザーにならないようにする
+      signInCaseSensitive: false,
+      standardAttributes: {
+        email: { required: true, mutable: true }
+      },
+      // 登録時にメールアドレスへ確認コードを送り、入力できたら有効化する
+      autoVerify: { email: true },
+      userVerification: {
+        emailSubject: 'ミチシル - メールアドレスの確認',
+        emailBody: 'ミチシルへのご登録ありがとうございます。確認コードは {####} です。',
+        emailStyle: cognito.VerificationEmailStyle.CODE
+      },
+      passwordPolicy: {
+        minLength: 8,
+        requireUppercase: true,
+        requireLowercase: true,
+        requireDigits: true,
+        requireSymbols: true,
+        tempPasswordValidity: cdk.Duration.days(7)
+      },
+      mfa: cognito.Mfa.OFF,
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      // 既定のCognito送信元を使う。独自ドメインから送る場合はSESの設定が必要
+      email: cognito.UserPoolEmail.withCognito(),
+      // 本番は誤操作で消えないよう保護し、開発は作り直せるようにする
+      deletionProtection: isProd,
+      removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY
+    });
+
+    // SPA 用のアプリクライアント。クライアントシークレットは持たせない
+    // （ブラウザに置くと漏れるため、SPAでは使えない）
+    const userPoolClient = userPool.addClient('WebClient', {
+      userPoolClientName: `michishiru-web-${stage}`,
+      generateSecret: false,
+      // パスワードをそのまま送らないSRPと、トークン更新のみを許可する
+      authFlows: { userSrp: true, user: true },
+      // Cognito がホストするログイン画面（マネージドログイン）は使わず、
+      // 画面はアプリ内に自作している。OAuth のリダイレクト経路は開けない
+      disableOAuth: true,
+      // ユーザーが存在しないことを伏せる（ユーザー名の探り当てを防ぐ）
+      preventUserExistenceErrors: true,
+      accessTokenValidity: cdk.Duration.hours(1),
+      idTokenValidity: cdk.Duration.hours(1),
+      refreshTokenValidity: cdk.Duration.days(5)
+    });
+
+    new cdk.CfnOutput(this, 'UserPoolId', {
+      value: userPool.userPoolId,
+      description:
+        'Cognito ユーザープールID（GitHub の Environment 変数 VITE_COGNITO_USER_POOL_ID に設定する）'
+    });
+    new cdk.CfnOutput(this, 'UserPoolClientId', {
+      value: userPoolClient.userPoolClientId,
+      description:
+        'Cognito アプリクライアントID（GitHub の Environment 変数 VITE_COGNITO_USER_POOL_CLIENT_ID に設定する）'
     });
 
     // ---- バックエンド（任意）: DynamoDB + Lambda + API Gateway ----

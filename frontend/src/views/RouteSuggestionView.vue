@@ -1,4 +1,5 @@
 <script setup>
+import { computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
@@ -23,9 +24,43 @@ const {
 } = useRouteCreation();
 const {
   message: toastMessage,
+  variant: toastVariant,
   showMessage,
   hideMessage
 } = useToastMessage();
+
+/**
+ * おまかせで選ばれた条件の案内文。おまかせを使っていない場合はnull。
+ * ルートごとに持つため、再作成で選び直されると表示も切り替わる。
+ */
+const randomSelectionMessage = computed(() => {
+  const route = routeStore.currentRoute;
+  const parts = [];
+
+  if (route?.selectedGenres?.length) {
+    parts.push(`ジャンル: ${route.selectedGenres.map((genre) => genre.genreName).join('・')}`);
+  }
+
+  if (route?.selectedDistanceKm !== null && route?.selectedDistanceKm !== undefined) {
+    parts.push(`距離: ${route.selectedDistanceKm}km`);
+  }
+
+  // トーストに「おまかせ」のラベルが付くため、本文は選ばれた内容だけにする
+  return parts.length > 0 ? `${parts.join(' / ')} で選びました` : null;
+});
+
+/**
+ * @description おまかせで選ばれた条件があればトーストで知らせる
+ * @returns {void}
+ */
+const showRandomSelectionMessage = () => {
+  if (randomSelectionMessage.value) {
+    showMessage(randomSelectionMessage.value, 'omakase');
+  }
+};
+
+// ホーム画面から作成して遷移してきたときに知らせる
+onMounted(showRandomSelectionMessage);
 
 /**
  * @description 提案を確定して案内画面へ進む。
@@ -50,7 +85,11 @@ const handleRegenerate = async () => {
 
   if (!isSucceeded) {
     showMessage(creationErrorMessage.value ?? 'ルートの再作成に失敗しました');
+    return;
   }
+
+  // 再作成ではおまかせで選び直されるため、新しい値を知らせる
+  showRandomSelectionMessage();
 };
 </script>
 
@@ -64,6 +103,7 @@ const handleRegenerate = async () => {
     <BaseToast
       v-if="toastMessage"
       :message="toastMessage"
+      :variant="toastVariant"
       @close="hideMessage"
     />
 
