@@ -136,8 +136,11 @@ inclusion: always
 | 口コミ投稿 | postReview | 口コミを投稿すること |
 | 口コミ投稿フォーム | ReviewPostForm | 口コミを入力するフォーム（コンポーネント名） |
 | 評価 | rating | スポットへの5段階評価（1〜5の整数） |
+| 平均評価 | ratingAverage | その場所の評価の平均。合計と件数から算出する |
+| 評価件数 | ratingCount | その場所に付いた口コミ（評価）の件数 |
 | ロケーション名 | spotName | 口コミ対象のスポットの名称。ユーザーが入力する |
 | ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
+| 丸めセル | geoCell | 近接する場所を同一視するためのグリッドのセルキー。半径40mの候補絞り込みに使う |
 
 `location`（単独）は使わない。口コミ対象の場所の名称は `spotName` に統一する（辞書の「使ってはいけない表記揺れ」で `place` / `location` を `spot` に寄せているため）。
 
@@ -291,4 +294,5 @@ inclusion: always
 | 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
 | 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
+| 2026/10/07 | 口コミ投稿のバックエンド実装に伴い「口コミ」へ `ratingAverage` / `ratingCount` / `geoCell` を追加（半径40mで同じ場所とみなし、場所ごとに評価を集計する） |
 | 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |
