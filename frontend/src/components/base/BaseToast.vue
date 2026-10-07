@@ -17,11 +17,12 @@ const props = defineProps({
    * メッセージの種類。
    * error: エラーや入力不足の通知（既定）
    * omakase: おまかせで選ばれた条件のお知らせ（ポップなデザイン）
+   * success: 操作の成功通知（口コミ投稿など）
    */
   variant: {
     type: String,
     default: 'error',
-    validator: (value) => ['error', 'omakase'].includes(value)
+    validator: (value) => ['error', 'omakase', 'success'].includes(value)
   }
 });
 
@@ -29,14 +30,17 @@ defineEmits(['close']);
 
 /** お知らせかどうか。エラー以外は割り込まずに読み上げさせる */
 const isOmakase = computed(() => props.variant === 'omakase');
+
+/** エラーかどうか。エラーのときだけ割り込みで読み上げさせる */
+const isError = computed(() => props.variant === 'error');
 </script>
 
 <template>
   <div
     class="toast"
-    :class="{ 'is-omakase': isOmakase }"
-    :role="isOmakase ? 'status' : 'alert'"
-    :aria-live="isOmakase ? 'polite' : 'assertive'"
+    :class="{ 'is-omakase': isOmakase, 'is-success': variant === 'success' }"
+    :role="isError ? 'alert' : 'status'"
+    :aria-live="isError ? 'assertive' : 'polite'"
   >
     <img
       v-if="isOmakase"
@@ -84,6 +88,11 @@ const isOmakase = computed(() => props.variant === 'omakase');
   background: var(--surface);
   box-shadow: 0 4px 16px rgba(58, 46, 32, 0.22);
   animation: toast-slide-in 0.2s ease-out;
+}
+
+/* 成功通知: 左端の色帯を緑にしてエラー（赤）と見分ける */
+.toast.is-success {
+  border-left-color: var(--accent-green);
 }
 
 .toast-body {

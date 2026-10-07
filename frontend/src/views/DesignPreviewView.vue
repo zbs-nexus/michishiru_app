@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
+import { enablePreviewIdToken } from '@/services/authService';
 import { useAuthStore } from '@/stores/authStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
@@ -95,9 +96,14 @@ const isLoadingScreenVisible = ref(false);
 /**
  * @description ログイン済みの状態と作成済みのルートをストアへ入れる。
  * ルーターガードの「ログイン必須」「ルート取得済み必須」を満たすために必要。
+ *
+ * あわせてAPIの認可に使うトークンをダミーへ切り替える。
+ * Cognito のセッションは作っていないため、これが無いと検索条件マスタの取得が
+ * 「ログインの有効期限が切れました」で失敗し、ホーム画面を確認できない。
  * @returns {void}
  */
 const seedSignedInState = () => {
+  enablePreviewIdToken();
   authStore.username = 'デザイン確認';
   authStore.isSessionRestored = true;
   routeStore.selectGenre('nature', '自然');
