@@ -5,6 +5,7 @@ import { handler as createReviewHandler } from '../backend/functions/createRevie
 import { handler as getConditionsHandler } from '../backend/functions/getConditions/handler.js';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
 import { handler as getSpotHandler } from '../backend/functions/getSpot/handler.js';
+import { handler as getUserReviewsHandler } from '../backend/functions/getUserReviews/handler.js';
 import { handler as verifyPasswordResetTargetHandler } from '../backend/functions/verifyPasswordResetTarget/handler.js';
 
 /**
@@ -42,6 +43,7 @@ const ROUTE_HANDLERS = [
   // 口コミ系はDynamoDBへアクセスするため、ローカルで叩くにはAWSの認証情報と
   // 環境変数 REVIEW_TABLE_NAME が必要になる。
   { method: 'GET', path: '/api/v1/spots', invoke: getSpotHandler },
+  { method: 'GET', path: '/api/v1/my-reviews', invoke: getUserReviewsHandler },
   { method: 'POST', path: '/api/v1/reviews', invoke: createReviewHandler },
   // 写真アップロードURL発行。ローカルで叩くにはAWSの認証情報と PHOTO_BUCKET_NAME が必要
   {

@@ -342,9 +342,27 @@ export class MichishiruStack extends cdk.Stack {
       photoBucket.grantRead(getSpotFn);
 
       // Lambda: createReview ハンドラ（口コミを投稿し、場所の集計を更新する）
+      // 本人編集で外された写真の実体を消すため、写真バケットの削除権限も持つ。
       const createReviewFn = new lambda.Function(this, 'CreateReviewFunction', {
         runtime: lambda.Runtime.NODEJS_LATEST,
         handler: 'functions/createReview/handler.handler',
+        code: backendCode,
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          REVIEW_TABLE_NAME: reviewTable.tableName,
+          PHOTO_BUCKET_NAME: photoBucket.bucketName
+        }
+      });
+
+      reviewTable.grantReadWriteData(createReviewFn);
+      // 編集で不要になった写真の実体を削除する
+      photoBucket.grantDelete(createReviewFn);
+
+      // Lambda: getUserReviews ハンドラ（自分の口コミ一覧。地図のオレンジピン用）
+      const getUserReviewsFn = new lambda.Function(this, 'GetUserReviewsFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        handler: 'functions/getUserReviews/handler.handler',
         code: backendCode,
         memorySize: 256,
         timeout: cdk.Duration.seconds(10),
@@ -353,7 +371,7 @@ export class MichishiruStack extends cdk.Stack {
         }
       });
 
-      reviewTable.grantReadWriteData(createReviewFn);
+      reviewTable.grantReadData(getUserReviewsFn);
 
       // Lambda: createPhotoUploadUrls ハンドラ（口コミ写真の署名付きPUT URLを発行する）
       // s3-request-presigner はランタイム同梱の保証が無いため、バンドルする。
@@ -432,8 +450,9 @@ export class MichishiruStack extends cdk.Stack {
       //   POST /api/v1/routes                      条件からルートを生成
       //   GET  /api/v1/conditions                  検索条件マスタの取得
       //   GET  /api/v1/spots                       長押し位置の既存口コミ場所の解決（要認証）
-      //   POST /api/v1/reviews                     口コミの投稿（要認証）
+      //   POST /api/v1/reviews                     口コミの投稿・本人編集（要認証）
       //   POST /api/v1/review-photo-uploads        写真アップロード用の署名付きURL発行（要認証）
+      //   GET  /api/v1/my-reviews                  自分の口コミ一覧（要認証）
       //   POST /api/v1/password-reset-verifications ユーザー名とメールアドレスの照合
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
@@ -518,6 +537,14 @@ export class MichishiruStack extends cdk.Stack {
       reviewPhotoUploadsResource.addMethod(
         'POST',
         new apigateway.LambdaIntegration(createPhotoUploadUrlsFn),
+        cognitoAuthorized
+      );
+
+      // GET /api/v1/my-reviews（自分の口コミ一覧。地図のオレンジピン用。要認証）
+      const myReviewsResource = v1Resource.addResource('my-reviews');
+      myReviewsResource.addMethod(
+        'GET',
+        new apigateway.LambdaIntegration(getUserReviewsFn),
         cognitoAuthorized
       );
 
