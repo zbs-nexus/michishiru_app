@@ -152,10 +152,14 @@ const handleSubmit = () => {
 </template>
 
 <style scoped>
-/* 全画面地図の上に、画面上部から現れる投稿フォーム */
+/*
+ * 全画面地図の上に、画面下部から現れる投稿フォーム。
+ * 終了ボタン（global.css の .primary-btn.full-width、z-index: 50）に重ねてよいため、
+ * 画面下端に固定し、より手前（z-index: 150）に置く。
+ */
 .review-form {
   position: fixed;
-  top: 0;
+  bottom: 0;
   left: 50%;
   transform: translateX(-50%);
   z-index: 150;
@@ -165,8 +169,8 @@ const handleSubmit = () => {
   overflow-y: auto;
   padding: 16px 20px 20px;
   background: var(--white);
-  border-radius: 0 0 16px 16px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.2);
   animation: review-form-slide-in 0.2s ease-out;
 }
 
@@ -250,7 +254,7 @@ const handleSubmit = () => {
 @keyframes review-form-slide-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -16px);
+    transform: translate(-50%, 16px);
   }
 
   to {

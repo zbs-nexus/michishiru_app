@@ -310,10 +310,12 @@ const renderPinMarker = () => {
     pinMarker = new Marker({ element: createPinElement(), anchor: 'bottom' })
       .setLngLat(lngLat)
       .addTo(map);
-    return;
+  } else {
+    pinMarker.setLngLat(lngLat);
   }
 
-  pinMarker.setLngLat(lngLat);
+  // 立てたピンの位置が地図の中央に来るように寄せる
+  map.easeTo({ center: lngLat });
 };
 
 /**
