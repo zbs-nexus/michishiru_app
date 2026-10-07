@@ -34,8 +34,11 @@ const MAX_SEGMENT_DISTANCE_M = 200;
  * 距離が一切積まれなくなる。useLocationTracking は精度が悪い測位を原則弾くが、
  * 初回測位と、良い測位が続かない場合の救済（MAX_POSITION_AGE_MS）では通すため、
  * ここでも独自に上限を持つ。
+ *
+ * 外部へ公開しているのは、案内画面が「測位は届いているが距離を積めない区間」を
+ * 同じ基準で判定するため。二重定義にすると片方だけ変えた時に判定がずれる。
  */
-const MAX_MEASURABLE_ACCURACY_M = 100;
+export const MAX_MEASURABLE_ACCURACY_M = 100;
 
 /**
  * @description 歩いた距離の積算を開始する

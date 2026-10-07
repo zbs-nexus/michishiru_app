@@ -84,6 +84,10 @@ inclusion: always
 | 採用する最小区間距離 | MIN_SEGMENT_DISTANCE_M | これを下回る移動はGPSのゆらぎとみなして積算しない。`useWalkRecord.js` の定数 |
 | 採用する最大区間距離 | MAX_SEGMENT_DISTANCE_M | これを上回る移動は測位の飛びとみなして積算しない。`useWalkRecord.js` の定数 |
 | 距離を積算できる精度の上限 | MAX_MEASURABLE_ACCURACY_M | これより精度が悪い測位では距離を積算しない（メートル）。`useWalkRecord.js` の定数。現在地の採用を決める `MAX_ACCEPTABLE_ACCURACY_M` とは目的が別 |
+| 計測状態 | measurementStatus | 実績をどこまで計測できたか。complete / partial / unavailable の3値 |
+| 計測の欠落があったかどうか | hasMeasurementGap | 画面を切られた・測位が途切れたことを検知したか |
+| 計測の欠落とみなす継続時間 | MEASUREMENT_GAP_THRESHOLD_MS | 測位の中断・画面の非表示がこの時間を超えたら欠落として扱う（ミリ秒）。`RouteNavigationView.vue` の定数 |
+| 最後に距離を積めた時刻 | lastDistanceAddedAt | 距離を加算できた最後の時刻。記録のみで、現時点では計測状態の判定には使っていない |
 
 ### 検索条件
 
@@ -127,6 +131,14 @@ inclusion: always
 | 散歩の開始時刻 | startedAt | 案内を開始した時刻 |
 | 散歩の終了時刻 | endedAt | 案内を終了した時刻 |
 | 経過時間 | elapsedMinutes | 案内の開始から終了までの時間（分） |
+| 画面の消灯を抑止しているかどうか | isScreenAwake | Screen Wake Lock を取得できている状態 |
+| 散歩のID | walkId | 1回の散歩を一意に識別する値（UUID v4）。フロントで生成して送り、再送時も同じ値を使う |
+| 散歩の回数 | walkCount | 保存した散歩の件数。累計レコードが持つ |
+| 累計の距離 | cumulativeDistanceM | 全散歩の距離の合計（メートル）。1回分の totalDistanceM とは別概念 |
+| 累計のスポット数 | cumulativeSpotCount | 全散歩で巡ったスポット数の合計 |
+| 累計の時間 | cumulativeMinutes | 全散歩の経過時間の合計（分） |
+| 保存待ちの実績 | pendingWalkResults | 保存に失敗して端末のブラウザストレージへ退避した実績の一覧 |
+| 退避した実績の持ち主 | ownerUsername | 退避した実績を保存する利用者のユーザー名。再送はこの人がサインインしているときだけ行う |
 
 ### 口コミ
 
@@ -295,3 +307,7 @@ inclusion: always
 | 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
 | 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |
 | 2026/10/07 | API の認可（Cognito オーソライザー）の実装に伴い「認証」へ `idToken` / `sub` を追加 |
+| 2026/10/07 | 散歩の計測信頼性の実装に伴い measurementStatus / hasMeasurementGap / lastDistanceAddedAt / isScreenAwake を追加 |
+| 2026/10/07 | 欠落の判定を継続時間のしきい値に変更したことに伴い MEASUREMENT_GAP_THRESHOLD_MS を追加 |
+| 2026/10/07 | 実績のDB保存に伴い walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults を追加 |
+| 2026/10/07 | 退避した実績を持ち主ごとに送り直すようにしたことに伴い ownerUsername を追加 |

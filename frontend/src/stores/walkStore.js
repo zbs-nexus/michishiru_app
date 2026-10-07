@@ -15,6 +15,16 @@ const METERS_PER_KM = 1000;
 /** 1分あたりのミリ秒数 */
 const MILLISECONDS_PER_MINUTE = 60000;
 
+/**
+ * 実績をどこまで計測できたかを表す3値。
+ * 結果画面の注記の出し分けに使うため、文字列を画面側へ直書きさせずここから参照させる。
+ */
+export const MEASUREMENT_STATUS = {
+  COMPLETE: 'complete',
+  PARTIAL: 'partial',
+  UNAVAILABLE: 'unavailable'
+};
+
 export const useWalkStore = defineStore('walk', () => {
   /** 実際に歩いた距離（メートル）。GPSの軌跡から積算する */
   const totalDistanceM = ref(0);
@@ -34,6 +44,20 @@ export const useWalkStore = defineStore('walk', () => {
    * 結果画面で言い分けるために持つ。距離が積めたかどうかとは別の事実
    */
   const hasLocationFix = ref(false);
+
+  /**
+   * 計測の欠落を検知したかどうか。
+   * 画面を切られた・測位が途切れた場合に立てる。復帰しても欠けた区間は取り戻せないため、
+   * 一度立てたら戻さない（visitedSpotIds と同じラッチの方針）
+   */
+  const hasMeasurementGap = ref(false);
+
+  /**
+   * 最後に距離を積めた時刻（エポックms）。まだ積めていない場合はnull。
+   * 本段階では計測状態の判定には使わず、記録だけ行う。
+   * 「一定時間積めていない＝欠落」とするタイマー判定は信号待ちや休憩を誤検知するため
+   */
+  const lastDistanceAddedAt = ref(null);
 
   /** 実際に歩いた距離（km）。表示直前に換算し、丸め誤差を積み上げない */
   const totalDistanceKm = computed(() => totalDistanceM.value / METERS_PER_KM);
@@ -56,6 +80,34 @@ export const useWalkStore = defineStore('walk', () => {
   });
 
   /**
+   * 実績をどこまで計測できたか。
+   *
+   * 判定の順序そのものが結果を左右するため、強い事実から順に見る。
+   * ① 一度も測位できていない場合は、欠落があったかどうかを語る土台がない。
+   *    最も強い事実なので最初に見て unavailable を返す。
+   * ② 欠落を検知していれば、距離が積めていても足りていない。
+   *    ③より先に見るのは、こちらが「検知した事実」で③より確かな情報だから。
+   * ③ 測位はできたのに距離が0のままなのは、ゆらぎ判定で全区間が落ちた状態。
+   *    欠落を検知してはいないが完全に計測できたとも言えないため partial に寄せる。
+   * ④ 上記のいずれでもなければ complete。
+   */
+  const measurementStatus = computed(() => {
+    if (hasLocationFix.value === false) {
+      return MEASUREMENT_STATUS.UNAVAILABLE;
+    }
+
+    if (hasMeasurementGap.value === true) {
+      return MEASUREMENT_STATUS.PARTIAL;
+    }
+
+    if (totalDistanceM.value === 0) {
+      return MEASUREMENT_STATUS.PARTIAL;
+    }
+
+    return MEASUREMENT_STATUS.COMPLETE;
+  });
+
+  /**
    * @description 散歩の計測を開始する
    * @returns {void}
    */
@@ -65,6 +117,8 @@ export const useWalkStore = defineStore('walk', () => {
     visitedSpotIds.value = [];
     endedAt.value = null;
     hasLocationFix.value = false;
+    hasMeasurementGap.value = false;
+    lastDistanceAddedAt.value = null;
     startedAt.value = Date.now();
   };
 
@@ -79,6 +133,9 @@ export const useWalkStore = defineStore('walk', () => {
     }
 
     totalDistanceM.value += distanceM;
+    // 加算できた時点だけを記録する。無効値で呼ばれた場合に時刻を進めると
+    // 「距離は積めている」と誤って読めてしまう
+    lastDistanceAddedAt.value = Date.now();
   };
 
   /**
@@ -87,6 +144,15 @@ export const useWalkStore = defineStore('walk', () => {
    */
   const markLocationFixed = () => {
     hasLocationFix.value = true;
+  };
+
+  /**
+   * @description 計測の欠落を検知したことを記録する
+   * @returns {void}
+   */
+  const markMeasurementGap = () => {
+    // 一度立てたら戻さない。測位が復帰しても、途切れていた間の距離は取り戻せないため
+    hasMeasurementGap.value = true;
   };
 
   /**
@@ -118,6 +184,8 @@ export const useWalkStore = defineStore('walk', () => {
     startedAt.value = null;
     endedAt.value = null;
     hasLocationFix.value = false;
+    hasMeasurementGap.value = false;
+    lastDistanceAddedAt.value = null;
   };
 
   return {
@@ -126,12 +194,16 @@ export const useWalkStore = defineStore('walk', () => {
     startedAt,
     endedAt,
     hasLocationFix,
+    hasMeasurementGap,
+    lastDistanceAddedAt,
     totalDistanceKm,
     spotCount,
     elapsedMinutes,
+    measurementStatus,
     startWalk,
     addDistanceM,
     markLocationFixed,
+    markMeasurementGap,
     setVisitedSpotIds,
     endWalk,
     resetWalk

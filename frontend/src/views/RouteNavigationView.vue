@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
@@ -10,7 +10,8 @@ import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
 import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
 import { useGenreOptions } from '@/composables/useGenreOptions';
-import { useWalkRecord } from '@/composables/useWalkRecord';
+import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
+import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
 
@@ -23,6 +24,15 @@ import { useWalkStore } from '@/stores/walkStore';
 const router = useRouter();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
+
+/**
+ * 計測が途切れたとみなす継続時間（ミリ秒）。
+ * これより短い中断では、復帰時の区間が MAX_SEGMENT_DISTANCE_M（200m）以内に収まり
+ * 距離は直線で繋がるため、実質的な損失が出ない。
+ * 一方スポットの到達判定は半径40mで、徒歩での通過時間が約64秒のため、
+ * これを超える中断では取りこぼしが起きうる。短い方に合わせて60秒とする。
+ */
+const MEASUREMENT_GAP_THRESHOLD_MS = 60000;
 
 /** 終了確認モーダルを表示するかどうか */
 const isEndConfirmVisible = ref(false);
@@ -69,11 +79,178 @@ const { nextSpot, distanceToNextM, visitedSpotIds, isCompleted } = useRouteProgr
 // 距離の積算は公開する状態を持たず、現在地のwatchでwalkStoreへ直接書き込む
 useWalkRecord({ currentLocation, accuracy });
 
+// 歩行中に画面が消えると測位が止まるため、案内中は自動消灯を抑止する。
+// 取得できたかどうかは画面に出さないため isScreenAwake は受け取らない。
+// 解放も composable 側の onBeforeUnmount が行うため、ここでは要求だけ使う
+const { requestScreenWakeLock } = useScreenWakeLock();
+
 // 到達状況をストアへ写し、結果画面でも巡ったスポット数が読めるようにする。
 // useRouteProgressは配列を丸ごと差し替えるためdeepは不要
 watch(visitedSpotIds, (spotIds) => {
   walkStore.setVisitedSpotIds(spotIds);
 });
+
+/**
+ * 計測が中断しているかどうか。
+ *
+ * 測位が届かない（trackingError）だけでなく、届いていても精度が悪くて
+ * useWalkRecord が距離を積めない区間（accuracy が MAX_MEASURABLE_ACCURACY_M 超）も
+ * 中断として扱う。精度が悪い測位が続く間は trackingError が null のままなので、
+ * エラーだけを見ていると、実際には距離が積まれていないのに完全に計測できたことになる。
+ */
+const isMeasurementInterrupted = computed(
+  () =>
+    trackingError.value !== null ||
+    (accuracy.value !== null && accuracy.value > MAX_MEASURABLE_ACCURACY_M)
+);
+
+/**
+ * 測位が途切れてから欠落と判断するまでのタイマーのID。張っていない場合はnull。
+ * テンプレートから参照しないため、リアクティブにせず素の変数で持つ
+ */
+let gapTimerId = null;
+
+/** 画面が隠れた時刻（エポックms）。表示中はnull */
+let hiddenAt = null;
+
+/**
+ * 中断していた時間の合計（ミリ秒）。
+ *
+ * 1回の中断ごとに判定を捨てるのではなく、散歩全体で積み上げる。
+ * しきい値未満の中断を繰り返す断続的な不調（信号待ちのたびに測位が切れる等）は、
+ * 復帰のたびにタイマーを捨てる形では永久に検知できなかった。
+ * 合計がしきい値を超えた時点で、欠けた事実として記録する。
+ *
+ * 累積値そのものは他の画面から読まないため、ストアには持たせない
+ */
+let accumulatedGapMs = 0;
+
+/** 中断が始まった時刻（エポックms）。中断していない場合はnull */
+let interruptedAt = null;
+
+/**
+ * @description 欠落と判断するタイマーを破棄する
+ * @returns {void}
+ */
+const clearGapTimer = () => {
+  if (gapTimerId !== null) {
+    clearTimeout(gapTimerId);
+    gapTimerId = null;
+  }
+};
+
+/**
+ * @description 中断していた時間を合計へ加え、しきい値を超えていれば欠落として記録する
+ * @param {number} gapMs 中断していた時間（ミリ秒）
+ * @returns {void}
+ */
+const addMeasurementGapMs = (gapMs) => {
+  accumulatedGapMs += gapMs;
+
+  if (accumulatedGapMs >= MEASUREMENT_GAP_THRESHOLD_MS) {
+    walkStore.markMeasurementGap();
+  }
+};
+
+/**
+ * @description 計測の中断が始まったものとして、開始時刻とタイマーを用意する。
+ * 復帰しないまま案内が続く場合に備え、残り時間でタイマーを張る。
+ * @returns {void}
+ */
+const startMeasurementInterruption = () => {
+  // 記録済みならラッチなので張り直す意味がない。
+  // 二重に始めると同じ実時間が2回積まれるため、開始済みの場合も何もしない
+  if (
+    walkStore.hasMeasurementGap ||
+    gapTimerId !== null ||
+    interruptedAt !== null
+  ) {
+    return;
+  }
+
+  interruptedAt = Date.now();
+
+  // 既に合計がしきい値に達しているなら待つ必要がない
+  const remainingMs = MEASUREMENT_GAP_THRESHOLD_MS - accumulatedGapMs;
+
+  if (remainingMs <= 0) {
+    walkStore.markMeasurementGap();
+    return;
+  }
+
+  gapTimerId = setTimeout(() => {
+    gapTimerId = null;
+    walkStore.markMeasurementGap();
+  }, remainingMs);
+};
+
+/**
+ * @description 計測の中断が終わったものとして、その長さを合計へ加える
+ * @returns {void}
+ */
+const endMeasurementInterruption = () => {
+  // 長さが確定したためタイマーは不要になる
+  clearGapTimer();
+
+  if (interruptedAt !== null) {
+    addMeasurementGapMs(Date.now() - interruptedAt);
+    interruptedAt = null;
+  }
+};
+
+// 測位のエラーは1回では欠落と判断しない。タイムアウトは10秒で、屋内や高架下では
+// 普通に起きるうえ、その間に進む距離（徒歩で約12m）では距離もスポットも失われない。
+// 中断の合計がしきい値を超えた場合だけ、欠けた事実として記録する
+watch(isMeasurementInterrupted, (isInterrupted) => {
+  if (!isInterrupted) {
+    endMeasurementInterruption();
+
+    return;
+  }
+
+  // 画面が隠れている間は非表示側で時間を数えている。ここでも数えると
+  // 同じ実時間が2回積まれ、実際より早くしきい値へ到達してしまう
+  if (hiddenAt !== null) {
+    return;
+  }
+
+  startMeasurementInterruption();
+});
+
+/**
+ * @description 画面の表示状態の変化に応じて、欠落の記録と消灯抑止の取り直しを行う
+ * @returns {void}
+ */
+const handleVisibilityChange = () => {
+  // 画面が隠れている間は測位が止まるか間隔が開く。ただし短い中断なら復帰時の区間が
+  // 200m以内に収まり距離は繋がるため、この時点では欠落と決めず時刻だけ控える
+  if (document.visibilityState === 'hidden') {
+    // ここから先は非表示側で時間を数える。測位の中断が続いていた場合は
+    // そこまでの長さを確定させ、同じ実時間を二重に積まないようにする
+    endMeasurementInterruption();
+    hiddenAt = Date.now();
+
+    return;
+  }
+
+  // 復帰した時点で中断の長さが確定する。タイマーではなく実測で判定できるのは、
+  // 隠れている画面の終了ボタンは押せず、復帰せずに案内が終わることがないため。
+  // 測位の中断と同じ合計へ積むことで、「1回の非表示がしきい値以上」も
+  // 「短い非表示の繰り返し」も同じ判定で拾える
+  if (hiddenAt !== null) {
+    addMeasurementGapMs(Date.now() - hiddenAt);
+  }
+
+  hiddenAt = null;
+
+  // 戻っても測位が届いていない場合は、ここから測位側の中断として数え直す
+  if (isMeasurementInterrupted.value) {
+    startMeasurementInterruption();
+  }
+
+  // Wake Lock は非表示で自動解放されるため、戻ってきた時点で取り直す
+  requestScreenWakeLock();
+};
 
 // 追跡の停止はuseLocationTracking側で画面の破棄時に行われる
 onMounted(() => {
@@ -82,6 +259,16 @@ onMounted(() => {
   startTracking();
   // フォームを開いたときに待たせないよう、先にジャンルを取得しておく
   loadGenreOptions();
+  requestScreenWakeLock();
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+});
+
+// 購読やタイマーを残すと、案内画面を離れた後も欠落が記録されてしまう。
+// とくにタイマーは次の散歩のストアへ書き込むため、必ず破棄する。
+// Wake Lock の解放は useScreenWakeLock 側の onBeforeUnmount が行うため、ここでは呼ばない
+onBeforeUnmount(() => {
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  clearGapTimer();
 });
 
 /**
