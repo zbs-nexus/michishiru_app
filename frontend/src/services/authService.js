@@ -108,6 +108,15 @@ const PASSWORD_RESET_ERROR_MESSAGES = {
     'このユーザーはメールアドレスが未確認のため再設定できません。管理者に連絡してください'
 };
 
+/**
+ * サインインで追加の手続きを求められたとき、例外名を読み替える対応。
+ * Amplify v6 は未確認のユーザーに対して UserNotConfirmedException を投げず、
+ * 次の手続き（CONFIRM_SIGN_UP）として返すため、例外として扱う名前へ寄せる。
+ */
+const SIGN_IN_STEP_ERROR_NAMES = {
+  CONFIRM_SIGN_UP: 'UserNotConfirmedException'
+};
+
 /** サインインの対応表に無い例外に使う文言 */
 const SIGN_IN_DEFAULT_ERROR_MESSAGE =
   'ログインに失敗しました。通信状況を確認してください';
@@ -162,10 +171,11 @@ export const signInWithPassword = async (username, password) => {
     return;
   }
 
-  // MFAや初回パスワード変更など、追加の手続きを求められた場合。
+  // 未確認のユーザー・MFA・初回パスワード変更など、追加の手続きを求められた場合。
   // 対応する画面を用意していないため、失敗として上位へ返す
   const error = new Error(`サインインが完了しませんでした: ${nextStep.signInStep}`);
-  error.name = nextStep.signInStep;
+  error.name =
+    SIGN_IN_STEP_ERROR_NAMES[nextStep.signInStep] ?? nextStep.signInStep;
   throw error;
 };
 

@@ -36,11 +36,22 @@ const createNamedError = (name, message) => {
  * @throws {Error} 一致しない場合（EmailMismatch）、または確認できなかった場合（VerificationUnavailable）
  */
 export const verifyPasswordResetTarget = async (username, email) => {
-  const response = await fetch(`${API_BASE_PATH}/password-reset-verifications`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email })
-  });
+  let response;
+
+  try {
+    response = await fetch(`${API_BASE_PATH}/password-reset-verifications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email })
+    });
+  } catch (error) {
+    // オフラインや通信の遮断では応答が返らず、fetch が TypeError を投げる。
+    // 応答のエラーと同じく「確認できなかった」として扱う
+    throw createNamedError(
+      'VerificationUnavailable',
+      `組み合わせの確認に失敗しました（通信エラー: ${error.message}）`
+    );
+  }
 
   // APIが未配線の環境ではSPAのindex.html（HTML）が200で返るため、解析前に判定する
   if (!response.ok || !isJsonResponse(response)) {
