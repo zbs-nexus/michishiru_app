@@ -321,33 +321,23 @@ body {
   outline-color: #D93025;
 }
 
-/* パスワード欄と「表示」ボタンを横に並べる */
+/* パスワード欄。右端に表示切替のボタンを重ねるため、位置の基準にする */
 .auth-password {
+  position: relative;
   display: flex;
-  gap: 8px;
-  align-items: stretch;
 }
 
 .auth-password input {
   flex: 1;
   /* 入力欄を縮められるようにする（flexの既定では縮まない） */
   min-width: 0;
+  /* 右端のボタンと入力文字が重ならないように空ける */
+  padding-right: 46px;
 }
 
-.auth-reveal-btn {
-  flex-shrink: 0;
-  padding: 0 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--primary-color);
-  background: var(--white);
-  border: 1px solid #DDE3E8;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.auth-reveal-btn:hover {
-  background: var(--bg-light);
+/* Edge が標準で出す表示切替は、自前のボタンと二重になるため隠す */
+.auth-password input::-ms-reveal {
+  display: none;
 }
 
 .auth-error {
@@ -491,6 +481,28 @@ body {
   border-radius: 16px;
   overflow: hidden;
   margin-bottom: 16px;
+}
+
+/*
+ * 現在地へ戻るボタン。
+ * MapLibre のコントロールとして地図コンテナへ挿入されるため、
+ * コンポーネントの <style scoped> では届かない。
+ * 枠と大きさはライブラリの .maplibregl-ctrl-group が与えるので、
+ * ここでは中のアイコンだけを描く。
+ */
+.recenter-btn::after {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0 auto;
+  border: 2px solid var(--primary-color);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px var(--white);
+  background: var(--primary-color);
+  background-clip: content-box;
+  padding: 3px;
+  box-sizing: border-box;
 }
 
 /*

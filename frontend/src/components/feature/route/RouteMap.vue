@@ -75,6 +75,15 @@ const props = defineProps({
   pinPosition: {
     type: Object,
     default: null
+  },
+  /**
+   * ピンを中央へ寄せるときの、地図中央からの縦のずれ（ピクセル）。
+   * 画面上部のバナーや下部のフォームで地図が隠れる場合に、
+   * 見えている範囲の中央へピンが来るよう親が指定する。下方向が正。
+   */
+  pinOffsetY: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -91,6 +100,9 @@ const ROUTE_LINE_LAYER_ID = 'route-line';
 
 /** 開始地点のマーカーに表示する文字（Start の頭文字） */
 const ORIGIN_MARKER_LABEL = 'S';
+
+/** 現在地へ戻るボタンの読み上げ用の名前 */
+const RECENTER_BUTTON_LABEL = '現在地へ戻る';
 
 /** 開始地点のマーカーを押したときに出す文言 */
 const ORIGIN_POPUP_TEXT = 'スタート地点';
@@ -111,6 +123,14 @@ let markers = [];
 let originMarker = null;
 let currentLocationMarker = null;
 let pinMarker = null;
+let recenterControl = null;
+
+/**
+ * 初期表示の拡大率。
+ * ルート全体を収めた直後の値を覚えておき、現在地へ戻るときに復元する。
+ * 地図の生成時の値を初期値とし、ルートを収められない場合もこの値を使う。
+ */
+let initialZoomLevel = DEFAULT_ZOOM_LEVEL;
 
 // 長押しの検出。地図の生成後にattachし、座標を親へ通知する
 const { attach: attachLongPress } = useMapLongPress({
@@ -243,10 +263,77 @@ const createCurrentLocationElement = () => {
 };
 
 /**
+ * @description 地図の中心を現在地へ寄せ、拡大率を初期表示と同じに戻す。
+ * @returns {void}
+ */
+const centerOnCurrentLocation = () => {
+  if (map === null || props.currentLocation === null) {
+    return;
+  }
+
+  map.easeTo({
+    center: [props.currentLocation.lng, props.currentLocation.lat],
+    zoom: initialZoomLevel
+  });
+};
+
+/**
+ * @description 現在地へ戻るコントロールを組み立てる。
+ * MapLibreのコントロールとして追加することで、ズームボタンと同じ枠に
+ * 同じ見た目で並ぶ（後から追加したものが下に来る）。
+ * @returns {object} MapLibreのIControlを満たすオブジェクト
+ */
+const createRecenterControl = () => {
+  const container = document.createElement('div');
+  container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'recenter-btn';
+  // アイコンのみのボタンなので、読み上げ用の名前を付ける
+  button.setAttribute('aria-label', RECENTER_BUTTON_LABEL);
+  button.title = RECENTER_BUTTON_LABEL;
+  button.addEventListener('click', centerOnCurrentLocation);
+
+  container.appendChild(button);
+
+  return {
+    onAdd: () => container,
+    onRemove: () => {
+      button.removeEventListener('click', centerOnCurrentLocation);
+      container.remove();
+    }
+  };
+};
+
+/**
+ * @description 現在地へ戻るコントロールを必要になった時点で追加する。
+ *
+ * 追跡の開始は親（View）のonMountedで行われ、子のonMountedより後になる。
+ * 地図の生成時には現在地の表示が無効のままなので、ここで追加する。
+ * @returns {void}
+ */
+const ensureRecenterControl = () => {
+  if (
+    recenterControl !== null ||
+    map === null ||
+    !props.isInteractive ||
+    !props.showCurrentLocation
+  ) {
+    return;
+  }
+
+  recenterControl = createRecenterControl();
+  map.addControl(recenterControl, 'top-right');
+};
+
+/**
  * @description 現在地マーカーを描画または更新する
  * @returns {void}
  */
 const renderCurrentLocationMarker = () => {
+  ensureRecenterControl();
+
   if (!props.showCurrentLocation || props.currentLocation === null) {
     // 現在地表示が無効または座標がない場合は削除
     if (currentLocationMarker !== null) {
@@ -314,8 +401,9 @@ const renderPinMarker = () => {
     pinMarker.setLngLat(lngLat);
   }
 
-  // 立てたピンの位置が地図の中央に来るように寄せる
-  map.easeTo({ center: lngLat });
+  // 立てたピンが、見えている地図範囲の中央に来るように寄せる。
+  // offsetは地図中央からのずれ（上部バナー・下部フォームの分だけ親が指定する）
+  map.easeTo({ center: lngLat, offset: [0, props.pinOffsetY] });
 };
 
 /**
@@ -341,6 +429,10 @@ const fitToRoute = () => {
     maxZoom: MAX_FIT_ZOOM_LEVEL,
     animate: false
   });
+
+  // 現在地へ戻るときに初期表示と同じ倍率へ復元できるよう、この時点の倍率を覚えておく。
+  // animate: false のため、ここでは寄せ終わった後の値が取れる
+  initialZoomLevel = map.getZoom();
 };
 
 /**
@@ -493,6 +585,8 @@ onBeforeUnmount(() => {
   }
   pinMarker?.remove();
   pinMarker = null;
+  // コントロールは map.remove() で破棄されるため、参照だけ落とす
+  recenterControl = null;
   map?.remove();
   map = null;
 });

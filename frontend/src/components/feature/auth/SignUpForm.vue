@@ -1,5 +1,6 @@
 <script setup>
 import { ref, watch } from 'vue';
+import PasswordVisibilityButton from '@/components/feature/auth/PasswordVisibilityButton.vue';
 import {
   EMAIL_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
@@ -34,14 +35,9 @@ const props = defineProps({
 
 const emit = defineEmits(['submitSignUp']);
 
-const {
-  isPasswordVisible,
-  isPasswordRevealAvailable,
-  passwordInputType,
-  togglePasswordVisibility,
-  disablePasswordReveal,
-  enablePasswordReveal
-} = usePasswordVisibility();
+// 表示の状態は欄ごとに持つ。片方を平文にしても、もう片方は隠したままにする
+const passwordVisibility = usePasswordVisibility();
+const passwordConfirmationVisibility = usePasswordVisibility();
 
 /** 入力中のユーザー名 */
 const username = ref('');
@@ -63,12 +59,21 @@ const fieldErrors = ref({
   passwordConfirmation: null
 });
 
+/**
+ * @description 両方のパスワード欄の表示ボタンを隠す
+ * @returns {void}
+ */
+const disableAllPasswordReveal = () => {
+  passwordVisibility.disablePasswordReveal();
+  passwordConfirmationVisibility.disablePasswordReveal();
+};
+
 // 登録に失敗したときも、修正されるまで表示ボタンを出さない
 watch(
   () => props.errorMessage,
   (message) => {
     if (message !== null) {
-      disablePasswordReveal();
+      disableAllPasswordReveal();
     }
   }
 );
@@ -83,14 +88,23 @@ const clearFieldError = (fieldName) => {
 };
 
 /**
- * @description パスワードが修正されたら、エラーを消して表示ボタンを使えるようにする。
+ * @description パスワードが修正されたら、エラーを消して表示ボタンを出せるようにする。
  * 確認パスワードとの一致も取り直すため、両方のエラーを消す。
  * @returns {void}
  */
 const handlePasswordInput = () => {
   clearFieldError('password');
   clearFieldError('passwordConfirmation');
-  enablePasswordReveal();
+  passwordVisibility.enablePasswordReveal();
+};
+
+/**
+ * @description 確認パスワードが修正されたときの処理
+ * @returns {void}
+ */
+const handlePasswordConfirmationInput = () => {
+  clearFieldError('passwordConfirmation');
+  passwordConfirmationVisibility.enablePasswordReveal();
 };
 
 /**
@@ -114,7 +128,7 @@ const handleSubmit = () => {
   };
 
   if (!hasNoFieldError(fieldErrors.value)) {
-    disablePasswordReveal();
+    disableAllPasswordReveal();
     return;
   }
 
@@ -198,7 +212,7 @@ const handleSubmit = () => {
         <input
           id="sign-up-password"
           v-model="password"
-          :type="passwordInputType"
+          :type="passwordVisibility.passwordInputType.value"
           name="password"
           autocomplete="new-password"
           :maxlength="PASSWORD_MAX_LENGTH"
@@ -208,16 +222,12 @@ const handleSubmit = () => {
           @input="handlePasswordInput"
         >
         <!-- エラーが出た後は、入力が修正されるまでこのボタンを出さない -->
-        <button
-          v-if="isPasswordRevealAvailable"
-          class="auth-reveal-btn"
-          type="button"
-          :aria-pressed="isPasswordVisible"
-          :disabled="isSigningUp"
-          @click="togglePasswordVisibility"
-        >
-          {{ isPasswordVisible ? '非表示' : '表示' }}
-        </button>
+        <PasswordVisibilityButton
+          v-if="passwordVisibility.isPasswordRevealAvailable.value"
+          :is-password-visible="passwordVisibility.isPasswordVisible.value"
+          :is-disabled="isSigningUp"
+          @toggle-visibility="passwordVisibility.togglePasswordVisibility"
+        />
       </div>
       <span
         id="sign-up-password-hint"
@@ -237,18 +247,31 @@ const handleSubmit = () => {
         class="auth-label"
         for="sign-up-password-confirmation"
       >パスワード（確認）</label>
-      <input
-        id="sign-up-password-confirmation"
-        v-model="passwordConfirmation"
-        :type="passwordInputType"
-        name="passwordConfirmation"
-        autocomplete="new-password"
-        :maxlength="PASSWORD_MAX_LENGTH"
-        :disabled="isSigningUp"
-        :aria-invalid="fieldErrors.passwordConfirmation !== null"
-        aria-describedby="sign-up-password-confirmation-error"
-        @input="clearFieldError('passwordConfirmation')"
-      >
+      <div class="auth-password">
+        <input
+          id="sign-up-password-confirmation"
+          v-model="passwordConfirmation"
+          :type="passwordConfirmationVisibility.passwordInputType.value"
+          name="passwordConfirmation"
+          autocomplete="new-password"
+          :maxlength="PASSWORD_MAX_LENGTH"
+          :disabled="isSigningUp"
+          :aria-invalid="fieldErrors.passwordConfirmation !== null"
+          aria-describedby="sign-up-password-confirmation-error"
+          @input="handlePasswordConfirmationInput"
+        >
+        <PasswordVisibilityButton
+          v-if="passwordConfirmationVisibility.isPasswordRevealAvailable.value"
+          :is-password-visible="
+            passwordConfirmationVisibility.isPasswordVisible.value
+          "
+          :is-disabled="isSigningUp"
+          label="確認パスワード"
+          @toggle-visibility="
+            passwordConfirmationVisibility.togglePasswordVisibility
+          "
+        />
+      </div>
       <span
         v-if="fieldErrors.passwordConfirmation"
         id="sign-up-password-confirmation-error"

@@ -95,69 +95,86 @@ describe('LoginForm', () => {
       'false'
     );
   });
+
+  test('初期状態ではパスワードを隠して表示する', () => {
+    const wrapper = mount(LoginForm);
+
+    expect(wrapper.find('#login-password').attributes('type')).toBe('password');
+  });
 });
 
-describe('LoginForm のパスワード表示ボタン', () => {
-  test('初期状態では表示ボタンがあり、押すと平文になる', async () => {
+describe('LoginForm のパスワード表示切替', () => {
+  test('目のアイコンを押すと平文になり、もう一度押すと隠れる', async () => {
     const wrapper = mount(LoginForm);
-    const revealButton = wrapper.find('.auth-reveal-btn');
 
-    expect(revealButton.exists()).toBe(true);
-    expect(wrapper.find('#login-password').attributes('type')).toBe('password');
-
-    await revealButton.trigger('click');
-
+    await wrapper.find('.password-visibility-btn').trigger('click');
     expect(wrapper.find('#login-password').attributes('type')).toBe('text');
-    expect(wrapper.find('.auth-reveal-btn').attributes('aria-pressed')).toBe(
-      'true'
-    );
+
+    await wrapper.find('.password-visibility-btn').trigger('click');
+    expect(wrapper.find('#login-password').attributes('type')).toBe('password');
   });
 
-  test('入力チェックでエラーが出たら表示ボタンを隠す', async () => {
+  test('状態に応じて読み上げ用のラベルを切り替える', async () => {
+    const wrapper = mount(LoginForm);
+
+    expect(
+      wrapper.find('.password-visibility-btn').attributes('aria-label')
+    ).toBe('パスワードを表示する');
+
+    await wrapper.find('.password-visibility-btn').trigger('click');
+
+    expect(
+      wrapper.find('.password-visibility-btn').attributes('aria-label')
+    ).toBe('パスワードを隠す');
+    expect(
+      wrapper.find('.password-visibility-btn').attributes('aria-pressed')
+    ).toBe('true');
+  });
+
+  test('入力チェックでエラーが出たらアイコンを隠す', async () => {
     const wrapper = mount(LoginForm);
 
     await submitWith(wrapper, { username: '', password: '' });
 
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.find('.password-visibility-btn').exists()).toBe(false);
   });
 
   test('平文表示中にエラーが出たら隠した状態へ戻す', async () => {
     const wrapper = mount(LoginForm);
 
-    await wrapper.find('.auth-reveal-btn').trigger('click');
+    await wrapper.find('.password-visibility-btn').trigger('click');
     expect(wrapper.find('#login-password').attributes('type')).toBe('text');
 
     await submitWith(wrapper, { username: '', password: '' });
 
     expect(wrapper.find('#login-password').attributes('type')).toBe('password');
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.find('.password-visibility-btn').exists()).toBe(false);
   });
 
-  test('エラー後はパスワードを修正するまで表示ボタンを出さない', async () => {
+  test('エラー後はパスワードを修正するまでアイコンを出さない', async () => {
     const wrapper = mount(LoginForm);
 
     await submitWith(wrapper, { username: '', password: '' });
 
-    // ユーザー名を直しただけでは、まだ表示ボタンは出ない
+    // ユーザー名を直しただけでは、まだアイコンは出ない
     await wrapper.find('#login-username').setValue('michishiru');
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.find('.password-visibility-btn').exists()).toBe(false);
 
-    // パスワードを直すと、表示ボタンが使えるようになる
+    // パスワードを直すと、アイコンが使えるようになる
     await wrapper.find('#login-password').setValue('Abcdef1!');
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(true);
+    expect(wrapper.find('.password-visibility-btn').exists()).toBe(true);
   });
 
-  test('サインインが失敗したときも表示ボタンを隠す', async () => {
-    const wrapper = mount(LoginForm, {
-      props: { errorMessage: null }
-    });
+  test('サインインが失敗したときもアイコンを隠す', async () => {
+    const wrapper = mount(LoginForm, { props: { errorMessage: null } });
 
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(true);
+    expect(wrapper.find('.password-visibility-btn').exists()).toBe(true);
 
     await wrapper.setProps({
       errorMessage: 'ユーザー名またはパスワードが違います'
     });
 
-    expect(wrapper.find('.auth-reveal-btn').exists()).toBe(false);
+    expect(wrapper.find('.password-visibility-btn').exists()).toBe(false);
   });
 });
+
