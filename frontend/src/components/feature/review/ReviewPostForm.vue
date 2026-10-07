@@ -1,13 +1,19 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import BaseButton from '@/components/base/BaseButton.vue';
+import ReviewPhotoInput from '@/components/feature/review/ReviewPhotoInput.vue';
 import ReviewRatingInput from '@/components/feature/review/ReviewRatingInput.vue';
 
+/** 1つの場所に付けられる写真の最大枚数 */
+const PHOTO_MAX_COUNT = 4;
+
 /**
- * @description 画面上部に表示する口コミ投稿フォーム。
+ * @description 画面下部に表示する口コミ投稿フォーム。
  * ロケーション名・ジャンル・5段階評価を入力し、投稿内容をemitで親へ返す。
+ *
+ * 投稿済みの場所（existingSpot あり）では、名前とジャンルは初回投稿者が決めた値に
+ * 固定し、評価のみ入力できる「評価のみモード」になる。
  * ジャンルの選択肢は親（View）がDBから取得して渡す。
- * 入力値はこのフォーム内で保持し、投稿・閉じるの操作のみを外へ通知する。
  */
 const props = defineProps({
   /** ジャンルの選択肢（検索条件マスタ由来）。{ value, label, icon } の配列 */
@@ -19,6 +25,29 @@ const props = defineProps({
   pinPosition: {
     type: Object,
     default: null
+  },
+  /**
+   * 投稿済みの既存の場所。ある場合は評価のみモードになり、
+   * 名前・ジャンルは固定表示にする。未投稿の場所の場合はnull。
+   */
+  existingSpot: {
+    type: Object,
+    default: null
+  },
+  /** 呼び出し元がこの場所に既に付けている評価。初期値として反映する */
+  initialRating: {
+    type: Number,
+    default: 0
+  },
+  /** 場所の解決中かどうか（投稿ボタンを押せないようにする） */
+  isResolving: {
+    type: Boolean,
+    default: false
+  },
+  /** 投稿中かどうか（二重送信を防ぐ） */
+  isPosting: {
+    type: Boolean,
+    default: false
   }
 });
 
@@ -34,16 +63,48 @@ const spotName = ref('');
 const selectedGenreId = ref(null);
 
 /** 選択中の評価（0は未選択） */
-const rating = ref(0);
+const rating = ref(props.initialRating);
+
+/** 選択中の写真（アップロード前のFile。初回投稿のみ） */
+const photos = ref([]);
+
+/** 評価のみモードか（投稿済みの場所） */
+const isRatingOnly = computed(() => props.existingSpot !== null);
+
+/** 評価のみモードで固定表示するジャンル（アイコン・名称） */
+const existingGenre = computed(() => {
+  if (props.existingSpot === null) {
+    return null;
+  }
+
+  const matched = props.genreOptions.find(
+    (option) => option.value === props.existingSpot.genreId
+  );
+
+  return {
+    icon: matched?.icon ?? '',
+    label: props.existingSpot.genreName ?? matched?.label ?? props.existingSpot.genreId
+  };
+});
+
+/** 評価のみモードで表示する平均評価のラベル */
+const averageLabel = computed(() => {
+  if (props.existingSpot === null) {
+    return '';
+  }
+
+  return `${props.existingSpot.ratingAverage.toFixed(1)}（${props.existingSpot.ratingCount}件）`;
+});
 
 /**
- * @description 入力内容を初期状態へ戻す
+ * @description 入力内容を初期状態へ戻す（評価は既存評価があればその値にする）
  * @returns {void}
  */
 const resetInputs = () => {
   spotName.value = '';
   selectedGenreId.value = null;
-  rating.value = 0;
+  rating.value = props.initialRating;
+  photos.value = [];
 };
 
 // ピンが別の場所に立て直されたら、前の場所の入力を持ち越さないようにする
@@ -54,13 +115,28 @@ watch(
   }
 );
 
-/** 投稿できる状態か。名前・ジャンル・評価がすべてそろったら有効にする */
-const canSubmit = computed(
-  () =>
-    spotName.value.trim().length > 0 &&
-    selectedGenreId.value !== null &&
-    rating.value > 0
+// 場所の解決後に既存評価が分かったら、評価の初期値へ反映する
+watch(
+  () => props.initialRating,
+  (value) => {
+    rating.value = value;
+  }
 );
+
+/** 投稿できる状態か */
+const canSubmit = computed(() => {
+  if (props.isPosting || props.isResolving || rating.value <= 0) {
+    return false;
+  }
+
+  // 評価のみモードは評価だけで投稿できる
+  if (isRatingOnly.value) {
+    return true;
+  }
+
+  // 初回はロケーション名とジャンルも必要
+  return spotName.value.trim().length > 0 && selectedGenreId.value !== null;
+});
 
 /**
  * @description ジャンルを選択する
@@ -73,11 +149,22 @@ const handleSelectGenre = (genreId) => {
 
 /**
  * @description 入力内容を投稿として親へ通知する。
- * ジャンルは表示名も合わせて渡す（後続の内部処理で使えるようにするため）。
+ * 評価のみモードでは名前・ジャンルを送らない（nullにする）。
  * @returns {void}
  */
 const handleSubmit = () => {
   if (!canSubmit.value) {
+    return;
+  }
+
+  if (isRatingOnly.value) {
+    emit('submitReview', {
+      spotName: null,
+      genreId: null,
+      genreName: null,
+      rating: rating.value,
+      photos: []
+    });
     return;
   }
 
@@ -89,7 +176,8 @@ const handleSubmit = () => {
     spotName: spotName.value.trim(),
     genreId: selectedGenreId.value,
     genreName: selectedGenre?.label ?? null,
-    rating: rating.value
+    rating: rating.value,
+    photos: photos.value
   });
 };
 </script>
@@ -115,50 +203,92 @@ const handleSubmit = () => {
       </button>
     </div>
 
-    <div class="review-field">
-      <label
-        class="review-label"
-        for="review-spot-name"
-      >ロケーション名</label>
-      <input
-        id="review-spot-name"
-        v-model="spotName"
-        class="review-name-input"
-        type="text"
-        :maxlength="SPOT_NAME_MAX_LENGTH"
-        placeholder="例: 中央公園の東屋"
-      >
-      <span class="review-char-count">
-        {{ spotName.length }} / {{ SPOT_NAME_MAX_LENGTH }}
-      </span>
-    </div>
-
-    <div class="review-field">
-      <span class="review-label">ジャンル</span>
-      <p
-        v-if="genreOptions.length === 0"
-        class="review-hint"
-      >
-        ジャンルを取得できませんでした
-      </p>
-      <div
-        v-else
-        class="genre-grid"
-      >
-        <button
-          v-for="option in genreOptions"
-          :key="option.value"
-          class="select-btn"
-          :class="{ selected: selectedGenreId === option.value }"
-          type="button"
-          :aria-pressed="selectedGenreId === option.value"
-          @click="handleSelectGenre(option.value)"
+    <!-- 投稿済みの場所: 名前・ジャンルは固定表示にし、評価のみ受け付ける -->
+    <template v-if="isRatingOnly">
+      <div class="review-existing">
+        <p class="review-existing-name">
+          {{ existingSpot.spotName }}
+        </p>
+        <p class="review-existing-meta">
+          <span class="review-existing-genre">
+            <span>{{ existingGenre.icon }}</span>
+            <span>{{ existingGenre.label }}</span>
+          </span>
+          <span class="review-existing-average">平均 ★{{ averageLabel }}</span>
+        </p>
+        <ul
+          v-if="existingSpot.photoUrls && existingSpot.photoUrls.length > 0"
+          class="review-existing-photos"
         >
-          <span class="btn-icon">{{ option.icon }}</span>
-          <span>{{ option.label }}</span>
-        </button>
+          <li
+            v-for="(url, index) in existingSpot.photoUrls"
+            :key="index"
+          >
+            <img
+              :src="url"
+              alt=""
+              class="review-existing-photo"
+            >
+          </li>
+        </ul>
       </div>
-    </div>
+    </template>
+
+    <!-- 未投稿の場所: ロケーション名とジャンルを入力する -->
+    <template v-else>
+      <div class="review-field">
+        <label
+          class="review-label"
+          for="review-spot-name"
+        >ロケーション名</label>
+        <input
+          id="review-spot-name"
+          v-model="spotName"
+          class="review-name-input"
+          type="text"
+          :maxlength="SPOT_NAME_MAX_LENGTH"
+          placeholder="例: 中央公園の東屋"
+        >
+        <span class="review-char-count">
+          {{ spotName.length }} / {{ SPOT_NAME_MAX_LENGTH }}
+        </span>
+      </div>
+
+      <div class="review-field">
+        <span class="review-label">ジャンル</span>
+        <p
+          v-if="genreOptions.length === 0"
+          class="review-hint"
+        >
+          ジャンルを取得できませんでした
+        </p>
+        <div
+          v-else
+          class="genre-grid"
+        >
+          <button
+            v-for="option in genreOptions"
+            :key="option.value"
+            class="select-btn"
+            :class="{ selected: selectedGenreId === option.value }"
+            type="button"
+            :aria-pressed="selectedGenreId === option.value"
+            @click="handleSelectGenre(option.value)"
+          >
+            <span class="btn-icon">{{ option.icon }}</span>
+            <span>{{ option.label }}</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="review-field">
+        <span class="review-label">写真（最大{{ PHOTO_MAX_COUNT }}枚・任意）</span>
+        <ReviewPhotoInput
+          v-model="photos"
+          :max-count="PHOTO_MAX_COUNT"
+        />
+      </div>
+    </template>
 
     <div class="review-footer">
       <div class="review-rating">
@@ -290,6 +420,50 @@ const handleSubmit = () => {
 .review-hint {
   font-size: 12px;
   color: var(--text-gray);
+}
+
+/* 投稿済みの場所の固定表示（名前・ジャンル・平均） */
+.review-existing {
+  margin-bottom: 12px;
+}
+
+.review-existing-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-dark);
+}
+
+.review-existing-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--text-gray);
+}
+
+.review-existing-genre {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* 投稿済みの場所に付いている写真のサムネイル */
+.review-existing-photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.review-existing-photo {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #DDE3E8;
 }
 
 /* 評価と投稿ボタンを1行に並べ、全幅ボタンの分の高さを節約する */
