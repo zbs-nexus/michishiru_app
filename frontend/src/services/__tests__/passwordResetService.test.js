@@ -62,6 +62,19 @@ describe('verifyPasswordResetTarget', () => {
     ).rejects.toMatchObject({ name: 'VerificationUnavailable' });
   });
 
+  test('通信自体が失敗した場合も VerificationUnavailable を投げる', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new TypeError('Failed to fetch');
+      })
+    );
+
+    await expect(
+      verifyPasswordResetTarget('michishiru', 'user@example.com')
+    ).rejects.toMatchObject({ name: 'VerificationUnavailable' });
+  });
+
   test('JSON以外が返った場合も VerificationUnavailable を投げる', async () => {
     stubFetch({ contentType: 'text/html' });
 
