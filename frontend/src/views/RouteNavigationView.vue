@@ -6,8 +6,10 @@ import BaseModal from '@/components/base/BaseModal.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
+import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
 import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
+import { useGenreOptions } from '@/composables/useGenreOptions';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
@@ -22,6 +24,12 @@ const routeStore = useRouteStore();
 /** 終了確認モーダルを表示するかどうか */
 const isEndConfirmVisible = ref(false);
 
+/** 長押しで立てた赤いピンの座標 { lng, lat }。未設定はnull */
+const reviewPin = ref(null);
+
+/** 口コミ投稿フォームを表示するかどうか */
+const isReviewFormVisible = ref(false);
+
 const {
   currentLocation,
   accuracy,
@@ -29,6 +37,9 @@ const {
   trackingError,
   startTracking
 } = useLocationTracking();
+
+// 口コミのジャンルはホーム画面と同じ検索条件マスタから取得する
+const { genreOptions, loadGenreOptions } = useGenreOptions();
 
 /** 案内対象のスポット。巡る順に並んでいる */
 const spots = computed(() => routeStore.currentRoute?.spots ?? []);
@@ -46,7 +57,38 @@ const { nextSpot, distanceToNextM, isCompleted } = useRouteProgress({
 // 追跡の停止はuseLocationTracking側で画面の破棄時に行われる
 onMounted(() => {
   startTracking();
+  // フォームを開いたときに待たせないよう、先にジャンルを取得しておく
+  loadGenreOptions();
 });
+
+/**
+ * @description 地図の長押しでピンを立て、口コミ投稿フォームを開く
+ * @param {{lng: number, lat: number}} position 長押しされた座標
+ * @returns {void}
+ */
+const handleLongPressMap = (position) => {
+  reviewPin.value = position;
+  isReviewFormVisible.value = true;
+};
+
+/**
+ * @description 口コミ投稿フォームを閉じ、立てたピンを消す
+ * @returns {void}
+ */
+const handleCloseReview = () => {
+  isReviewFormVisible.value = false;
+  reviewPin.value = null;
+};
+
+/**
+ * @description 口コミの投稿を受け取る。
+ * 送信などの内部処理は未実装のため、現時点では投稿内容（ReviewPostFormのsubmitReview
+ * が渡す { spotName, genreId, genreName, rating }）は使わず、フォームを閉じてピンを消すだけにする。
+ * @returns {void}
+ */
+const handleSubmitReview = () => {
+  handleCloseReview();
+};
 
 /**
  * @description 終了確認を表示する
@@ -92,6 +134,16 @@ const handleConfirmEnd = () => {
       :current-accuracy="accuracy"
       :is-tracking="isTracking"
       :tracking-error="trackingError"
+      :is-long-press-enabled="true"
+      :pin-position="reviewPin"
+      @long-press-map="handleLongPressMap"
+    />
+
+    <ReviewPostForm
+      v-if="isReviewFormVisible"
+      :genre-options="genreOptions"
+      @submit-review="handleSubmitReview"
+      @close="handleCloseReview"
     />
 
     <template #footer>
