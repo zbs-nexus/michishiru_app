@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-186 パスワード再設定画面 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NZ-186 パスワード再設定画面 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026-09-30<br>
+            <strong>🌿 ブランチ:</strong> <code>feature/NZ-186</code>（PR #61 / <code>27a151a</code>）<br>
+            <strong>📝 課題番号:</strong> NZ-186
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>パスワードを忘れた人が、自分で新しいパスワードを決め直せる画面（<code>/password-reset</code>）を追加しました。ログイン画面の「パスワードの再設定」リンクから開けます。</p>
+        <p>手順は2段です。① ユーザー名を入れて確認コードをメールで受け取る → ② 届いた6桁のコードと新しいパスワードを入れる。終わるとログイン画面に戻り、「パスワードを再設定しました」と表示されます。</p>
+        <p>ログインの仕組み（Cognito と Amplify）の基本は <code>docs/Cognitoログイン画面_構築手順書.html</code> にまとまっています。ここでは再設定に関係する部分だけを説明します。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li>これまではパスワードを忘れると、管理者に頼むしかありませんでした。</li>
+            <li>自分で再設定できれば、管理者の手間も利用者の待ち時間もなくなります。</li>
+        </ul>
+        <h3>「再発行」ではなく「再設定」と呼ぶ理由</h3>
+        <p>Cognito（AWS のログイン機能）は、新しいパスワードを作って送ってくれるわけではありません。本人確認のコードだけを送り、新しいパスワードは利用者自身に決めさせます。そのため、コード上も画面上も「再設定（<code>resetPassword</code>）」で統一しています。<code>forgotPassword</code> や <code>reissuePassword</code> は使いません（<code>naming-glossary.md</code> の「認証」節）。</p>
+
+        <h2>🔄 処理の流れ</h2>
+        <pre class="code-block">[ログイン画面] 「パスワードの再設定」を押す
+     ▼
+[PasswordResetView 1段目] ユーザー名を入力
+     │  authStore.resetPassword → authService.sendPasswordResetCode
+     │  → Cognito の resetPassword（確認コードをメール送信）
+     ▼
+[PasswordResetView 2段目] 確認コード + 新しいパスワードを入力
+     │  authStore.confirmResetPassword → authService.confirmPasswordResetWithCode
+     │  → Cognito の confirmResetPassword（パスワードを変更）
+     ▼
+[ログイン画面] /login?reset=1 → 「パスワードを再設定しました」</pre>
+
+        <div class="flow-step">
+            <strong>Step 1: ユーザー名を送る</strong><br>
+            <code>PasswordResetRequestForm.vue</code> がユーザー名（前後の空白は取り除く）を親に渡します。画面（View）がストアの <code>resetPassword</code> を呼び、成功したら2段目に切り替えます。コードの送り先は、登録時に確認済みのメールアドレスです。こちらからは指定できません。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: コードと新しいパスワードを送る</strong><br>
+            <code>PasswordResetConfirmForm.vue</code> に、送り先（例: <code>a***@example.com</code> のように一部が隠された形）を表示します。コードと新しいパスワードを入れて送ると、ストアの <code>confirmResetPassword</code> が呼ばれます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: ログイン画面に戻る</strong><br>
+            成功したら <code>router.push({ name: 'login', query: { reset: '1' } })</code> で戻ります。ログイン画面は URL の <code>reset=1</code> を見て完了メッセージを出します。
+        </div>
+        <div class="flow-step">
+            <strong>（任意）コードの再送</strong><br>
+            「確認コードを再送する」を押すと、1段目と同じ <code>resetPassword</code> をもう一度呼びます。Cognito では再送も「再設定の開始」と同じ操作だからです。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/services/authService.js — Cognito を呼ぶ</h3>
+        <div class="code-block"><pre>export const sendPasswordResetCode = async (username) =&gt; {
+  const { nextStep } = await cognitoResetPassword({ username });
+
+  if (nextStep.resetPasswordStep === 'CONFIRM_RESET_PASSWORD_WITH_CODE') {
+    return nextStep.codeDeliveryDetails?.destination ?? null;
+  }
+  // コード入力を伴わない設定（DONE）は想定していないため、失敗として返す
+  ...
+};</pre></div>
+        <ul>
+            <li>入力: ユーザー名。出力: コードの送り先（隠された形）。</li>
+            <li>Amplify（<code>aws-amplify/auth</code>）の関数は、このファイルの中だけで使います。ほかのファイルは Amplify を直接知らなくて済みます。</li>
+            <li>「次はコードを入力してね」（<code>CONFIRM_RESET_PASSWORD_WITH_CODE</code>）以外が返ってきたら、想定外として失敗扱いにします。</li>
+        </ul>
+        <p><code>confirmPasswordResetWithCode(username, confirmationCode, newPassword)</code> は Cognito の <code>confirmResetPassword</code> をそのまま呼びます。</p>
+
+        <h3>エラー文言の決め方</h3>
+        <div class="code-block"><pre>export const toPasswordResetErrorMessage = (error) =&gt;
+  PASSWORD_RESET_ERROR_MESSAGES[error?.name] ??
+  ERROR_MESSAGES[error?.name] ??
+  PASSWORD_RESET_DEFAULT_ERROR_MESSAGE;</pre></div>
+        <p>Cognito のエラー名から、画面に出す日本語を3段階で探します。① 再設定専用の文言 → ② ログインなどと共通の文言 → ③ どれにも当てはまらないときの文言。</p>
+        <table>
+            <tr><th>エラー名</th><th>画面の文言</th><th>補足</th></tr>
+            <tr><td><code>UserNotFoundException</code></td><td>ユーザー名を確認してください</td><td>「そのユーザーはいません」と言うと、第三者に登録の有無を知られてしまうため、あいまいにしている</td></tr>
+            <tr><td><code>InvalidParameterException</code></td><td>メールアドレスが未確認のため再設定できません…</td><td>メールが確認されていないと、コードの送り先がない</td></tr>
+            <tr><td><code>CodeMismatchException</code></td><td>確認コードが違います</td><td>共通の文言</td></tr>
+            <tr><td><code>ExpiredCodeException</code></td><td>確認コードの有効期限が切れています…</td><td>共通の文言</td></tr>
+            <tr><td><code>InvalidPasswordException</code></td><td>パスワードの条件を満たしていません…</td><td>共通の文言</td></tr>
+        </table>
+
+        <h3>frontend/src/stores/authStore.js</h3>
+        <p><code>resetPassword</code> と <code>confirmResetPassword</code> を追加しました。どちらも通信中は <code>isResettingPassword</code> を <code>true</code> にし、失敗したら <code>errorMessage</code> に文言を入れます。画面はこの2つを見て、ボタンを押せなくしたりエラーを表示したりします。</p>
+
+        <h3>frontend/src/views/PasswordResetView.vue</h3>
+        <ul>
+            <li><code>isConfirming</code>（2段目に進んだか）で、どちらのフォームを出すか切り替えます。</li>
+            <li>対象のユーザー名（<code>targetUsername</code>）はこの画面の中だけで使うので、ストアではなく画面で持ちます。</li>
+            <li>開いたときに <code>authStore.clearErrorMessage()</code> を呼び、ログイン画面で出ていたエラーを持ち込まないようにしています。</li>
+        </ul>
+
+        <h3>フォーム部品（PasswordResetRequestForm / PasswordResetConfirmForm）</h3>
+        <ul>
+            <li>入力を受け取って親に渡すだけで、通信はしません（通信は View → ストア → service の順）。</li>
+            <li>確認コード欄は <code>inputmode="numeric"</code>（スマホで数字キーボード）と <code>autocomplete="one-time-code"</code>（メールやSMSのコードを自動入力候補に出す）を指定しています。</li>
+            <li>新しいパスワード欄は <code>autocomplete="new-password"</code> で、ブラウザのパスワード生成機能が使えます。</li>
+            <li>コードの桁数・パスワードの条件は <code>constants/authValidation.js</code> の定数を使います。</li>
+        </ul>
+
+        <h3>frontend/src/router/index.js</h3>
+        <p><code>/password-reset</code>（ルート名 <code>password-reset</code>）を追加し、<code>meta: { isPublic: true }</code> で未ログインでも開けるようにしました。ログイン済みで開くとホームへ送られます。</p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>パスワードの条件は2か所にある</strong><br>
+            画面のヒント（<code>constants/authValidation.js</code>）と、実際のルール（<code>iac/lib/michishiru-stack.ts</code> のユーザープールの <code>passwordPolicy</code>）は別々に書かれています。片方だけ変えると食い違うので、必ず両方を直してください。
+        </div>
+        <div class="important">
+            <strong>存在しないユーザー名でもエラーにならないことがある</strong><br>
+            アプリクライアントは <code>preventUserExistenceErrors: true</code>（ユーザーの有無を伏せる設定）です。この設定だと、存在しないユーザー名でも Cognito が成功に見える応答を返すことがあり、その場合は2段目に進みますがメールは届きません。動作確認ではこの点を想定しておいてください。
+        </div>
+        <div class="important">
+            <strong>メール確認が済んでいないユーザーは再設定できない</strong><br>
+            ユーザー登録で確認コードを入れずに終わったユーザーは、送り先のメールが「未確認」のままなので再設定できません。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>Cognito の接続情報を用意します。ローカルでは <code>frontend/.env.local</code> に <code>VITE_COGNITO_USER_POOL_ID</code> と <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code> を書きます（書き方は構築手順書を参照。値はチームの dev 環境のものを使い、コミットしないこと）。</li>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行します。</li>
+            <li>ログイン画面の「パスワードの再設定」を押し、メール確認済みのユーザー名を入れて「確認コードを送る」を押します。</li>
+            <li>メールに届いた6桁のコードと、新しいパスワードを入れて「パスワードを再設定する」を押します。</li>
+            <li>ログイン画面に「パスワードを再設定しました」と出ること、新しいパスワードでログインできることを確認します。</li>
+            <li>わざとコードを間違えて「確認コードが違います」と出ることも確認します。</li>
+            <li><code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code> を実行します（フロントの自動テストは未導入です）。</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th></tr>
+                <tr><td><code>frontend/src/views/PasswordResetView.vue</code></td><td>（新規）再設定画面。2段の切り替えと遷移</td></tr>
+                <tr><td><code>frontend/src/components/feature/auth/PasswordResetRequestForm.vue</code></td><td>（新規）ユーザー名の入力欄</td></tr>
+                <tr><td><code>frontend/src/components/feature/auth/PasswordResetConfirmForm.vue</code></td><td>（新規）確認コードと新しいパスワードの入力欄</td></tr>
+                <tr><td><code>frontend/src/services/authService.js</code></td><td>Cognito の呼び出しとエラー文言の変換</td></tr>
+                <tr><td><code>frontend/src/stores/authStore.js</code></td><td>通信中フラグとエラーの保持</td></tr>
+                <tr><td><code>frontend/src/views/LoginView.vue</code></td><td>再設定へのリンクと完了メッセージ</td></tr>
+                <tr><td><code>frontend/src/router/index.js</code></td><td><code>/password-reset</code> を追加</td></tr>
+                <tr><td><code>.kiro/steering/naming-glossary.md</code></td><td><code>resetPassword</code> / <code>confirmResetPassword</code> / <code>newPassword</code> を登録</td></tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

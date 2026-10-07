@@ -128,6 +128,19 @@ inclusion: always
 | 散歩の終了時刻 | endedAt | 案内を終了した時刻 |
 | 経過時間 | elapsedMinutes | 案内の開始から終了までの時間（分） |
 
+### 口コミ
+
+| 日本語 | 英語（コード上） | 説明 |
+|---|---|---|
+| 口コミ | review | ユーザーがスポットに付ける感想と評価のまとまり |
+| 口コミ投稿 | postReview | 口コミを投稿すること |
+| 口コミ投稿フォーム | ReviewPostForm | 口コミを入力するフォーム（コンポーネント名） |
+| 評価 | rating | スポットへの5段階評価（1〜5の整数） |
+| ロケーション名 | spotName | 口コミ対象のスポットの名称。ユーザーが入力する |
+| ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
+
+`location`（単独）は使わない。口コミ対象の場所の名称は `spotName` に統一する（辞書の「使ってはいけない表記揺れ」で `place` / `location` を `spot` に寄せているため）。
+
 ### 地図
 
 | 日本語 | 英語（コード上） | 説明 |
@@ -272,4 +285,5 @@ inclusion: always
 | 2026/09/30 | パスワード再設定画面の追加に伴い「認証」へ `resetPassword` / `confirmResetPassword` / `newPassword` を登録。`forgotPassword` / `reissuePassword` を禁止し、「再発行」ではなく「再設定」と呼ぶことを明記 |
 | 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
+| 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
 | 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |

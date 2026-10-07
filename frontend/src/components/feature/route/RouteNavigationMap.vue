@@ -37,8 +37,20 @@ defineProps({
   trackingError: {
     type: String,
     default: null
+  },
+  /** 口コミ投稿のために地図の長押しを受け付けるかどうか */
+  isLongPressEnabled: {
+    type: Boolean,
+    default: false
+  },
+  /** 長押しで立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
+  pinPosition: {
+    type: Object,
+    default: null
   }
 });
+
+defineEmits(['longPressMap']);
 </script>
 
 <template>
@@ -50,6 +62,9 @@ defineProps({
         :show-current-location="isTracking"
         :current-location="currentLocation"
         :current-accuracy="currentAccuracy"
+        :is-long-press-enabled="isLongPressEnabled"
+        :pin-position="pinPosition"
+        @long-press-map="$emit('longPressMap', $event)"
       />
     </div>
     <div

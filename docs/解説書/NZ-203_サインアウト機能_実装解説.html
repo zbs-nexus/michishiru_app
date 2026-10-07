@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-203 サインアウト（ログアウト）機能 - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NZ-203 サインアウト（ログアウト）機能 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026-09-30（14:40、PR #56、マージコミット <code>db7756f</code>）<br>
+            <strong>🌿 ブランチ:</strong> feature/NZ-203<br>
+            <strong>📝 課題番号:</strong> NZ-203<br>
+            <strong>🧩 概要:</strong> ホーム画面（情報入力画面）の右上にハンバーガーメニューを置き、そこから「ログアウト」できるようにした
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            ログイン中の利用者が、ホーム画面の右上にある「≡」の形のボタン（ハンバーガーメニュー）を押すと、
+            「ログアウト」という項目が出てきます。これを押すと、ログイン状態が解除されてログイン画面に戻ります。
+        </p>
+        <p>
+            画面に出る文言は「ログアウト」ですが、コードの中では <code>signOut</code>（サインアウト）という名前で統一しています。
+            ログイン認証に使っている Amazon Cognito（アマゾン コグニート。AWS のログイン管理サービス）と、
+            それを呼び出すライブラリ Amplify の関数名が <code>signOut</code> だからです。
+            用語辞書（<code>naming-glossary.md</code>）でも <code>logout</code> は使わないと決められています。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li>これまではログインはできても、ログアウトする手段が画面にありませんでした。</li>
+            <li>1台の端末を複数人で使う場合、前の人のログイン状態のまま次の人が使ってしまいます。</li>
+            <li>前の人が入力したジャンルや距離、作ったルートが残っていると、次の人に見えてしまいます。そのため、ログアウト時にこれらも消しています。</li>
+        </ul>
+
+        <h2>🔄 処理の流れ</h2>
+        <pre class="code-block">
+[ホーム画面 RouteConditionView]
+   │  右上の「≡」ボタンを押す
+   ▼
+[SignOutMenu] メニューが開く ─→「ログアウト」を押す
+   │  メニューを閉じて、親へ signOut イベントを通知
+   ▼
+[RouteConditionView] handleSignOut()
+   ├─ ① authStore.signOut()        … Cognito からサインアウト、ログイン情報を空に
+   ├─ ② routeStore.resetConditions() … 入力条件とルートを初期状態に
+   └─ ③ router.push({ name: 'login' })
+   ▼
+[ルーターガード] 未ログインなのでログイン画面の表示を許可
+   ▼
+[ログイン画面 LoginView]
+</pre>
+
+        <div class="flow-step">
+            <strong>Step 1:</strong> 利用者がホーム画面右上の「≡」ボタンを押すと、<code>SignOutMenu</code> の中の <code>isOpen</code>（開いているかどうか）が <code>true</code> になり、「ログアウト」の項目が表示されます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2:</strong> 「ログアウト」を押すと、<code>SignOutMenu</code> はまずメニューを閉じ、親の画面へ <code>signOut</code> という合図（イベント）を送ります。メニュー自身はログアウト処理をしません。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3:</strong> 親の <code>RouteConditionView</code> が合図を受け取り、<code>handleSignOut</code> を実行します。<code>authStore.signOut()</code> で Cognito からサインアウトし、ストアのユーザー名を空（<code>null</code>）にします。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4:</strong> <code>routeStore.resetConditions()</code> で、ジャンル・距離・「おまかせ」の選択・取得済みのルートを初期状態に戻します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5:</strong> <code>router.push({ name: 'login' })</code> でログイン画面へ移ります。画面を移る前に必ず通る見張り役（ルーターガード <code>router.beforeEach</code>）は、ログイン画面を「未ログインでも開ける画面」として扱っているので、そのまま表示されます。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/components/feature/auth/SignOutMenu.vue（新規）</h3>
+        <p>
+            ハンバーガーメニューの見た目と、開く・閉じるの動きだけを担当する部品です。
+            「ログアウトの処理そのもの」は持たず、押されたことを親へ知らせるだけにしています。
+            こうしておくと、部品はほかの画面でも使い回しやすく、処理の中身は画面側で決められます。
+        </p>
+        <div class="code-block">
+            <pre>const emit = defineEmits(['signOut']);
+
+const handleSignOut = () =&gt; {
+  closeMenu();
+  emit('signOut');
+};</pre>
+        </div>
+        <p>
+            <code>emit</code> は「子の部品から親へ合図を送る」Vue の仕組みです。
+            先にメニューを閉じておくのは、あとでこの画面に戻ってきたときにメニューが開いたままにならないようにするためです。
+        </p>
+        <p>メニューを閉じる方法は3つあります。</p>
+        <table>
+            <tr>
+                <th>操作</th>
+                <th>担当する関数</th>
+                <th>説明</th>
+            </tr>
+            <tr>
+                <td>「≡」ボタンをもう一度押す</td>
+                <td><code>toggleMenu</code></td>
+                <td>開いていれば閉じ、閉じていれば開く</td>
+            </tr>
+            <tr>
+                <td>メニューの外側を押す</td>
+                <td><code>handleOutsideClick</code></td>
+                <td>押された場所がメニューの中（<code>menuContainer</code>）でなければ閉じる</td>
+            </tr>
+            <tr>
+                <td>Esc キーを押す</td>
+                <td><code>handleKeydown</code></td>
+                <td>押されたキーが <code>Escape</code> なら閉じる</td>
+            </tr>
+        </table>
+        <div class="code-block">
+            <pre>onMounted(() =&gt; {
+  document.addEventListener('click', handleOutsideClick);
+  document.addEventListener('keydown', handleKeydown);
+});
+
+onBeforeUnmount(() =&gt; {
+  document.removeEventListener('click', handleOutsideClick);
+  document.removeEventListener('keydown', handleKeydown);
+});</pre>
+        </div>
+        <p>
+            画面のどこを押しても気付けるよう、ページ全体（<code>document</code>）に見張り（イベントリスナー）を付けています。
+            <code>onMounted</code> は「部品が画面に出たとき」、<code>onBeforeUnmount</code> は「部品が画面から消える直前」に動きます。
+            消える直前に見張りを外さないと、画面を移ったあとも見張りが残り続けてしまう（メモリリーク）ため、必ず対にしています。
+        </p>
+
+        <h3>アクセシビリティ（誰でも使えるための工夫）</h3>
+        <div class="code-block">
+            <pre>&lt;button
+  type="button"
+  aria-label="メニュー"
+  aria-haspopup="true"
+  :aria-expanded="isOpen"
+  aria-controls="signout-menu-list"
+  @click="toggleMenu"
+&gt;</pre>
+        </div>
+        <p><code>aria-</code> で始まる属性は、画面読み上げソフト（スクリーンリーダー）に情報を伝えるためのものです。</p>
+        <table>
+            <tr>
+                <th>属性</th>
+                <th>意味</th>
+            </tr>
+            <tr>
+                <td><code>aria-label="メニュー"</code></td>
+                <td>「≡」は線の絵だけで文字がないため、「メニュー」ボタンだと読み上げさせる</td>
+            </tr>
+            <tr>
+                <td><code>aria-haspopup="true"</code></td>
+                <td>押すと何かが出てくるボタンだと伝える</td>
+            </tr>
+            <tr>
+                <td><code>:aria-expanded="isOpen"</code></td>
+                <td>今メニューが開いているか閉じているかを伝える（<code>isOpen</code> に合わせて自動で変わる）</td>
+            </tr>
+            <tr>
+                <td><code>aria-controls</code></td>
+                <td>このボタンがどの一覧（<code>id="signout-menu-list"</code>）を開閉するかを結び付ける</td>
+            </tr>
+            <tr>
+                <td><code>aria-hidden="true"</code>（3本の線）</td>
+                <td>飾りの線を読み上げの対象から外す</td>
+            </tr>
+        </table>
+        <p>
+            ボタンは本物の <code>&lt;button&gt;</code> 要素なので、Tab キーで移動し Enter / Space キーで押せます。
+            Esc キーでメニューを閉じることもできます。
+        </p>
+
+        <h3>frontend/src/views/RouteConditionView.vue（変更）</h3>
+        <p>ホーム画面に <code>SignOutMenu</code> を置き、合図を受けたときの処理 <code>handleSignOut</code> を追加しました。</p>
+        <div class="code-block">
+            <pre>&lt;SignOutMenu
+  class="header-menu"
+  @sign-out="handleSignOut"
+/&gt;</pre>
+        </div>
+        <p>
+            子の部品では <code>signOut</code>（camelCase）と宣言していますが、親のテンプレートでは <code>@sign-out</code>（kebab-case）と書きます。
+            「JavaScript の中は camelCase、HTML として書く場所は kebab-case」という Vue のルールです。
+            また <code>.header-menu</code> に <code>margin-left: auto</code> を付け、ロゴの右側の余白へ押し出してヘッダー右上に置いています。
+        </p>
+        <div class="code-block">
+            <pre>const handleSignOut = async () =&gt; {
+  await authStore.signOut();
+  routeStore.resetConditions();
+
+  router.push({ name: 'login' });
+};</pre>
+        </div>
+        <p>
+            <code>await</code> は「前の処理が終わるまで待つ」という意味です。サインアウトが終わってからログイン画面へ移るので、
+            ルーターガードが「まだログイン中」と勘違いしてホームへ戻してしまうことを防げます。
+            画面の移動先はパス（<code>/login</code>）ではなく名前（<code>'login'</code>）で指定しています（チームのルール）。
+        </p>
+
+        <h3>呼び出している既存の処理</h3>
+        <p>この機能で新しく作ったのは画面側だけで、サインアウトの本体はもともとあった処理を使っています。</p>
+        <table>
+            <tr>
+                <th>場所</th>
+                <th>関数</th>
+                <th>していること</th>
+            </tr>
+            <tr>
+                <td><code>stores/authStore.js</code></td>
+                <td><code>signOut</code></td>
+                <td><code>signOutFromCognito()</code> を呼んだあと、<code>username</code> と <code>errorMessage</code> を <code>null</code> にする。<code>username</code> が <code>null</code> になると <code>isSignedIn</code>（ログイン済みかどうか）が自動で <code>false</code> になる</td>
+            </tr>
+            <tr>
+                <td><code>services/authService.js</code></td>
+                <td><code>signOutFromCognito</code></td>
+                <td>Amplify の <code>signOut</code>（<code>aws-amplify/auth</code>）を呼び、ブラウザに保存されているログインの証明書（トークン）を捨てる</td>
+            </tr>
+            <tr>
+                <td><code>stores/routeStore.js</code></td>
+                <td><code>resetConditions</code></td>
+                <td><code>genre</code> / <code>genreName</code> を <code>null</code>、<code>distanceKm</code> を初期値、<code>isGenreRandom</code> / <code>isDistanceRandom</code> を <code>false</code>、<code>currentRoute</code> を <code>null</code> に戻す。散歩結果画面の「ホーム画面」ボタンでも使われている</td>
+            </tr>
+            <tr>
+                <td><code>router/index.js</code></td>
+                <td><code>router.beforeEach</code></td>
+                <td>ログイン画面は <code>meta: { isPublic: true }</code>。未ログインならそのまま表示し、ログイン済みならホームへ送る。逆にログインが必要な画面を未ログインで開くとログイン画面へ送る</td>
+            </tr>
+        </table>
+        <p>
+            「ストア」は Pinia（ピニア）というライブラリで作った、複数の画面で共有する入れ物です。
+            ログイン状態（<code>authStore</code>）と入力条件・ルート（<code>routeStore</code>）がそれぞれ入っています。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>ログアウトできるのはホーム画面だけ</strong><br>
+            メニューは <code>RouteConditionView</code> にだけ置かれています。ルート提案・案内・散歩結果の画面からはログアウトできません。
+        </div>
+        <div class="important">
+            <strong>失敗したときの処理がない</strong><br>
+            <code>handleSignOut</code> には <code>try</code> / <code>catch</code>（失敗したときの受け止め）がありません。
+            <code>authStore.signOut()</code> の途中で例外が起きると、条件の初期化とログイン画面への移動が行われず、利用者には何も起きないように見えます。
+            必要なら、失敗時にトーストでメッセージを出すなどの対応を検討してください。
+        </div>
+        <div class="important">
+            <strong>ログアウトはこの端末だけ</strong><br>
+            Amplify の <code>signOut()</code> を引数なしで呼んでいるため、この端末（ブラウザ）のログイン情報だけが消えます。
+            ほかの端末でログインしている分まで一度に切りたい場合は <code>signOut({ global: true })</code> が必要です。
+        </div>
+        <div class="important">
+            <strong>アクセシビリティの改善余地</strong><br>
+            <ul>
+                <li>メニューを開いても、キーボードの位置（フォーカス）は「≡」ボタンのままです。Tab キーを押すと「ログアウト」へ移れますが、矢印キーでの移動はありません。</li>
+                <li>Esc キーやメニュー外の押下で閉じたとき、フォーカスを「≡」ボタンへ戻す処理はありません。</li>
+                <li><code>aria-haspopup="true"</code> は「メニュー（<code>role="menu"</code>）が出る」という意味ですが、一覧は普通の <code>&lt;ul&gt;</code> で <code>role="menu"</code> はありません。
+                    今の作りに合わせるなら <code>aria-haspopup</code> を外して「開閉するだけのボタン」として扱うか、逆に <code>role="menu"</code> / <code>role="menuitem"</code> と矢印キー操作をそろえるか、どちらかに寄せると読み上げと動きが一致します。</li>
+                <li><code>id="signout-menu-list"</code> は固定の値なので、1つの画面にこの部品を2つ置くと id が重複します。</li>
+            </ul>
+            なお、実際に読み上げソフトで使いやすいかどうかは、支援技術を使った手動の確認が必要です。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <h3>画面での確認</h3>
+        <ol>
+            <li>リポジトリのルート（<code>michishiru_app/</code>）で <code>npm run dev</code> を実行し、フロントとAPIを同時に起動する。</li>
+            <li>ブラウザで表示されたURLを開き、ログイン画面からログインする（ホーム画面が表示される）。</li>
+            <li>ジャンルや距離を選んでおく。</li>
+            <li>右上の「≡」ボタンを押し、「ログアウト」が出ることを確認する。もう一度押す・外側を押す・Esc キーを押すと閉じることも確認する。</li>
+            <li>「ログアウト」を押し、ログイン画面に移ることを確認する。</li>
+            <li>ブラウザのアドレス欄にホーム画面のURL（<code>/</code>）を入力しても、ログイン画面へ戻されることを確認する。</li>
+            <li>もう一度ログインし、前に選んだジャンルや距離が初期状態に戻っていることを確認する。</li>
+            <li>キーボードだけで操作できるか確認する（Tab で「≡」へ移動 → Enter で開く → Tab で「ログアウト」へ → Enter）。</li>
+        </ol>
+        <h3>チェックコマンド</h3>
+        <ol>
+            <li><code>frontend/</code> で <code>npm run lint</code>（書き方のチェック。ESLint）を実行し、エラーがないこと。</li>
+            <li><code>frontend/</code> で <code>npm run build</code>（本番用ファイルの作成）を実行し、成功すること。</li>
+        </ol>
+        <p>フロントエンドの自動テストはツールが未決定のため、この機能のテストコードはありません。</p>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/auth/SignOutMenu.vue</code>（新規）</td>
+                    <td>ハンバーガーメニュー。開閉と「ログアウト」の合図（<code>signOut</code> イベント）を担当</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteConditionView.vue</code>（変更）</td>
+                    <td>ホーム画面。メニューを配置し、<code>handleSignOut</code> でサインアウト・条件の初期化・ログイン画面への移動を行う</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/stores/authStore.js</code>（既存・参照のみ）</td>
+                    <td>ログイン状態の入れ物。<code>signOut</code> でユーザー名を消す</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/authService.js</code>（既存・参照のみ）</td>
+                    <td>Cognito とのやり取り。<code>signOutFromCognito</code> で Amplify の <code>signOut</code> を呼ぶ</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/stores/routeStore.js</code>（既存・参照のみ）</td>
+                    <td>入力条件とルートの入れ物。<code>resetConditions</code> で初期状態に戻す</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/router/index.js</code>（既存・参照のみ）</td>
+                    <td>画面とURLの対応、ログイン状態による画面の振り分け（ルーターガード）</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
