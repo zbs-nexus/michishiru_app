@@ -1,0 +1,7 @@
+{
+  "task_id": "task-walk-result-save",
+  "task_description": "段階3b: 散歩の実績をユーザー（Cognito の sub）単位で DynamoDB へ保存する。保存（POST /api/v1/walk-results）のみを作り、履歴取得API・履歴画面・削除機能は作らない。各散歩の実績（pk=USER#<sub>, sk=WALK#<endedAt>#<walkId>）とユーザーの累計（sk=TOTAL）を TransactWriteItems で1回にまとめ、walkId による冪等性を持たせる。あわせて保存失敗時のトースト通知・オフライン時の退避と再送、段階3a のレビューで確認された計測の検知漏れ2件（低精度の測位が続く区間・断続的な不調）に対処する。詳細な設計判断と手順は .agents/tasks/plan.md にある。",
+  "status": "completed",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003"],
+  "blocked_reason": null
+}
