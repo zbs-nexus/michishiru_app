@@ -47,6 +47,11 @@ defineProps({
   pinPosition: {
     type: Object,
     default: null
+  },
+  /** ピンを中央へ寄せるときの、地図中央からの縦のずれ（ピクセル）。下方向が正 */
+  pinOffsetY: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -64,6 +69,7 @@ defineEmits(['longPressMap']);
         :current-accuracy="currentAccuracy"
         :is-long-press-enabled="isLongPressEnabled"
         :pin-position="pinPosition"
+        :pin-offset-y="pinOffsetY"
         @long-press-map="$emit('longPressMap', $event)"
       />
     </div>

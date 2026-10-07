@@ -75,6 +75,15 @@ const props = defineProps({
   pinPosition: {
     type: Object,
     default: null
+  },
+  /**
+   * ピンを中央へ寄せるときの、地図中央からの縦のずれ（ピクセル）。
+   * 画面上部のバナーや下部のフォームで地図が隠れる場合に、
+   * 見えている範囲の中央へピンが来るよう親が指定する。下方向が正。
+   */
+  pinOffsetY: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -314,8 +323,9 @@ const renderPinMarker = () => {
     pinMarker.setLngLat(lngLat);
   }
 
-  // 立てたピンの位置が地図の中央に来るように寄せる
-  map.easeTo({ center: lngLat });
+  // 立てたピンが、見えている地図範囲の中央に来るように寄せる。
+  // offsetは地図中央からのずれ（上部バナー・下部フォームの分だけ親が指定する）
+  map.easeTo({ center: lngLat, offset: [0, props.pinOffsetY] });
 };
 
 /**
