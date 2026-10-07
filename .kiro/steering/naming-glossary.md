@@ -190,7 +190,10 @@ inclusion: always
 | パスワード再設定（画面・行為） | resetPassword | 画面名は「パスワードの再設定」、コード上は `resetPassword`（`/password-reset` / `isResettingPassword`） |
 | パスワード再設定の確認 | confirmResetPassword | 確認コードと新しいパスワードで再設定を確定すること |
 | 新しいパスワード | newPassword | 再設定で利用者が決めるパスワード |
+| 確認パスワード | passwordConfirmation | 打ち間違いを防ぐため、パスワードをもう一度入力させる欄 |
+| 入力チェックの結果 | fieldErrors | 項目名をキーに、エラー文言を持つオブジェクト。エラーが無い項目は持たない |
 | ログイン済みかどうか | isSignedIn | - |
+| パスワードを表示中かどうか | isPasswordVisible | 表示ボタンでパスワードを平文表示しているかどうか |
 
 `logout` は使わない（`signOut` に統一）。`register` / `signup`（大文字なし）も使わない。
 `forgotPassword` / `reissuePassword` も使わない（`resetPassword` に統一）。Cognito は新しいパスワードを発行せず利用者に決めさせるため、「再発行」ではなく「再設定」と呼ぶ。
@@ -274,6 +277,7 @@ inclusion: always
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
 | 2026/09/30 | ユーザー登録画面の追加に伴い「認証」の節を新設。未登録だったログイン関連の語（login / signIn / signOut / isSignedIn / username / password）と、登録で使う語（signUp / email / confirmationCode / confirmSignUp）を登録。`logout` / `register` を禁止 |
 | 2026/09/30 | パスワード再設定画面の追加に伴い「認証」へ `resetPassword` / `confirmResetPassword` / `newPassword` を登録。`forgotPassword` / `reissuePassword` を禁止し、「再発行」ではなく「再設定」と呼ぶことを明記 |
+| 2026/09/30 | 認証フォームの入力チェック追加に伴い「認証」へ `passwordConfirmation` / `fieldErrors` / `isPasswordVisible` を登録 |
 | 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
 | 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |

@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1128.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1147.0",
     "@aws-sdk/client-dynamodb": "^3.1118.0",
     "@aws-sdk/client-geo-places": "^3.1128.0",
     "@aws-sdk/client-geo-routes": "^3.1128.0",

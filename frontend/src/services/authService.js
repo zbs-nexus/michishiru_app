@@ -56,6 +56,11 @@ const ERROR_MESSAGES = {
 const PASSWORD_RESET_ERROR_MESSAGES = {
   // ユーザーの有無を画面で言い当てないよう、あいまいな文言にする
   UserNotFoundException: 'ユーザー名を確認してください',
+  // 入力されたユーザー名とメールアドレスの組み合わせが、登録内容と一致しなかった場合
+  EmailMismatch: 'ユーザー名とメールアドレスの組み合わせが一致しません',
+  // 照合そのものができなかった場合（APIへ到達できない等）
+  VerificationUnavailable:
+    '組み合わせを確認できませんでした。通信状況を確認してください',
   // メールアドレスが未確認のユーザーは、送信先が無いため再設定できない
   InvalidParameterException:
     'このユーザーはメールアドレスが未確認のため再設定できません。管理者に連絡してください'
@@ -202,6 +207,10 @@ export const resendConfirmationCode = async (username) => {
  *
  * 新しいパスワードはこの時点では決めず、`confirmPasswordResetWithCode` で設定する。
  * 送信先はユーザープールで確認済みのメールアドレスで、こちらからは指定できない。
+ *
+ * この関数を呼ぶ時点でコードが送信される。
+ * ユーザー名とメールアドレスの組み合わせの照合は、呼ぶ前に
+ * `passwordResetService.verifyPasswordResetTarget` で済ませておく。
  * @param {string} username ユーザー名
  * @returns {Promise<string|null>} コードの送信先（マスクされた形）。取得できない場合はnull
  * @throws {Error} 送信に失敗した場合、または未対応の手続きを求められた場合

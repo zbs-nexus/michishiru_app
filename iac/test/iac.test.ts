@@ -148,6 +148,33 @@ describe('MichishiruStack (バックエンド有効)', () => {
       HttpMethod: 'POST'
     });
   });
+
+  test('verifyPasswordResetTarget の Lambda 関数とAPIの経路を作成する', () => {
+    // NodejsFunction はバンドル結果を index として出力するため、環境変数で見分ける
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      Environment: {
+        Variables: Match.objectLike({
+          USER_POOL_ID: Match.anyValue()
+        })
+      }
+    });
+    template.hasResourceProperties('AWS::ApiGateway::Resource', {
+      PathPart: 'password-reset-verifications'
+    });
+  });
+
+  test('照合用の Lambda には対象のユーザープールへの AdminGetUser だけを許可する', () => {
+    template.hasResourceProperties('AWS::IAM::Policy', {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Sid: 'ReadUserForPasswordReset',
+            Action: 'cognito-idp:AdminGetUser'
+          })
+        ])
+      }
+    });
+  });
 });
 
 describe('OidcStack', () => {
