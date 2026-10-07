@@ -1,9 +1,21 @@
+import { fetchIdToken } from '@/services/authService';
 import { isJsonResponse } from '@/utils/apiResponse';
 
 /**
  * @description 検索条件マスタ（ジャンル・距離）のAPI通信を担当する。
  * レスポンスを画面で扱う形へ変換して返し、失敗時は例外を投げる。
  * 例外の捕捉はcomposableが行う。
+ *
+ * APIはAPI GatewayのCognitoオーソライザーで保護しているため、
+ * IDトークンをAuthorizationヘッダーで載せる。
+ * `Bearer ` などのスキーム接頭辞は付けない。オーソライザーは既定で
+ * ヘッダーの値をトークンそのものとして検証するため、接頭辞を付けると検証に失敗する。
+ *
+ * `fetchIdToken` が投げた例外はここで捕まえず上位へそのまま伝播させる。
+ * セッション切れの文言への変換は `toAuthErrorMessage` 側の責務。
+ *
+ * 同じヘッダーの付与を routeService.js にも書いているが、呼び出し箇所が
+ * 3つだけのため今回は抽象化しない。3ファイル目が出た時点で共通化する。
  */
 
 /**
@@ -54,10 +66,14 @@ const toDistanceRange = (distanceItems) => {
 /**
  * @description 検索条件の選択肢をまとめて取得する
  * @returns {Promise<{genreOptions: object[], distanceRange: object}>} ジャンルの選択肢と距離の選択範囲
- * @throws {Error} 通信に失敗した場合、またはマスタの項目が不足している場合
+ * @throws {Error} 通信に失敗した場合、マスタの項目が不足している場合、またはセッションが失効している場合
  */
 export const fetchConditionOptions = async () => {
-  const response = await fetch(`${API_BASE_PATH}/conditions`);
+  const idToken = await fetchIdToken();
+
+  const response = await fetch(`${API_BASE_PATH}/conditions`, {
+    headers: { Authorization: idToken }
+  });
 
   if (!response.ok) {
     throw new Error(`検索条件の取得に失敗しました（${response.status}）`);

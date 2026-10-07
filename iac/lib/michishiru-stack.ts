@@ -329,21 +329,65 @@ export class MichishiruStack extends cdk.Stack {
         }
       });
 
+      // API Gateway のオーソライザー。
+      // ユーザープールは withBackend の外で常に作っているため、このブロックからそのまま参照できる。
+      // URL を知っていれば誰でも叩ける状態を避けるため、ログイン後に呼ぶメソッドは
+      // すべてこのオーソライザーで保護する。検証は API Gateway が行うため、
+      // Lambda 側にトークンを検証する処理は不要になる。
+      // フロントは Cognito の idToken を Authorization ヘッダーに載せて送る
+      // （スキーム接頭辞は付けない。既定ではヘッダーの値をトークンそのものとして扱う）。
+      // 後続のタスクで Lambda は event.requestContext.authorizer.claims.sub から
+      // ユーザーを識別し、散歩の実績をユーザー単位で保存する。
+      const apiAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(
+        this,
+        'ApiAuthorizer',
+        {
+          cognitoUserPools: [userPool],
+          // API 本体と同じ理由で物理名を指定する（AWSコンソールで識別するため）
+          authorizerName: `michishiru-api-authorizer-${stage}`
+        }
+      );
+
+      // 保護する3メソッドへ渡す設定。authorizationType は省略すると
+      // 既定値に引きずられるため、COGNITO を明示する。
+      const cognitoAuthorized: apigateway.MethodOptions = {
+        authorizer: apiAuthorizer,
+        authorizationType: apigateway.AuthorizationType.COGNITO
+      };
+
       const v1Resource = api.root.addResource('api').addResource('v1');
 
-      // GET /api/v1/routes
+      // GET / POST /api/v1/routes
+      // フロントは router.beforeEach で全画面をログインゲートしており、
+      // ログイン前にルートの取得・生成を呼ぶ経路が存在しない。
+      // したがって2メソッドとも認可を必須にしてよい。
       const routesResource = v1Resource.addResource('routes');
-      routesResource.addMethod('GET', new apigateway.LambdaIntegration(getRouteFn));
-      routesResource.addMethod('POST', new apigateway.LambdaIntegration(createRouteFn));
+      routesResource.addMethod(
+        'GET',
+        new apigateway.LambdaIntegration(getRouteFn),
+        cognitoAuthorized
+      );
+      routesResource.addMethod(
+        'POST',
+        new apigateway.LambdaIntegration(createRouteFn),
+        cognitoAuthorized
+      );
 
       // GET /api/v1/conditions
+      // 検索条件マスタもホーム画面（ログイン後）からしか呼ばないため保護する。
+      // 1つでも付け忘れると未認証の穴が残るため、テストで NONE の件数を数えている。
       const conditionsResource = v1Resource.addResource('conditions');
       conditionsResource.addMethod(
         'GET',
-        new apigateway.LambdaIntegration(getConditionsFn)
+        new apigateway.LambdaIntegration(getConditionsFn),
+        cognitoAuthorized
       );
 
       // POST /api/v1/password-reset-verifications
+      // ここだけ認可を付けない。パスワードを忘れた利用者がログインする前に呼ぶため、
+      // Cognito オーソライザーで守ると機能しなくなる。
+      // 総当たりへの備えは回数制限（API Gateway のスロットリング / WAF）で行う方針だが、
+      // まだ未対応（ミチシル_前提条件.md の「照合APIの保護」に残置）。
       const passwordResetVerificationsResource = v1Resource.addResource(
         'password-reset-verifications'
       );

@@ -149,6 +149,55 @@ describe('MichishiruStack (バックエンド有効)', () => {
     });
   });
 
+  test('API に Cognito オーソライザーを1つ作成する', () => {
+    template.resourceCountIs('AWS::ApiGateway::Authorizer', 1);
+    template.hasResourceProperties('AWS::ApiGateway::Authorizer', {
+      Type: 'COGNITO_USER_POOLS',
+      Name: 'michishiru-api-authorizer-prod',
+      // ユーザープールのARNは Fn::GetAtt で解決されるため、値の形には依存させない
+      ProviderARNs: Match.anyValue()
+    });
+  });
+
+  test('ログイン後に呼ぶ3つのメソッドを Cognito 認可で保護する', () => {
+    const methods = Object.values(template.findResources('AWS::ApiGateway::Method'));
+    const authorizedMethods = methods.filter(
+      (method) => method.Properties?.AuthorizationType === 'COGNITO_USER_POOLS'
+    );
+
+    expect(authorizedMethods).toHaveLength(3);
+
+    for (const method of authorizedMethods) {
+      expect(method.Properties?.AuthorizerId).toBeDefined();
+    }
+
+    // routes の GET / POST と conditions の GET
+    expect(
+      authorizedMethods.map((method) => method.Properties?.HttpMethod).sort()
+    ).toEqual(['GET', 'GET', 'POST']);
+  });
+
+  test('未認証のメソッドはログイン前に呼ぶ照合APIだけである', () => {
+    // 認可を付け忘れたメソッドを足したら落ちるようにするための検証。
+    // 論理IDは CDK の生成規則に依存するため、直書きせず経路から引く
+    const resources = template.findResources('AWS::ApiGateway::Resource');
+    const passwordResetResourceId = Object.entries(resources).find(
+      ([, resource]) => resource.Properties?.PathPart === 'password-reset-verifications'
+    )?.[0];
+
+    expect(passwordResetResourceId).toBeDefined();
+
+    const methods = Object.values(template.findResources('AWS::ApiGateway::Method'));
+    const unauthorizedMethods = methods.filter(
+      (method) => method.Properties?.AuthorizationType !== 'COGNITO_USER_POOLS'
+    );
+
+    expect(unauthorizedMethods).toHaveLength(1);
+    expect(unauthorizedMethods[0].Properties?.ResourceId?.Ref).toBe(
+      passwordResetResourceId
+    );
+  });
+
   test('verifyPasswordResetTarget の Lambda 関数とAPIの経路を作成する', () => {
     // NodejsFunction はバンドル結果を index として出力するため、環境変数で見分ける
     template.hasResourceProperties('AWS::Lambda::Function', {
