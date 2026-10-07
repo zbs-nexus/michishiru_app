@@ -125,6 +125,13 @@ let currentLocationMarker = null;
 let pinMarker = null;
 let recenterControl = null;
 
+/**
+ * 初期表示の拡大率。
+ * ルート全体を収めた直後の値を覚えておき、現在地へ戻るときに復元する。
+ * 地図の生成時の値を初期値とし、ルートを収められない場合もこの値を使う。
+ */
+let initialZoomLevel = DEFAULT_ZOOM_LEVEL;
+
 // 長押しの検出。地図の生成後にattachし、座標を親へ通知する
 const { attach: attachLongPress } = useMapLongPress({
   onLongPress: (position) => emit('longPressMap', position)
@@ -256,8 +263,7 @@ const createCurrentLocationElement = () => {
 };
 
 /**
- * @description 地図の中心を現在地へ寄せる。
- * ズーム倍率は変えず、位置だけを移動させる。
+ * @description 地図の中心を現在地へ寄せ、拡大率を初期表示と同じに戻す。
  * @returns {void}
  */
 const centerOnCurrentLocation = () => {
@@ -266,7 +272,8 @@ const centerOnCurrentLocation = () => {
   }
 
   map.easeTo({
-    center: [props.currentLocation.lng, props.currentLocation.lat]
+    center: [props.currentLocation.lng, props.currentLocation.lat],
+    zoom: initialZoomLevel
   });
 };
 
@@ -422,6 +429,10 @@ const fitToRoute = () => {
     maxZoom: MAX_FIT_ZOOM_LEVEL,
     animate: false
   });
+
+  // 現在地へ戻るときに初期表示と同じ倍率へ復元できるよう、この時点の倍率を覚えておく。
+  // animate: false のため、ここでは寄せ終わった後の値が取れる
+  initialZoomLevel = map.getZoom();
 };
 
 /**

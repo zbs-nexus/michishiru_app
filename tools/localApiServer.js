@@ -19,6 +19,15 @@ const PORT = Number(process.env.LOCAL_API_PORT ?? 3001);
 const HOST = '127.0.0.1';
 
 /**
+ * ローカル開発で認可済みとみなすユーザーの識別子（CognitoのsubにあたるID）。
+ * 本番のデータと見分けが付くよう、実在しそうなUUID形式にはしない。
+ */
+const LOCAL_DEV_USER_SUB = 'local-dev-user';
+
+/** ローカル開発で認可済みとみなすユーザー名 */
+const LOCAL_DEV_USERNAME = 'local-dev';
+
+/**
  * パスとLambdaハンドラの対応。
  * createRoute は Location Service と Bedrock を実際に呼び出すため、
  * ローカルで叩くにはAWSの認証情報（`AWS_PROFILE` 等）が必要になる。
@@ -39,14 +48,6 @@ const ROUTE_HANDLERS = [
     invoke: verifyPasswordResetTargetHandler
   }
 ];
-
-/**
- * ローカルでの口コミ投稿者。
- * 本番は API Gateway の Cognito オーソライザーが検証済みのクレームを渡すが、
- * ローカルにはオーソライザーが無いため、ヘッダ x-debug-user-id（無ければ既定値）で代用する。
- * この代用はローカルハーネス限定で、デプロイ対象には含めない。
- */
-const LOCAL_DEBUG_USER_ID = 'local-dev-user';
 
 /**
  * @description リクエストボディを文字列として読み切る
@@ -77,15 +78,20 @@ const buildEvent = (request, requestUrl, body) => ({
   path: requestUrl.pathname,
   queryStringParameters: Object.fromEntries(requestUrl.searchParams.entries()),
   headers: request.headers,
-  // 本番の Cognito オーソライザー相当のクレームを模す（ローカル限定）
+  body,
+  // 本番ではAPI GatewayのCognitoオーソライザーが検証した結果をここへ入れる。
+  // このハーネスは認可を模倣するだけで検証はしない（Authorizationヘッダーの中身は見ない）。
+  // そうしてよい理由は、127.0.0.1でのみ待ち受けており、tools/配下でデプロイ対象外のため。
+  // 本番の認可はAPI Gatewayが行う。
+  // Lambdaが event.requestContext.authorizer.claims.sub を読むため、同じ形のイベントを渡す。
   requestContext: {
     authorizer: {
       claims: {
-        sub: request.headers['x-debug-user-id'] ?? LOCAL_DEBUG_USER_ID
+        sub: LOCAL_DEV_USER_SUB,
+        'cognito:username': LOCAL_DEV_USERNAME
       }
     }
-  },
-  body
+  }
 });
 
 const server = createServer(async (request, response) => {

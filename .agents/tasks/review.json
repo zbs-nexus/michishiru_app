@@ -1,0 +1,48 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "label": "NoValidSession の文言が到達しない",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "file": "frontend/src/services/authService.js",
+      "detail": "ERROR_MESSAGES.NoValidSession を引く toAuthErrorMessage は authStore.js からしか呼ばれず、useRouteCreation / useRouteConditionOptions / useGenreOptions は error.message をそのまま表示する。routeService.js と conditionService.js のコメントが主張する「変換は toAuthErrorMessage 側の責務」は現状成り立たない。文言を活かすなら composable 側で変換を通すか、辞書追加を見送る。"
+    },
+    {
+      "label": "401 の本文が英語で画面に出る",
+      "severity": "non-blocking",
+      "confidence": "likely",
+      "file": "frontend/src/services/routeService.js",
+      "detail": "API Gateway のオーソライザーは {\"message\":\"Unauthorized\"} を返し、extractErrorMessage がそれを拾って表示する。plan.md で今回のスコープ外と明記済みだが、デプロイ後に残る。"
+    },
+    {
+      "label": "VITE_ROUTE_API_URL 経由で idToken が別オリジンへ出得る",
+      "severity": "non-blocking",
+      "confidence": "possible",
+      "file": "frontend/src/services/routeService.js",
+      "detail": "ROUTE_API_URL は env で任意のオリジンへ差し替えられる既存設計で、今回そこに idToken が乗る。fetchRoute には本番の呼び出し元が無いため潜在的。別 API Gateway へ向ける運用を続けるなら、向き先を同一オリジンに限る前提を明文化したい。"
+    },
+    {
+      "label": "IdentitySource を検証していない",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "file": "iac/test/iac.test.ts",
+      "detail": "ヘッダー名 Authorization は CDK の既定に依存し、フロントはその名前へ固定で依存している。テンプレートの IdentitySource をテストで固定すると、既定変更や明示指定ミスで全リクエストが 401 になる事故を防げる。"
+    },
+    {
+      "label": "バックエンド無効時にオーソライザーが作られないことの検証が無い",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "file": "iac/test/iac.test.ts",
+      "detail": "オーソライザーは withBackend ブロック内にあるが、フロントのみのスタックで AWS::ApiGateway::Authorizer が 0 件であることを確かめるテストが無い。"
+    },
+    {
+      "label": "検証結果の記録がタスクディレクトリに無い",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "file": ".agents/tasks/",
+      "detail": "plan.md のみで、lint / build / test / cdk synth の実行結果を残したファイルが無い。指示どおりスイートは再実行しておらず、本レビューはコーダーの最終メッセージに記録がある前提で判定している。"
+    }
+  ],
+  "reviewDoc": "c:\\ミチシル開発\\michishiru_app\\.agents\\tasks\\review.md"
+}

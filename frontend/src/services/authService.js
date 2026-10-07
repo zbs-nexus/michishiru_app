@@ -1,6 +1,7 @@
 import {
   confirmResetPassword as cognitoConfirmResetPassword,
   confirmSignUp as cognitoConfirmSignUp,
+  fetchAuthSession,
   getCurrentUser,
   resendSignUpCode as cognitoResendSignUpCode,
   resetPassword as cognitoResetPassword,
@@ -13,6 +14,17 @@ import {
  * @description Cognito を使った認証処理をまとめる。
  * ライブラリへの依存をこのファイルに閉じ込め、呼び出し側は例外だけを扱う。
  */
+
+/**
+ * セッションが無い・失効した場合に画面へ出す文言。
+ *
+ * この文言だけ定数に切り出しているのは、2つの経路から同じものを出す必要があるため。
+ * サインインの失敗は authStore が `toAuthErrorMessage` で対応表を引くが、
+ * API の認可で失敗した場合は composable が `error.message` をそのまま表示する。
+ * 対応表と throw するメッセージが別々だと、経路によって文言が変わってしまう。
+ */
+const NO_VALID_SESSION_MESSAGE =
+  'ログインの有効期限が切れました。もう一度ログインしてください';
 
 /** Cognito が返す例外名と、画面に出す文言の対応 */
 const ERROR_MESSAGES = {
@@ -45,7 +57,9 @@ const ERROR_MESSAGES = {
   EmptyResetPasswordUsername: 'ユーザー名を入力してください',
   EmptyConfirmResetPasswordUsername: 'ユーザー名を入力してください',
   EmptyConfirmResetPasswordConfirmationCode: '確認コードを入力してください',
-  EmptyConfirmResetPasswordNewPassword: '新しいパスワードを入力してください'
+  EmptyConfirmResetPasswordNewPassword: '新しいパスワードを入力してください',
+  // ここから下はAPIの認可で出るもの
+  NoValidSession: NO_VALID_SESSION_MESSAGE
 };
 
 /**
@@ -265,4 +279,34 @@ export const fetchSignedInUsername = async () => {
     // 未サインインでも例外になる仕様のため、サインインしていない状態として扱う
     return null;
   }
+};
+
+/**
+ * @description APIの認可に使うIDトークンを取得する。
+ * API Gateway のCognitoオーソライザーが検証するため、呼び出し側はこの値を
+ * Authorization ヘッダーへそのまま載せる。
+ *
+ * 取得した値をモジュール変数にキャッシュしてはいけない。
+ * idTokenの有効期限は1時間だが、散歩はそれより長く続くことがある。
+ * `fetchAuthSession` はリフレッシュトークン（5日）で期限切れのトークンを
+ * 自動更新するため、リクエストごとに呼ぶのが最も単純で安全。
+ * キャッシュすると期限切れのトークンを送り続け、401になる。
+ *
+ * 取得できない場合はnullを返さず例外を投げる。呼び出し側が
+ * 「通信に失敗した」ではなく「認証が切れた」と区別できる必要があるため。
+ * @returns {Promise<string>} Cognito が発行したIDトークン
+ * @throws {Error} 未サインイン、またはセッションが失効している場合（name は NoValidSession）
+ */
+export const fetchIdToken = async () => {
+  const session = await fetchAuthSession();
+  const idToken = session.tokens?.idToken?.toString();
+
+  if (idToken) {
+    return idToken;
+  }
+
+  // composable は error.message をそのまま画面へ出すため、ここに利用者向けの文言を入れる
+  const error = new Error(NO_VALID_SESSION_MESSAGE);
+  error.name = 'NoValidSession';
+  throw error;
 };
