@@ -536,6 +536,48 @@ body {
   z-index: 1;
 }
 
+/*
+ * 口コミ投稿で長押しした位置に立てる赤いピン。
+ * RouteMap.vue が動的に生成し、MapLibre がコンポーネントの外側へ挿入するため、
+ * スポット・現在地マーカーと同じ理由でグローバルに定義している。
+ * しずく型（下端が座標を指す）で、スポット（青）・開始地点（緑）と色で見分ける。
+ */
+.location-pin {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+}
+
+/* しずくの頭。先端（左下の角）が下を向くよう回転させる */
+.location-pin-head {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  margin-left: -12px;
+  background: #E53935;
+  border: 3px solid var(--white);
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  transform-origin: center;
+  box-shadow: var(--shadow);
+}
+
+/* 中心の白い点。ピンらしく見せる */
+.location-pin-head::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 7px;
+  height: 7px;
+  background: var(--white);
+  border-radius: 50%;
+}
+
 /* ルート情報カード */
 .route-info-card {
   background: var(--white);

@@ -23,6 +23,7 @@ import {
   ROUTE_LINE_WIDTH_PX
 } from '@/constants/mapDefaults';
 import { toCoordinateBounds } from '@/utils/geoBounds';
+import { useMapLongPress } from '@/composables/useMapLongPress';
 
 // 地図を生成する前に一度だけ設定する必要があるため、モジュールの読み込み時に実行する
 setWorkerUrl(maplibreWorkerUrl);
@@ -64,8 +65,20 @@ const props = defineProps({
   currentAccuracy: {
     type: Number,
     default: null
+  },
+  /** 地図の長押しを検出して通知するかどうか */
+  isLongPressEnabled: {
+    type: Boolean,
+    default: false
+  },
+  /** 長押しで立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
+  pinPosition: {
+    type: Object,
+    default: null
   }
 });
+
+const emit = defineEmits(['longPressMap']);
 
 /** ルートの経路を保持するソースのID */
 const ROUTE_SOURCE_ID = 'route';
@@ -97,6 +110,12 @@ let map = null;
 let markers = [];
 let originMarker = null;
 let currentLocationMarker = null;
+let pinMarker = null;
+
+// 長押しの検出。地図の生成後にattachし、座標を親へ通知する
+const { attach: attachLongPress } = useMapLongPress({
+  onLongPress: (position) => emit('longPressMap', position)
+});
 
 /**
  * @description 座標列をGeoJSONのFeatureへ包む。
@@ -255,6 +274,49 @@ const renderCurrentLocationMarker = () => {
 };
 
 /**
+ * @description 長押しで立てる赤いピンのDOM要素を作成する。
+ * スポット（青い丸）や開始地点（緑の丸）と見分けられるよう、しずく型の赤いピンにする。
+ * @returns {HTMLElement} ピンとして使う要素
+ */
+const createPinElement = () => {
+  // 外枠はMapLibreが位置決めに使うため素のままにし、回転は内側の要素で行う
+  // （MapLibreが外枠へ付けるtransformと回転が競合するのを避ける）
+  const container = document.createElement('div');
+  container.className = 'location-pin';
+
+  const head = document.createElement('div');
+  head.className = 'location-pin-head';
+  container.appendChild(head);
+
+  return container;
+};
+
+/**
+ * @description 長押しで立てる赤いピンを描き直す。
+ * 座標が無い場合はピンを消す。
+ * @returns {void}
+ */
+const renderPinMarker = () => {
+  if (props.pinPosition === null) {
+    pinMarker?.remove();
+    pinMarker = null;
+    return;
+  }
+
+  const lngLat = [props.pinPosition.lng, props.pinPosition.lat];
+
+  if (pinMarker === null) {
+    // ピンの先端が座標を指すよう、下端を基準にする
+    pinMarker = new Marker({ element: createPinElement(), anchor: 'bottom' })
+      .setLngLat(lngLat)
+      .addTo(map);
+    return;
+  }
+
+  pinMarker.setLngLat(lngLat);
+};
+
+/**
  * @description ルート全体とスポットが収まる位置まで地図を寄せる
  * @returns {void}
  */
@@ -362,12 +424,17 @@ onMounted(() => {
     map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
   }
 
+  if (props.isLongPressEnabled) {
+    attachLongPress(map);
+  }
+
   // スタイルの読み込み完了前はソースを追加できないため、loadを待つ
   map.on('load', () => {
     renderRouteLine();
     renderOriginMarker();
     renderSpotMarkers();
     renderCurrentLocationMarker();
+    renderPinMarker();
     fitToRoute();
   });
 });
@@ -400,6 +467,19 @@ watch(
   { deep: true }
 );
 
+// 長押しのピンが更新されたら描き直す
+watch(
+  () => props.pinPosition,
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    renderPinMarker();
+  },
+  { deep: true }
+);
+
 onBeforeUnmount(() => {
   markers.forEach((marker) => marker.remove());
   markers = [];
@@ -409,6 +489,8 @@ onBeforeUnmount(() => {
     currentLocationMarker.remove();
     currentLocationMarker = null;
   }
+  pinMarker?.remove();
+  pinMarker = null;
   map?.remove();
   map = null;
 });
