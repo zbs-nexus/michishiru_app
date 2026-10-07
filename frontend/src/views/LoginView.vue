@@ -70,7 +70,6 @@ const handleLogin = async ({ username, password }) => {
       </div>
       <div class="logo-text">
         <h1>ミチシル</h1>
-        <p>ルート提案型お散歩アプリ</p>
       </div>
     </div>
 

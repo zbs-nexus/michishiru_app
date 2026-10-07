@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from 'vue';
+import MascotAvatar from '@/components/feature/mascot/MascotAvatar.vue';
 
 /**
  * @description 案内中に、次の目的地を画面上部へ表示する。
@@ -7,6 +8,7 @@ import { computed } from 'vue';
  *
  * 歩きながら一瞥して読めることを優先し、見出しと距離を上段、
  * 目的地の名前を下段に置いて名前を大きく見せる。
+ * 案内役のマスコットを左に添え、この帯が案内役の言葉に見えるようにする。
  */
 const props = defineProps({
   /** 次の目的地の名前。未取得の場合はnull */
@@ -64,32 +66,43 @@ const distanceLabel = computed(() => {
     role="status"
     aria-live="polite"
   >
-    <p
-      v-if="isCompleted"
-      class="banner-message"
-    >
-      すべての目的地を通過しました。開始地点へ戻ります
-    </p>
+    <!--
+      読み上げ範囲の中にあるため装飾として置く。
+      距離が変わるたびにマスコットの説明が読み直されるのを防ぐ。
+    -->
+    <MascotAvatar
+      size="small"
+      is-decorative
+    />
 
-    <template v-else-if="spotName">
-      <div class="banner-header">
-        <span class="banner-label">次の目的地</span>
-        <span
-          v-if="distanceLabel"
-          class="banner-distance"
-        >{{ distanceLabel }}</span>
-      </div>
-      <p class="banner-name">
-        {{ spotName }}
+    <div class="banner-body">
+      <p
+        v-if="isCompleted"
+        class="banner-message"
+      >
+        すべての目的地を通過しました。開始地点へ戻ります
       </p>
-    </template>
 
-    <p
-      v-else
-      class="banner-message"
-    >
-      現在地を取得しています
-    </p>
+      <template v-else-if="spotName">
+        <div class="banner-header">
+          <span class="banner-label">次の目的地</span>
+          <span
+            v-if="distanceLabel"
+            class="banner-distance"
+          >{{ distanceLabel }}</span>
+        </div>
+        <p class="banner-name">
+          {{ spotName }}
+        </p>
+      </template>
+
+      <p
+        v-else
+        class="banner-message"
+      >
+        現在地を取得しています
+      </p>
+    </div>
   </div>
 </template>
 
@@ -98,6 +111,7 @@ const distanceLabel = computed(() => {
  * 屋外で歩きながら見るため、地図の上でも文字が沈まないよう
  * 背景は不透明にし、影を強めて地図から浮かせる。
  * 画面幅が広い場合もアプリの表示幅に合わせて中央へ寄せる。
+ * 左にマスコット、右に文言を置き、案内役が話している帯として見せる。
  */
 .next-spot-banner {
   position: fixed;
@@ -106,15 +120,25 @@ const distanceLabel = computed(() => {
   transform: translateX(-50%);
   z-index: 40;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  align-items: center;
+  gap: 12px;
   width: calc(100% - 24px);
   max-width: 406px;
-  padding: 12px 16px;
-  border-radius: 14px;
+  padding: 10px 16px 10px 12px;
+  border-radius: 16px;
+  border: 2px solid var(--border-gold);
   border-left: 5px solid var(--accent-green);
-  background: var(--white);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgba(58, 46, 32, 0.28);
+}
+
+/* 文言の側。マスコットの右に縦並びで置く */
+.banner-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 /* 見出しと距離を同じ行に置き、距離を右端に寄せる */

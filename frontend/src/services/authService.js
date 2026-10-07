@@ -26,6 +26,34 @@ import {
 const NO_VALID_SESSION_MESSAGE =
   'ログインの有効期限が切れました。もう一度ログインしてください';
 
+/**
+ * デザイン確認用のダミートークン（開発時のみ）。
+ * ローカルAPIハーネスはトークンを検証しないため、形だけ揃っていれば通る。
+ * 本物と見間違えないよう、値そのものに用途を書いておく。
+ */
+const PREVIEW_ID_TOKEN = 'design-preview-dummy-id-token';
+
+/**
+ * ダミートークンを返す状態かどうか。
+ * 既定は false で、デザイン確認用の画面（DesignPreviewView）だけが真にする。
+ */
+let isPreviewIdTokenEnabled = false;
+
+/**
+ * @description 以降の `fetchIdToken` がダミートークンを返すようにする。
+ *
+ * デザイン確認用の画面は Cognito のセッションを作らずログイン済みに見せるため、
+ * このままではAPIの認可でトークンが取れず画面を確認できない。
+ * その回避のための開発時限定の口であり、本番ビルドでは
+ * `import.meta.env.DEV` が false になってこの関数は何もしない。
+ * @returns {void}
+ */
+export const enablePreviewIdToken = () => {
+  if (import.meta.env.DEV) {
+    isPreviewIdTokenEnabled = true;
+  }
+};
+
 /** Cognito が返す例外名と、画面に出す文言の対応 */
 const ERROR_MESSAGES = {
   NotAuthorizedException: 'ユーザー名またはパスワードが違います',
@@ -298,6 +326,11 @@ export const fetchSignedInUsername = async () => {
  * @throws {Error} 未サインイン、またはセッションが失効している場合（name は NoValidSession）
  */
 export const fetchIdToken = async () => {
+  // デザイン確認用の画面から有効にしたときのみ通る。本番ビルドでは条件ごと消える
+  if (import.meta.env.DEV && isPreviewIdTokenEnabled) {
+    return PREVIEW_ID_TOKEN;
+  }
+
   const session = await fetchAuthSession();
   const idToken = session.tokens?.idToken?.toString();
 
