@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
+import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
@@ -10,6 +11,8 @@ import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
 import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
 import { useGenreOptions } from '@/composables/useGenreOptions';
+import { useReviewPosting } from '@/composables/useReviewPosting';
+import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkRecord } from '@/composables/useWalkRecord';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
@@ -52,6 +55,26 @@ const {
 
 // 口コミのジャンルはホーム画面と同じ検索条件マスタから取得する
 const { genreOptions, loadGenreOptions } = useGenreOptions();
+
+// 口コミの場所解決と投稿
+const {
+  existingSpot,
+  userRating,
+  isResolving,
+  isPosting,
+  errorMessage: reviewErrorMessage,
+  resolve: resolveReviewSpot,
+  post: postReviewContent,
+  reset: resetReview
+} = useReviewPosting();
+
+// 画面上部に出す一時メッセージ（投稿成功・エラー）
+const {
+  message: toastMessage,
+  variant: toastVariant,
+  showMessage,
+  hideMessage
+} = useToastMessage();
 
 /** 案内対象のスポット。巡る順に並んでいる */
 const spots = computed(() => routeStore.currentRoute?.spots ?? []);
@@ -109,6 +132,10 @@ const measureVisibleCenterOffsetY = () => {
  * @returns {Promise<void>}
  */
 const handleLongPressMap = async (position) => {
+  // 前の場所のメッセージ・解決結果を持ち越さない
+  hideMessage();
+  resetReview();
+
   isReviewFormVisible.value = true;
 
   // フォームが描画されてから高さを測る
@@ -116,6 +143,13 @@ const handleLongPressMap = async (position) => {
   pinOffsetY.value = measureVisibleCenterOffsetY();
 
   reviewPin.value = position;
+
+  // 投稿済みの場所なら名前・ジャンルを固定し評価のみにするため、先に解決する
+  const isResolved = await resolveReviewSpot(position);
+
+  if (!isResolved) {
+    showMessage(reviewErrorMessage.value ?? '場所の確認に失敗しました');
+  }
 };
 
 /**
@@ -125,16 +159,25 @@ const handleLongPressMap = async (position) => {
 const handleCloseReview = () => {
   isReviewFormVisible.value = false;
   reviewPin.value = null;
+  resetReview();
 };
 
 /**
- * @description 口コミの投稿を受け取る。
- * 送信などの内部処理は未実装のため、現時点では投稿内容（ReviewPostFormのsubmitReview
- * が渡す { spotName, genreId, genreName, rating }）は使わず、フォームを閉じてピンを消すだけにする。
- * @returns {void}
+ * @description 口コミを投稿する。
+ * 成功したらフォームを閉じて知らせ、失敗したらフォームを残してエラーを出す。
+ * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @returns {Promise<void>}
  */
-const handleSubmitReview = () => {
+const handleSubmitReview = async (review) => {
+  const result = await postReviewContent({ position: reviewPin.value, ...review });
+
+  if (result === null) {
+    showMessage(reviewErrorMessage.value ?? '口コミの投稿に失敗しました');
+    return;
+  }
+
   handleCloseReview();
+  showMessage('口コミを投稿しました', 'success');
 };
 
 /**
@@ -170,6 +213,13 @@ const handleConfirmEnd = () => {
     v-if="routeStore.currentRoute"
     :has-content-padding="false"
   >
+    <BaseToast
+      v-if="toastMessage"
+      :message="toastMessage"
+      :variant="toastVariant"
+      @close="hideMessage"
+    />
+
     <RouteNextSpotBanner
       ref="bannerRef"
       :spot-name="nextSpot?.name ?? null"
@@ -194,6 +244,11 @@ const handleConfirmEnd = () => {
       v-if="isReviewFormVisible"
       ref="reviewFormRef"
       :genre-options="genreOptions"
+      :pin-position="reviewPin"
+      :existing-spot="existingSpot"
+      :initial-rating="userRating"
+      :is-resolving="isResolving"
+      :is-posting="isPosting"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
     />

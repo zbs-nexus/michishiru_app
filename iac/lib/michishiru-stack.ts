@@ -141,6 +141,8 @@ export class MichishiruStack extends cdk.Stack {
     // ---- バックエンド（任意）: DynamoDB + Lambda + API Gateway ----
     // withBackend が true のときのみ構成する。
     let apiOrigin: origins.RestApiOrigin | undefined;
+    // 口コミ写真の保存先バケット。CloudFront の配信ビヘイビアと CORS 設定で後から参照する。
+    let photoBucket: s3.Bucket | undefined;
 
     if (withBackend) {
       // DynamoDB: ルートを格納するテーブル
@@ -158,6 +160,43 @@ export class MichishiruStack extends cdk.Stack {
             sortKey: { name: 'distance', type: dynamodb.AttributeType.NUMBER }
           }
         ]
+      });
+
+      // DynamoDB: 口コミ（場所メタ＋口コミ）を格納するテーブル（単一テーブル設計）
+      //   pk=spotId, sk='SPOT'（場所メタ）/ 'REVIEW#<userId>'（各ユーザーの口コミ）
+      const reviewTable = new dynamodb.TableV2(this, 'ReviewTable', {
+        tableName: `Review-${stage}`,
+        partitionKey: { name: 'spotId', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+        billing: dynamodb.Billing.onDemand(),
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+        globalSecondaryIndexes: [
+          {
+            // 近接する場所をグリッドのセルで引くための GSI（半径40mの候補絞り込み）。
+            // 場所メタ行のみ geoCell を持つため、口コミ行は含まれない（疎なインデックス）
+            indexName: 'GSI-GeoCell',
+            partitionKey: { name: 'geoCell', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'spotId', type: dynamodb.AttributeType.STRING }
+          },
+          {
+            // ユーザーが投稿した口コミを新しい順に引くための GSI。
+            // 口コミ行のみ userId を持つため、場所メタ行は含まれない（疎なインデックス）
+            indexName: 'GSI-UserReview',
+            partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING }
+          }
+        ]
+      });
+
+      // S3: 口コミ写真の保存先（非公開。CloudFront の OAC 経由で配信し、
+      // アップロードは署名付きURLで行う）。物理名は iac-rules に従い指定しない。
+      photoBucket = new s3.Bucket(this, 'PhotoBucket', {
+        blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+        encryption: s3.BucketEncryption.S3_MANAGED,
+        enforceSSL: true,
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+        // 開発環境は作り直しやすいよう、削除時に中身ごと破棄する
+        autoDeleteObjects: !isProd
       });
 
       // backend は素の ESM JavaScript で、依存する AWS SDK v3 は Lambda ランタイムに
@@ -276,6 +315,78 @@ export class MichishiruStack extends cdk.Stack {
 
       conditionTable.grantReadData(getConditionsFn);
 
+      // Lambda: getSpot ハンドラ（長押し位置に既存の口コミ場所があるかを返す）
+      // DynamoDB に加え、写真表示用の署名付きGET URLを S3 で発行する。
+      // s3-request-presigner はランタイム同梱の保証が無いため、バンドルする。
+      const getSpotFn = new nodejs.NodejsFunction(this, 'GetSpotFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        entry: path.join(backendDir, 'functions', 'getSpot', 'handler.js'),
+        handler: 'handler',
+        projectRoot: backendDir,
+        depsLockFilePath: path.join(backendDir, 'package-lock.json'),
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          REVIEW_TABLE_NAME: reviewTable.tableName,
+          PHOTO_BUCKET_NAME: photoBucket.bucketName
+        },
+        bundling: {
+          externalModules: [],
+          minify: true,
+          sourceMap: false
+        }
+      });
+
+      reviewTable.grantReadData(getSpotFn);
+      // 表示用の署名付きGET URLを発行するため、読み取りを許可する
+      photoBucket.grantRead(getSpotFn);
+
+      // Lambda: createReview ハンドラ（口コミを投稿し、場所の集計を更新する）
+      const createReviewFn = new lambda.Function(this, 'CreateReviewFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        handler: 'functions/createReview/handler.handler',
+        code: backendCode,
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          REVIEW_TABLE_NAME: reviewTable.tableName
+        }
+      });
+
+      reviewTable.grantReadWriteData(createReviewFn);
+
+      // Lambda: createPhotoUploadUrls ハンドラ（口コミ写真の署名付きPUT URLを発行する）
+      // s3-request-presigner はランタイム同梱の保証が無いため、バンドルする。
+      const createPhotoUploadUrlsFn = new nodejs.NodejsFunction(
+        this,
+        'CreatePhotoUploadUrlsFunction',
+        {
+          runtime: lambda.Runtime.NODEJS_LATEST,
+          entry: path.join(
+            backendDir,
+            'functions',
+            'createPhotoUploadUrls',
+            'handler.js'
+          ),
+          handler: 'handler',
+          projectRoot: backendDir,
+          depsLockFilePath: path.join(backendDir, 'package-lock.json'),
+          memorySize: 256,
+          timeout: cdk.Duration.seconds(10),
+          environment: {
+            PHOTO_BUCKET_NAME: photoBucket.bucketName
+          },
+          bundling: {
+            externalModules: [],
+            minify: true,
+            sourceMap: false
+          }
+        }
+      );
+
+      // 署名付きURLは発行者（この関数のロール）の権限を引き継ぐため、PutObject を許可する
+      photoBucket.grantPut(createPhotoUploadUrlsFn);
+
       // Lambda: verifyPasswordResetTarget ハンドラ
       // （パスワード再設定の前に、ユーザー名とメールアドレスの組み合わせを照合する）
       // ブラウザからはユーザーの登録情報を参照できないため、サーバー側で確かめる。
@@ -320,6 +431,9 @@ export class MichishiruStack extends cdk.Stack {
       //   GET  /api/v1/routes                      既存ルートの取得
       //   POST /api/v1/routes                      条件からルートを生成
       //   GET  /api/v1/conditions                  検索条件マスタの取得
+      //   GET  /api/v1/spots                       長押し位置の既存口コミ場所の解決（要認証）
+      //   POST /api/v1/reviews                     口コミの投稿（要認証）
+      //   POST /api/v1/review-photo-uploads        写真アップロード用の署名付きURL発行（要認証）
       //   POST /api/v1/password-reset-verifications ユーザー名とメールアドレスの照合
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
@@ -383,6 +497,30 @@ export class MichishiruStack extends cdk.Stack {
         cognitoAuthorized
       );
 
+      // GET /api/v1/spots（長押し位置の既存口コミ場所を解決する。要認証）
+      const spotsResource = v1Resource.addResource('spots');
+      spotsResource.addMethod(
+        'GET',
+        new apigateway.LambdaIntegration(getSpotFn),
+        cognitoAuthorized
+      );
+
+      // POST /api/v1/reviews（口コミを投稿する。要認証）
+      const reviewsResource = v1Resource.addResource('reviews');
+      reviewsResource.addMethod(
+        'POST',
+        new apigateway.LambdaIntegration(createReviewFn),
+        cognitoAuthorized
+      );
+
+      // POST /api/v1/review-photo-uploads（写真アップロード用の署名付きURLを発行する。要認証）
+      const reviewPhotoUploadsResource = v1Resource.addResource('review-photo-uploads');
+      reviewPhotoUploadsResource.addMethod(
+        'POST',
+        new apigateway.LambdaIntegration(createPhotoUploadUrlsFn),
+        cognitoAuthorized
+      );
+
       // POST /api/v1/password-reset-verifications
       // ここだけ認可を付けない。パスワードを忘れた利用者がログインする前に呼ぶため、
       // Cognito オーソライザーで守ると機能しなくなる。
@@ -398,6 +536,11 @@ export class MichishiruStack extends cdk.Stack {
 
       apiOrigin = new origins.RestApiOrigin(api);
 
+      new cdk.CfnOutput(this, 'PhotoBucketName', {
+        value: photoBucket.bucketName,
+        description: '口コミ写真を格納する S3 バケット名'
+      });
+
       new cdk.CfnOutput(this, 'ApiEndpoint', {
         value: api.url,
         description: 'API Gateway のエンドポイント（直接アクセス用。通常は CloudFront 経由）'
@@ -406,9 +549,34 @@ export class MichishiruStack extends cdk.Stack {
         value: routeTable.tableName,
         description: 'ルートを格納する DynamoDB テーブル名'
       });
+      new cdk.CfnOutput(this, 'ReviewTableName', {
+        value: reviewTable.tableName,
+        description: '口コミ（場所メタ＋口コミ）を格納する DynamoDB テーブル名'
+      });
     }
 
     // ---- CloudFront: SPA 配信（バックエンドがある場合は /api/* を API Gateway へ） ----
+    // CloudFront の追加ビヘイビア。バックエンドがある場合に /api/* と review-photos/* を足す。
+    const additionalBehaviors: Record<string, cloudfront.BehaviorOptions> = {};
+
+    if (apiOrigin) {
+      // API へのリクエストはキャッシュせず、クエリ文字列を含めて転送する
+      additionalBehaviors['api/*'] = {
+        origin: apiOrigin,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        // Host ヘッダを除く全ての情報（クエリ文字列含む）をオリジンへ渡す
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER
+      };
+    }
+
+    // 写真は CloudFront 経由では配信しない。
+    // 同一ディストリビューションから OAC 配信すると、写真バケットのバケットポリシーが
+    // このディストリビューションを参照し、ディストリビューションは /api/* 経由で
+    // 写真アップロードURL発行Lambda（＝写真バケットに依存）に依存するため、循環参照になる。
+    // 代わりに getSpot が表示用の署名付きGET URLを返す（S3の署名付きURLで直接取得する）。
+
     const distribution = new cloudfront.Distribution(this, 'SiteDistribution', {
       comment: `ミチシル フロントエンド配信 (${stage})`,
       defaultRootObject: 'index.html',
@@ -417,25 +585,29 @@ export class MichishiruStack extends cdk.Stack {
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED
       },
-      additionalBehaviors: apiOrigin
-        ? {
-            // API へのリクエストはキャッシュせず、クエリ文字列を含めて転送する
-            'api/*': {
-              origin: apiOrigin,
-              viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-              allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-              cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
-              // Host ヘッダを除く全ての情報（クエリ文字列含む）をオリジンへ渡す
-              originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER
-            }
-          }
-        : undefined,
+      additionalBehaviors:
+        Object.keys(additionalBehaviors).length > 0 ? additionalBehaviors : undefined,
       errorResponses: [
         // SPA のため、S3 が返す 403/404 は index.html にフォールバックさせる
         { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html' },
         { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html' }
       ]
     });
+
+    // ---- 口コミ写真バケットの CORS（ブラウザからの署名付きPUTを許可する） ----
+    // 表示（GET）は getSpot が返す署名付きURLで行い CORS 不要。アップロード（PUT）だけが
+    // クロスオリジンになる。許可オリジンに配信元（CloudFront）のドメインを使うと、
+    // バケットがディストリビューションに依存し、ディストリビューションは /api/* 経由で
+    // 写真Lambda（＝バケットに依存）に依存するため循環する。これを避けるため固定値にする。
+    // PUT 先の署名付きURL自体が短命の権限を持つため、オリジンを絞らなくても安全に保てる。
+    if (photoBucket) {
+      photoBucket.addCorsRule({
+        allowedMethods: [s3.HttpMethods.PUT],
+        allowedOrigins: ['*'],
+        allowedHeaders: ['*'],
+        maxAge: 3000
+      });
+    }
 
     // ---- フロントエンド成果物のデプロイ ----
     // frontend/dist が存在する場合のみアップロードする。

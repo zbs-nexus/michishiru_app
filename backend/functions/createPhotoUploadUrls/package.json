@@ -1,0 +1,12 @@
+{
+  "name": "create-photo-upload-urls",
+  "version": "1.0.0",
+  "description": "口コミ写真のアップロード用の署名付きURLを発行するLambda関数",
+  "private": true,
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1118.0",
+    "@aws-sdk/s3-request-presigner": "3.1118.0"
+  }
+}
