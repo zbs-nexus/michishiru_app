@@ -82,6 +82,11 @@ defineProps({
   visitedSpotIds: {
     type: Array,
     default: () => []
+  },
+  /** 選択中の口コミの場所のID。該当するピンを大きく前面に出す */
+  selectedReviewSpotId: {
+    type: String,
+    default: null
   }
 });
 
@@ -106,6 +111,7 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :other-review-spots="otherReviewSpots"
         :show-other-reviews="showOtherReviews"
         :visited-spot-ids="visitedSpotIds"
+        :selected-review-spot-id="selectedReviewSpotId"
         @long-press-map="$emit('longPressMap', $event)"
         @select-review-spot="$emit('selectReviewSpot', $event)"
       />
