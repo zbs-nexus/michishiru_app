@@ -78,6 +78,12 @@ inclusion: always
 | 経路からの離れ | deviationM | 現在地が経路の折れ線からどれだけ離れているか（メートル） |
 | 経路の測定用データ | routeMeasure | 経路の各点までの累積距離をまとめたもの。距離計算に使う |
 | 経路沿いを採用する離れの上限 | MAX_ROUTE_DEVIATION_M | これ以上経路から離れたら直線距離へ切り替える（メートル）。`useRouteProgress.js` の定数 |
+| 地図に表示する現在地 | displayLocation | 経路の近くでは経路の線上へ吸着させた現在地。表示専用で、距離の計算には使わない。`useRouteSnapping.js` が返す |
+| 経路へ吸着させているかどうか | isSnappedToRoute | 現在地が経路から `MAX_SNAP_DEVIATION_M` 以内で、線上へ寄せて表示しているか |
+| 経路へ吸着させる離れの上限 | MAX_SNAP_DEVIATION_M | これ以上経路から離れたら吸着をやめ、測位した座標をそのまま表示する（メートル）。`useRouteSnapping.js` の定数 |
+| 徒歩として採用する速さの上限 | MAX_WALKING_SPEED_MPS | 前回採用した地点からこれを超える速さで動いた測位は、座標の飛びとして捨てる（メートル毎秒）。`locationPlausibility.js` の定数 |
+| 飛びの候補 | jumpCandidate | 飛びと判定して捨てた直近の測位と、互いに矛盾せず続いた回数。`useLocationTracking.js` の内部状態 |
+| 飛びを受け入れる連続回数 | MAX_CONSECUTIVE_JUMP_COUNT | 飛びと判定した測位が矛盾せずこの回数続いたら受け入れる。前回の採用地点が誤っていた場合に現在地が固まるのを防ぐ。`useLocationTracking.js` の定数 |
 | 実績の総距離 | totalDistanceM | 実際に歩いた距離（メートル）。GPSの軌跡から積算する |
 | 測位できたかどうか | hasLocationFix | 一度でも現在地を採用できたか。できていない場合は実績を計測できない |
 | 区間距離 | segmentDistanceM | 前回採用した地点から現在地までの距離（メートル） |
@@ -383,3 +389,4 @@ inclusion: always
 | 2026/10/14 | 案内中に手動で次の目的地へ進めるボタンの追加に伴い「ルートとスポット」へ advanceToNextSpot / VISITED_STAMP_LABEL を追加 |
 | 2026/10/14 | 次の目的地の切り替えをボタン操作のみにし、現在地からの到達判定を廃止したことに伴い ARRIVAL_THRESHOLD_M を削除 |
 | 2026/10/14 | 到達済みのスタンプを「済」の文字から足跡の画像（`assets/images/spot-visited-stamp.png`）に変更したことに伴い VISITED_STAMP_LABEL を削除 |
+| 2026/10/14 | ビル群での現在地のずれ対策（速さによる飛びの除外・経路への吸着表示）に伴い「ルートとスポット」へ displayLocation / isSnappedToRoute / MAX_SNAP_DEVIATION_M / MAX_WALKING_SPEED_MPS / jumpCandidate / MAX_CONSECUTIVE_JUMP_COUNT を追加 |
