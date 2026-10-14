@@ -171,6 +171,7 @@ inclusion: always
 | 他の人の口コミの場所 | otherReviewSpots | `reviewSpots` から自分が投稿済みの場所を除いたもの。地図の紫ピン表示に使う |
 | 自分の口コミを表示するか | showMyReviews | オレンジピンの表示切り替え |
 | 他の人の口コミを表示するか | showOtherReviews | 紫ピンの表示切り替え |
+| 選択中の口コミの場所のID | selectedReviewSpotId | 選択中のピンを大きく前面に出すための目印。未選択はnull |
 | ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
 | 口コミフォームの対象座標 | reviewTargetPosition | 投稿フォームが対象にしている座標。長押しした位置、または選んだピンの位置 |
 | 新規投稿の場所のピン | newSpotPin | 赤いピンの座標。まだ口コミが無い場所にだけ立てる |
@@ -192,6 +193,9 @@ inclusion: always
 | 赤 | 新規で口コミ投稿をする場所 | `location-pin` |
 | オレンジ | 自分が口コミ投稿済みの場所 | `review-pin-mine` |
 | 紫 | 他の人の口コミ投稿の場所 | `review-pin-other` |
+
+選択中のピンは色を変えず、大きくして（`--pin-size`）縁・影を強め前面へ出す（`is-selected`）。
+色は意味に固定しているため、選択という別の意味に色を使わない。
 
 ### マスコット
 

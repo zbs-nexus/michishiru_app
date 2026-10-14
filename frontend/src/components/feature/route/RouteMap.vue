@@ -118,6 +118,11 @@ const props = defineProps({
   visitedSpotIds: {
     type: Array,
     default: () => []
+  },
+  /** 選択中の口コミの場所のID。該当するピンを大きく前面に出す。未選択はnull */
+  selectedReviewSpotId: {
+    type: String,
+    default: null
   }
 });
 
@@ -495,11 +500,16 @@ const OTHER_REVIEW_PIN_CLASS = 'review-pin-other';
  * @param {string} spotName 場所の名称（読み上げ用）
  * @returns {HTMLElement} マーカーとして使う要素
  */
-const createReviewPinElement = (modifierClass, spotName) => {
+const createReviewPinElement = (modifierClass, spot) => {
   const container = document.createElement('button');
   container.className = `review-pin ${modifierClass}`;
   container.type = 'button';
-  container.setAttribute('aria-label', `${spotName ?? ''}の口コミを見る`);
+  container.setAttribute('aria-label', `${spot.spotName ?? ''}の口コミを見る`);
+
+  // 選択中はピンを大きく前面に出し、支援技術にも選択状態を伝える
+  const isSelected = spot.spotId === props.selectedReviewSpotId;
+  container.classList.toggle('is-selected', isSelected);
+  container.setAttribute('aria-pressed', String(isSelected));
 
   const head = document.createElement('div');
   head.className = 'review-pin-head';
@@ -511,7 +521,7 @@ const createReviewPinElement = (modifierClass, spotName) => {
 /**
  * @description 口コミの場所の一覧からマーカーを作る。
  * ピンを押すとその場所を親へ通知する。
- * @param {Array<{position: {lng: number, lat: number}, spotName: string}>} spots 場所の一覧
+ * @param {Array<{spotId: string, position: {lng: number, lat: number}, spotName: string}>} spots 場所の一覧
  * @param {string} modifierClass 色を決める修飾クラス
  * @returns {object[]} 生成したマーカー
  */
@@ -522,12 +532,16 @@ const toReviewMarkers = (spots, modifierClass) =>
         Number.isFinite(spot.position?.lng) && Number.isFinite(spot.position?.lat)
     )
     .map((spot) => {
-      const element = createReviewPinElement(modifierClass, spot.spotName);
+      const element = createReviewPinElement(modifierClass, spot);
 
       element.addEventListener('click', (event) => {
         // 地図のクリックや長押し判定に伝播させない
         event.stopPropagation();
-        emit('selectReviewSpot', { lng: spot.position.lng, lat: spot.position.lat });
+        // 押した瞬間に大きくできるよう、座標だけでなく spotId も渡す
+        emit('selectReviewSpot', {
+          spotId: spot.spotId,
+          position: { lng: spot.position.lng, lat: spot.position.lat }
+        });
       });
 
       return new Marker({ element, anchor: 'bottom' })
@@ -766,13 +780,14 @@ watch(
   { deep: true }
 );
 
-// 口コミピンの一覧・表示切り替えに追従する
+// 口コミピンの一覧・表示切り替え・選択に追従する
 watch(
   () => [
     props.myReviewSpots,
     props.showMyReviews,
     props.otherReviewSpots,
-    props.showOtherReviews
+    props.showOtherReviews,
+    props.selectedReviewSpotId
   ],
   () => {
     if (map === null || !map.isStyleLoaded()) {

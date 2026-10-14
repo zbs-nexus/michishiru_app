@@ -821,32 +821,45 @@ textarea {
 /*
  * 投稿済みの口コミのピン。形は location-pin と同じしずく型で、色だけを変える。
  * 押せることを支援技術へ伝えるためボタン要素で作るため、既定の見た目を打ち消す。
+ *
+ * サイズは --pin-size にまとめ、高さ・頭・持ち上げ量をそこから比率で出す。
+ * しずくは正方形を45°回しているため、角が箱の底辺より size × (√2−1)/2 外へ出る。
+ * MapLibre の anchor: 'bottom' が合わせる箱の底辺と先端を一致させるには、
+ * 高さに 1 + (√2−1)/2 ≒ 1.2071、持ち上げ量に (√2−1)/2 ≒ 0.2071 を掛ける。
+ * 定数で持つと選択時に拡大しても先端が座標からずれない。
  */
 .review-pin {
   /* relative にしないこと（理由は current-location-marker のコメント） */
   position: absolute;
-  width: 24px;
-  /* 先端の張り出しぶんを含めた高さ（location-pin と同じ理由） */
-  height: 29px;
+  --pin-size: 24px;
+  width: var(--pin-size);
+  /* 先端の張り出しぶんを含めた高さ */
+  height: calc(var(--pin-size) * 1.2071);
   padding: 0;
   background: none;
   border: none;
   cursor: pointer;
+  /* 選択時の拡大をなめらかに見せる */
+  transition: width 0.12s ease-out, height 0.12s ease-out;
 }
 
-/* 先端を座標に合わせるため5px持ち上げる（理由は location-pin-head のコメント） */
 .review-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 5px;
-  width: 24px;
-  height: 24px;
-  margin-left: -12px;
+  /* 先端を座標に合わせるため張り出しぶんだけ持ち上げる */
+  bottom: calc(var(--pin-size) * 0.2071);
+  width: var(--pin-size);
+  height: var(--pin-size);
+  margin-left: calc(var(--pin-size) / -2);
   border: 3px solid var(--white);
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   transform-origin: center;
   box-shadow: var(--shadow);
+  transition:
+    width 0.12s ease-out,
+    height 0.12s ease-out,
+    border-width 0.12s ease-out;
 }
 
 .review-pin-head::after {
@@ -859,6 +872,21 @@ textarea {
   height: 7px;
   background: var(--white);
   border-radius: 50%;
+}
+
+/*
+ * 選択中のピン。
+ * 大きくし（A）、縁を太く・影を濃くして浮かせ（E）、重なっても隠れないよう前面へ出す。
+ * z-index はマーカー同士の兄弟要素に効く（MapLibre は重なり順を管理しないため）。
+ */
+.review-pin.is-selected {
+  --pin-size: 34px;
+  z-index: 1;
+}
+
+.review-pin.is-selected .review-pin-head {
+  border-width: 4px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 /* 自分が口コミ投稿済みの場所はオレンジ */
