@@ -92,6 +92,20 @@ textarea {
   font-family: inherit;
 }
 
+/*
+ * MapLibre GL は自分のスタイルシートで地図コンテナへ
+ * `font: 12px/20px Helvetica Neue, Arial, ...` を当てる。
+ * 地図の中へ挿入する要素（スポットの番号・開始地点の目印・帰属表示）は
+ * これを受け継いでしまい、アプリの書体から外れる。そのため継承へ戻す。
+ *
+ * ここで直せるのはHTMLとして描かれる文字だけ。
+ * 地図そのものに写っている地名は、タイル画像に焼き込まれた絵なので
+ * CSSでは変えられない（ベクタタイルへ移行しない限り触れない）。
+ */
+.maplibregl-map {
+  font-family: inherit;
+}
+
 #app {
   min-height: 100vh;
   position: relative;
