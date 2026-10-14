@@ -77,6 +77,21 @@ body {
   position: relative;
 }
 
+/*
+ * ボタンや入力欄は、ブラウザの既定では親から書体を受け継がない。
+ * UAスタイルシートが独自の書体（Arial 等）を当てるため、
+ * font-family を書いていない部品だけ別の書体で表示されてしまう。
+ * ジャンルの選択ボタンや認証画面の入力欄がこれに当たっていたので、
+ * まとめて body からの継承へ戻す。
+ * 個別に font-family を指定している部品（.primary-btn 等）はそちらが優先される。
+ */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 #app {
   min-height: 100vh;
   position: relative;
