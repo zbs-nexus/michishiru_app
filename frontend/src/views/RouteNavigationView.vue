@@ -460,27 +460,24 @@ const handleSelectReviewSpot = async (position) => {
   hideMessage();
 
   /*
-   * 解決の前にフォームを閉じる。
+   * 解決してから描く。フォームを開いていない場合は、内容が揃ってから現れる。
    *
-   * 既に別の場所のフォームを開いている場合、閉じずに解決すると
-   * 解決結果が消えた状態（＝新規モードの空の入力欄）で描かれたまま応答を待つことになり、
-   * 投稿内容が出るまで待たされているように見える。
-   * 閉じることで次の場所の内容が揃ってから描き直せる。
+   * 既に別の場所のフォームを開いている場合は、閉じずに前の場所の内容を出したまま
+   * 解決を待ち、揃ってから中身を差し替える（resolve は前の結果を保持する）。
+   * 先に空にすると、切り替えの間だけ新規モードの空の入力欄が見えてしまう。
+   * 解決中は投稿ボタンを押せないため、前の場所へ誤って投稿されることはない。
    */
-  isReviewFormVisible.value = false;
-  reviewTargetPosition.value = null;
-  resetReview();
-
-  isExistingSpotSelected.value = true;
-
   const isResolved = await resolveReviewSpot(position);
 
-  // 取得できないまま開くと新規投稿の画面になってしまうため、開かずに知らせる
+  // 取得できないまま開くと新規投稿の画面になってしまうため、開かずに知らせる。
+  // 既に開いている場合は前の場所の表示をそのまま残す
   if (!isResolved) {
-    isExistingSpotSelected.value = false;
     showMessage(reviewErrorMessage.value ?? '口コミの取得に失敗しました');
     return;
   }
+
+  // 投稿済みと分かったので、赤いピンは立てない
+  isExistingSpotSelected.value = true;
 
   await showReviewFormAt(position);
 };
