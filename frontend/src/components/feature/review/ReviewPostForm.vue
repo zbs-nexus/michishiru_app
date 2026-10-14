@@ -239,21 +239,24 @@ const prefillForEditing = () => {
   keptPhotos.value = [...props.existingPhotos];
 };
 
-// ピンが別の場所に立て直されたら、前の場所の入力を持ち越さない
+/*
+ * 対象の場所、または解決結果が変わったら入力を作り直す。
+ *
+ * 2つを別のwatchで扱うと、発火の順番によって片方の処理がもう片方を打ち消す。
+ * （場所の入れ替えでプリフィルが消える / プリフィル後にリセットが走る）。
+ * どちらが変わっても「初期化してからプリフィル」を通すことで、順番に依存しなくなる。
+ *
+ * immediate を付けるのは、投稿済みのピンを選んだ場合に
+ * 解決を終えてからフォームを描くため。このときpropsは最初から確定しており、
+ * 変化を待っているとプリフィルが走らず、自分の投稿内容が空のまま表示される。
+ */
 watch(
-  () => props.pinPosition,
-  () => {
-    resetInputs();
-  }
-);
-
-// 場所の解決後に既存情報が分かったら、本人編集ならプリフィルする
-watch(
-  () => props.existingSpot,
+  () => [props.pinPosition, props.existingSpot],
   () => {
     resetInputs();
     prefillForEditing();
-  }
+  },
+  { immediate: true }
 );
 
 // 解決後に既存評価が分かったら、評価の初期値へ反映する
