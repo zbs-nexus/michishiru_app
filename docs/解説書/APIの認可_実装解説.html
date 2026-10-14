@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APIの認可 - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .prereq {
+            background-color: #f0f7ec;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        a {
+            color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>🔐 APIの認可 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
+            <strong>📅 マージ日:</strong> 2026-10-07<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-176<br>
+            <strong>🔖 対象マージ:</strong> <code>75de23f</code>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+
+        <div class="prereq">
+            <strong>「認証」と「認可」は別のもの</strong><br>
+            認証は「あなたが誰か」を確かめること（ログイン）です。認可は「その人がこの操作をしてよいか」を確かめることです。
+            ミチシルはログイン画面をすでに作っていましたが、<strong>API 側は誰からの呼び出しでも受け付けていました</strong>。今回やったのは後者の認可です。
+        </div>
+
+        <div class="prereq">
+            <strong>API Gateway とは</strong><br>
+            ブラウザからの HTTP リクエストを受け取り、対応する Lambda 関数へ渡す AWS のサービスです。
+            「どの URL とどのメソッド（GET / POST）を、どの Lambda に繋ぐか」をここで定義します。ミチシルでは <code>iac/lib/michishiru-stack.ts</code> が定義しています。
+        </div>
+
+        <div class="prereq">
+            <strong>IDトークン（idToken）とは</strong><br>
+            Cognito がログイン成功時に発行する、文字列になった身分証です。中にユーザーの属性（ユーザー名、不変のID <code>sub</code> など）と有効期限が入っており、
+            Cognito の署名が付いているため<strong>偽造すると検証で弾かれます</strong>。ミチシルの設定では有効期限は1時間です。
+        </div>
+
+        <div class="prereq">
+            <strong>フロントの「サービス層」とは</strong><br>
+            <code>frontend/src/services/</code> に置く、API との通信だけを担当するファイル群です。
+            画面（Vue コンポーネント）が直接 <code>fetch</code> を呼ばず、ここを経由させることで「通信の作法」を1か所にまとめられます。
+            今回の「トークンをヘッダーに付ける」処理もここに入ります。
+        </div>
+
+        <div class="prereq">
+            <strong>ローカル開発のAPIハーネスとは</strong><br>
+            <code>tools/localApiServer.js</code> は、自分のパソコンの中で API Gateway の代わりをする小さなサーバーです（<code>npm run dev</code> で起動します）。
+            Lambda のコードをそのまま呼び出すため、AWS にデプロイしなくても動作を確認できます。デプロイ対象には含まれません。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            ミチシルの API（ルートの取得・生成、検索条件マスタの取得）を、<strong>ログイン済みの人だけが呼べる状態</strong>にした修正です。
+        </p>
+        <p>
+            仕組みは2つに分かれます。
+        </p>
+        <ul>
+            <li><strong>サーバー側（守る）</strong>: API Gateway に「Cognito オーソライザー」を取り付け、IDトークンを持たないリクエストを Lambda へ届く前に断る</li>
+            <li><strong>フロント側（通す）</strong>: API を呼ぶ直前に Cognito から IDトークンを取り出し、<code>Authorization</code> ヘッダーに載せて送る</li>
+        </ul>
+        <p>
+            「オーソライザー（authorizer）」は直訳すると「認可する人」です。
+            API Gateway に取り付ける門番で、リクエストが届くたびにトークンを検証し、問題なければ Lambda へ通し、だめなら <code>401 Unauthorized</code> を返します。
+            <strong>検証を API Gateway が引き受けるため、Lambda のコードにトークンを調べる処理を書く必要はありません。</strong>
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            この修正の前は、画面側だけがログインを要求していました。フロントは <code>frontend/src/router/index.js</code> の
+            <code>router.beforeEach</code>（画面を移る前に必ず通る見張り役）で、未ログインならログイン画面へ送り返しています。
+        </p>
+        <p>
+            ただし、これはブラウザの中の話です。<strong>API の URL を知っている人が、ブラウザを通さず直接リクエストを送れば、ログインせずに応答を得られました。</strong>
+            ルート生成 API は Amazon Bedrock（AI）と Amazon Location Service を呼ぶため、無制限に叩かれると料金にも直結します。
+        </p>
+        <p>
+            もう1つの理由は、<strong>この先の機能の土台になる</strong>ことです。
+            認可を通ったリクエストでは、API Gateway が検証済みのユーザー情報を Lambda へ渡してくれます（<code>event.requestContext.authorizer.claims</code>）。
+            Lambda はこれを使って「誰の散歩実績か」「誰の口コミか」を判断できます。
+            前提条件書で未決だった「API の認可」が、このマージで「確定した要素」へ移りました（2026/10/07）。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+
+        <div class="flow-step">
+            <strong>Step 1:</strong> 利用者がログインする。Cognito が IDトークンを発行し、Amplify（<code>aws-amplify/auth</code>）がブラウザに保存する。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2:</strong> 画面が API を呼ぶ。サービス層（<code>routeService.js</code> / <code>conditionService.js</code>）が、<code>fetch</code> を呼ぶ直前に
+            <code>authService.fetchIdToken()</code> でトークンを取り出す。期限が切れていれば Amplify が自動で更新する。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3:</strong> 取り出したトークンを <code>Authorization</code> ヘッダーに<strong>そのまま</strong>載せてリクエストを送る。
+            <code>Bearer </code> のような接頭辞は付けない（理由は「注意ポイント」）。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4:</strong> リクエストは CloudFront の <code>/api/*</code> を通って API Gateway に届く。
+            オーソライザーがヘッダーのトークンを検証する（署名・有効期限・発行元のユーザープールが一致するか）。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5（検証OK）:</strong> Lambda が起動する。トークンの中身は
+            <code>event.requestContext.authorizer.claims</code> に展開され、<code>claims.sub</code> でユーザーを一意に識別できる。
+        </div>
+        <div class="flow-step">
+            <strong>Step 6（検証NG）:</strong> API Gateway が <code>401</code> と <code>{"message":"Unauthorized"}</code> を返す。
+            <strong>Lambda は呼ばれない</strong>ため、処理も料金も発生しない。
+        </div>
+
+        <h3>保護したメソッドと、しなかったメソッド</h3>
+        <table>
+            <tr>
+                <th>メソッドとパス</th>
+                <th>認可</th>
+                <th>理由</th>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/routes</code></td>
+                <td>必須</td>
+                <td>既存ルートの取得。ログイン後の画面からしか呼ばない</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/routes</code></td>
+                <td>必須</td>
+                <td>ルートの生成。AI と地図サービスを呼ぶため、特に守る価値が高い</td>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/conditions</code></td>
+                <td>必須</td>
+                <td>検索条件マスタの取得。ホーム画面（ログイン後）からしか呼ばない</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/password-reset-verifications</code></td>
+                <td><strong>なし</strong></td>
+                <td>パスワードを忘れた人が<strong>ログインする前</strong>に呼ぶ。認可を付けると機能しなくなる</td>
+            </tr>
+        </table>
+        <p>
+            このマージの時点で API Gateway のメソッドは4つあり、そのうち3つを保護しました。
+            4つ目の照合API（ユーザー名とメールアドレスの組み合わせを確かめる API）だけは、ログイン前に呼ぶ必要があるため認可を付けていません。
+        </p>
+        <div class="info-box">
+            この修正のあとに追加された API（口コミの投稿・取得、写真アップロードURLの発行、散歩実績の保存）も、
+            同じ <code>cognitoAuthorized</code> の設定を渡して保護しています。
+            つまりこのマージは、<strong>以降に増える API が従う型</strong>を作ったことになります。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>iac/lib/michishiru-stack.ts（変更）</h3>
+        <p>
+            インフラの定義ファイルです。ここにオーソライザーを1つ作り、保護したいメソッドへ渡します。
+        </p>
+        <div class="code-block">
+            <pre>const apiAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(
+  this,
+  'ApiAuthorizer',
+  {
+    cognitoUserPools: [userPool],
+    // API 本体と同じ理由で物理名を指定する（AWSコンソールで識別するため）
+    authorizerName: `michishiru-api-authorizer-${stage}`
+  }
+);
+
+// 保護する3メソッドへ渡す設定。authorizationType は省略すると
+// 既定値に引きずられるため、COGNITO を明示する。
+const cognitoAuthorized: apigateway.MethodOptions = {
+  authorizer: apiAuthorizer,
+  authorizationType: apigateway.AuthorizationType.COGNITO
+};</pre>
+        </div>
+        <p>
+            <code>cognitoUserPools: [userPool]</code> で「どのユーザープールが発行したトークンを正しいとみなすか」を指定します。
+            <code>userPool</code> は <code>withBackend</code>（バックエンドを含めるかどうかの切り替え）の外側で作られているため、ここからそのまま参照できます。
+        </p>
+        <p>
+            設定を <code>cognitoAuthorized</code> という変数にまとめているのは、3か所へ同じものを渡すためです。
+            <code>authorizationType</code> をわざわざ書いているのは、省略すると既定値に引きずられる可能性があるためで、<code>COGNITO</code> を明示しています。
+        </p>
+        <p>
+            実際にメソッドへ渡すのは、<code>addMethod</code> の第3引数です。
+        </p>
+        <div class="code-block">
+            <pre>const routesResource = v1Resource.addResource('routes');
+routesResource.addMethod(
+  'GET',
+  new apigateway.LambdaIntegration(getRouteFn),
+  cognitoAuthorized
+);
+routesResource.addMethod(
+  'POST',
+  new apigateway.LambdaIntegration(createRouteFn),
+  cognitoAuthorized
+);</pre>
+        </div>
+        <p>
+            一方、照合APIには第3引数を渡しません。<strong>渡さない＝認可なし</strong>です。
+            この「付けない」という判断には、コードにはっきり理由を書き残しています。
+        </p>
+        <div class="code-block">
+            <pre>// POST /api/v1/password-reset-verifications
+// ここだけ認可を付けない。パスワードを忘れた利用者がログインする前に呼ぶため、
+// Cognito オーソライザーで守ると機能しなくなる。
+// 総当たりへの備えは回数制限（API Gateway のスロットリング / WAF）で行う方針だが、
+// まだ未対応（ミチシル_前提条件.md の「照合APIの保護」に残置）。
+const passwordResetVerificationsResource = v1Resource.addResource(
+  'password-reset-verifications'
+);
+passwordResetVerificationsResource.addMethod(
+  'POST',
+  new apigateway.LambdaIntegration(verifyPasswordResetTargetFn)
+);</pre>
+        </div>
+
+        <h3>frontend/src/services/authService.js（変更）</h3>
+        <p>
+            Cognito とのやり取りをまとめているファイルです。ここに <code>fetchIdToken</code> を追加しました。
+        </p>
+        <div class="code-block">
+            <pre>export const fetchIdToken = async () => {
+  const session = await fetchAuthSession();
+  const idToken = session.tokens?.idToken?.toString();
+
+  if (idToken) {
+    return idToken;
+  }
+
+  // composable は error.message をそのまま画面へ出すため、ここに利用者向けの文言を入れる
+  const error = new Error(NO_VALID_SESSION_MESSAGE);
+  error.name = 'NoValidSession';
+  throw error;
+};</pre>
+        </div>
+        <p>
+            <code>fetchAuthSession()</code> は Amplify の関数で、ブラウザに保存されているセッションを読み出します。
+            <code>?.</code>（オプショナルチェーン）は「途中が <code>undefined</code> でもエラーにせず <code>undefined</code> を返す」書き方で、未ログインの場合に備えています。
+        </p>
+        <p>
+            <small>※ 現在の <code>authService.js</code> では、この関数の先頭に「開発サーバーでデザイン確認用のダミートークンを返す」分岐（<code>import.meta.env.DEV &amp;&amp; isPreviewIdTokenEnabled</code>）が増えています。これは後続のマージ <code>3c4fc0b</code> で加わったもので、上の抜粋（このマージ時点のコード）には含まれません。</small>
+        </p>
+        <p>
+            トークンが取れなかったとき、<code>null</code> を返さずに<strong>例外を投げている</strong>のがこの関数の要点です。
+            呼び出し側が「通信に失敗した」と「ログインが切れた」を区別できる必要があるためです。
+            例外には <code>name = 'NoValidSession'</code> を付け、画面に出す文言の対応表にも同じキーを登録しています。
+        </p>
+        <div class="code-block">
+            <pre>const NO_VALID_SESSION_MESSAGE =
+  'ログインの有効期限が切れました。もう一度ログインしてください';
+
+const ERROR_MESSAGES = {
+  // ...
+  // ここから下はAPIの認可で出るもの
+  NoValidSession: NO_VALID_SESSION_MESSAGE
+};</pre>
+        </div>
+        <p>
+            文言を定数に切り出しているのは、2つの経路から同じ文言を出す必要があるためです。
+            ログインの失敗は対応表（<code>toAuthErrorMessage</code>）を引いて表示されますが、API の認可で失敗した場合は
+            <code>error.message</code> がそのまま表示されます。別々に書くと、経路によって文言が変わってしまいます。
+        </p>
+
+        <h3>frontend/src/services/conditionService.js・routeService.js（変更）</h3>
+        <p>
+            API を呼ぶ関数に、トークンの取得とヘッダーの付与を足しました。検索条件マスタの取得はこうなっています。
+        </p>
+        <div class="code-block">
+            <pre>const idToken = await fetchIdToken();
+
+const response = await fetch(`${API_BASE_PATH}/conditions`, {
+  headers: { Authorization: idToken }
+});</pre>
+        </div>
+        <p>
+            ルート生成（POST）は <code>Content-Type</code> と並べて書きます。
+        </p>
+        <div class="code-block">
+            <pre>const response = await fetch(`${API_BASE_PATH}/routes`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: idToken
+  },
+  body: JSON.stringify(/* ... */)
+});</pre>
+        </div>
+        <p>
+            <code>fetchIdToken()</code> の例外は、このファイルでは <code>try</code> で捕まえません。
+            そのまま上位（composable）へ伝わり、画面にメッセージが出ます。「どの層が何を担当するか」を分けているためです。
+        </p>
+        <p>
+            なお、同じヘッダーの付与が2ファイルに重複しています。これは意図した上での判断で、ファイル先頭のコメントに
+            「呼び出し箇所が3つだけのため今回は抽象化しない。3ファイル目が出た時点で共通化する」と残してあります。
+        </p>
+
+        <h3>tools/localApiServer.js（変更）</h3>
+        <p>
+            ローカル開発では Cognito オーソライザーが存在しません。
+            そこで、API Gateway が入れてくれるはずのユーザー情報を、<strong>決め打ちの値で用意</strong>しています。
+        </p>
+        <div class="code-block">
+            <pre>const LOCAL_DEV_USER_SUB = 'local-dev-user';
+const LOCAL_DEV_USERNAME = 'local-dev';
+
+const buildEvent = (request, requestUrl, body) => ({
+  httpMethod: request.method,
+  path: requestUrl.pathname,
+  queryStringParameters: Object.fromEntries(requestUrl.searchParams.entries()),
+  headers: request.headers,
+  body,
+  requestContext: {
+    authorizer: {
+      claims: {
+        sub: LOCAL_DEV_USER_SUB,
+        'cognito:username': LOCAL_DEV_USERNAME
+      }
+    }
+  }
+});</pre>
+        </div>
+        <p>
+            重要なのは、<strong>このハーネスは認可を真似るだけで、検証は一切しない</strong>という点です。
+            <code>Authorization</code> ヘッダーの中身は見ません。それでよい理由は、<code>127.0.0.1</code>（自分のパソコンの中）だけで待ち受けており、
+            <code>tools/</code> 配下はデプロイされないためです。本番の守りは API Gateway が行います。
+        </p>
+        <p>
+            <code>sub</code> の値を <code>local-dev-user</code> という、いかにも開発用の文字列にしているのも意図的です。
+            本物の <code>sub</code> は UUID 形式なので、データを見たときにローカルの記録だと一目で分かります。
+        </p>
+
+        <h3>iac/test/iac.test.ts（変更）</h3>
+        <p>
+            認可は「付け忘れても画面は普通に動いてしまう」種類の設定です。気付けないまま穴が残るのを防ぐため、テストで件数を数えています。
+        </p>
+        <div class="code-block">
+            <pre>test('未認証のメソッドはログイン前に呼ぶ照合APIだけである', () => {
+  // 認可を付け忘れたメソッドを足したら落ちるようにするための検証。
+  // 論理IDは CDK の生成規則に依存するため、直書きせず経路から引く
+  const resources = template.findResources('AWS::ApiGateway::Resource');
+  const passwordResetResourceId = Object.entries(resources).find(
+    ([, resource]) => resource.Properties?.PathPart === 'password-reset-verifications'
+  )?.[0];
+
+  expect(passwordResetResourceId).toBeDefined();
+
+  const methods = Object.values(template.findResources('AWS::ApiGateway::Method'));
+  const unauthorizedMethods = methods.filter(
+    (method) => method.Properties?.AuthorizationType !== 'COGNITO_USER_POOLS'
+  );
+
+  expect(unauthorizedMethods).toHaveLength(1);
+  expect(unauthorizedMethods[0].Properties?.ResourceId?.Ref).toBe(
+    passwordResetResourceId
+  );
+});</pre>
+        </div>
+        <p>
+            <code>template</code> は、CDK のコードから組み立てた CloudFormation テンプレート（AWS へ渡す設計図）です。
+            実際に AWS へデプロイせずに、設計図の中身を調べられます。
+        </p>
+        <p>追加したテストは3つです。</p>
+        <table>
+            <tr>
+                <th>テスト名</th>
+                <th>何を確かめるか</th>
+            </tr>
+            <tr>
+                <td>API に Cognito オーソライザーを1つ作成する</td>
+                <td>種類が <code>COGNITO_USER_POOLS</code>、名前が <code>michishiru-api-authorizer-prod</code> のオーソライザーがちょうど1つあること</td>
+            </tr>
+            <tr>
+                <td>ログイン後に呼ぶ3つのメソッドを Cognito 認可で保護する</td>
+                <td>保護されたメソッドが3件で、その内訳が <code>GET</code> 2件・<code>POST</code> 1件であること</td>
+            </tr>
+            <tr>
+                <td>未認証のメソッドはログイン前に呼ぶ照合APIだけである</td>
+                <td>認可なしのメソッドが1件だけで、それが照合APIの経路であること</td>
+            </tr>
+        </table>
+        <p>
+            3つ目が特に大事です。「認可なしは照合APIの1件だけ」という形で書いているので、
+            <strong>将来うっかり無認可の API を足すとテストが落ちます</strong>。
+        </p>
+
+        <h3>frontend/src/services/__tests__/（新規2ファイル）</h3>
+        <p>
+            ヘッダーが本当に付いているかを自動で確かめるテストです。Amplify の実体を読み込まずに済むよう、トークン取得を差し替えています。
+        </p>
+        <div class="code-block">
+            <pre>// Amplifyの実体を読み込ませないため、トークン取得を差し替える
+vi.mock('@/services/authService', () => ({
+  fetchIdToken: vi.fn(async () => 'dummy-id-token')
+}));
+
+test('トークンにスキーム接頭辞を付けない', async () => {
+  stubFetch({ body: {} });
+
+  await createRoute(CREATE_ROUTE_CONDITIONS);
+
+  const [, options] = vi.mocked(fetch).mock.calls[0];
+
+  // Cognitoオーソライザーは値をトークンそのものとして検証するため、
+  // `Bearer ` を付けると認可に失敗する
+  expect(options.headers.Authorization).toBe('dummy-id-token');
+});</pre>
+        </div>
+        <p>
+            <code>vi.mock</code> は「このファイルの代わりに、こちらの偽物を使って」とテストに指示する仕組みです（モック）。
+            <code>stubFetch</code> は <code>fetch</code> そのものを偽物に差し替えるヘルパーで、実際の通信は発生しません。
+            <code>toBe('dummy-id-token')</code> という<strong>厳密な一致</strong>で比べているため、接頭辞が付いたら落ちます。
+        </p>
+        <p>
+            セッション切れの扱いも確かめています。<code>fetchIdToken</code> が例外を投げた場合、
+            例外がそのまま上へ伝わり、<strong>API は1度も呼ばれない</strong>ことを検証しています。
+        </p>
+        <div class="code-block">
+            <pre>await expect(createRoute(CREATE_ROUTE_CONDITIONS)).rejects.toMatchObject({
+  name: 'NoValidSession'
+});
+
+// トークンが取れない時点で中断するため、APIは呼ばない
+expect(fetch).not.toHaveBeenCalled();</pre>
+        </div>
+
+        <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>1. <code>Bearer </code> を付けてはいけない</h3>
+            <p>
+                Web の世界では <code>Authorization: Bearer &lt;トークン&gt;</code> と書く流儀が広く使われていますが、
+                <strong>API Gateway の Cognito オーソライザーは既定でヘッダーの値をトークンそのものとして検証します</strong>。
+                接頭辞を付けると、トークンの先頭に余計な文字が混ざった状態になり検証に失敗します。
+            </p>
+            <div class="code-block">
+                <pre>// 正しい
+headers: { Authorization: idToken }
+
+// 失敗する
+headers: { Authorization: `Bearer ${idToken}` }</pre>
+            </div>
+            <p>この間違いは気付きにくいため、フロントのテストで厳密一致を確認しています。</p>
+        </div>
+
+        <div class="important">
+            <h3>2. トークンをキャッシュしてはいけない</h3>
+            <p>
+                <code>fetchIdToken</code> の結果を変数に取り置いて再利用したくなりますが、やってはいけません。
+                IDトークンの有効期限は1時間ですが、散歩はそれより長く続くことがあります。
+            </p>
+            <p>
+                <code>fetchAuthSession</code> はリフレッシュトークン（有効期限5日）を使って期限切れのトークンを自動で更新してくれるので、
+                <strong>リクエストごとに呼ぶのが最も単純で安全</strong>です。キャッシュすると期限切れのトークンを送り続け、<code>401</code> になります。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>3. 照合APIは今も無認可のまま</h3>
+            <p>
+                <code>POST /api/v1/password-reset-verifications</code> は、ログイン前に呼ぶ必要があるため認可で守れません。
+                総当たり（組み合わせを機械的に試す攻撃）への備えは、回数制限（API Gateway のスロットリング / AWS WAF）で行う方針ですが、
+                <strong>まだ未対応</strong>です。前提条件書の「今後追加予定の要素」に残っています。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>4. 401 のときは英語の文言が出ることがある</h3>
+            <p>
+                API Gateway のオーソライザーは <code>{"message":"Unauthorized"}</code> を返すため、
+                この文言がそのまま画面に出る可能性があります。<strong>既存のエラー処理には手を入れていないため、残課題です。</strong>
+            </p>
+            <p>
+                ただし、ブラウザ側でトークンが取れないケース（＝多くのセッション切れ）は <code>NoValidSession</code> の経路を通り、
+                日本語の「ログインの有効期限が切れました。もう一度ログインしてください」が出ます。
+                英語が出るのは「トークンは取れたが API 側で失効扱いになった」という狭い場合に限られます。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>5. ローカルで通ることは、本番で通る保証にならない</h3>
+            <p>
+                ローカルのAPIハーネスはトークンを検証しません。したがって
+                <strong>「ローカルで動いたからヘッダーは正しい」とは言えません</strong>。
+                ヘッダーの正しさはフロントのテストで、認可の設定は IaC のテストで確かめてください。
+            </p>
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+
+        <h3>テストの実行</h3>
+        <ol>
+            <li>
+                <strong>インフラ（認可の設定）を確かめる</strong>
+                <div class="code-block">
+                    <pre>cd iac
+npm ci          # 初回のみ。node_modules が無い場合
+npm run build   # TypeScript の型チェック
+npm test        # オーソライザーと保護対象の件数を検証</pre>
+                </div>
+                <p>
+                    設計図そのものを見たい場合は、合成（synth）して確かめます。
+                </p>
+                <div class="code-block">
+                    <pre>npx cdk synth Michishiru-dev -c withBackend=true --quiet</pre>
+                </div>
+                <p>
+                    生成された <code>iac/cdk.out/Michishiru-dev.template.json</code> の中で、
+                    <code>AWS::ApiGateway::Authorizer</code> が1件あることを確認できます。
+                </p>
+            </li>
+            <li>
+                <strong>フロント（ヘッダーの付与）を確かめる</strong>
+                <div class="code-block">
+                    <pre>cd frontend
+npm run lint
+npm test
+npm run build</pre>
+                </div>
+            </li>
+        </ol>
+
+        <h3>ローカルで画面から確認する</h3>
+        <ol>
+            <li>
+                <code>frontend/.env.local</code> に <code>VITE_COGNITO_USER_POOL_ID</code> と
+                <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code> を設定する（これが無いとログイン自体ができません）
+            </li>
+            <li>
+                リポジトリのルートで <code>npm run dev</code> を実行し、フロント（<code>http://localhost:5173</code>）と
+                ローカルAPIハーネス（<code>http://127.0.0.1:3001</code>）を同時に起動する
+            </li>
+            <li>ログインしてホーム画面を開く（検索条件マスタの取得が走ります）</li>
+            <li>
+                ブラウザの開発者ツールの「ネットワーク」タブで <code>conditions</code> のリクエストを選び、
+                リクエストヘッダーに <code>Authorization</code> があり、値が <code>Bearer </code> で始まっていないことを確認する
+            </li>
+        </ol>
+
+        <h3>認可が効いていることを確認する（デプロイ後）</h3>
+        <p>
+            トークンを付けずに API を直接叩くと <code>401</code> が返ります。
+        </p>
+        <div class="code-block">
+            <pre>curl -i "https://&lt;配信ドメイン&gt;/api/v1/conditions"
+# → HTTP/1.1 401 Unauthorized
+#   {"message":"Unauthorized"}</pre>
+        </div>
+        <p>
+            ローカルのAPIハーネスは検証しないため、この確認は AWS へデプロイした環境で行ってください。
+        </p>
+
+        <h2>📁 関連ファイル一覧</h2>
+
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                    <th>由来のブランチ</th>
+                </tr>
+                <tr>
+                    <td><code>iac/lib/michishiru-stack.ts</code></td>
+                    <td>Cognito オーソライザーを作り、保護する3メソッドへ適用する（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>iac/test/iac.test.ts</code></td>
+                    <td>オーソライザーの件数・保護対象3件・無認可1件を検証する（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/authService.js</code></td>
+                    <td><code>fetchIdToken</code> とセッション切れの文言を追加する（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/routeService.js</code></td>
+                    <td>ルートの取得・生成に <code>Authorization</code> ヘッダーを付ける（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/conditionService.js</code></td>
+                    <td>検索条件マスタの取得に <code>Authorization</code> ヘッダーを付ける（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/__tests__/routeService.test.js</code></td>
+                    <td>ヘッダーの付与・接頭辞なし・セッション切れの伝播を検証する（新規）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/__tests__/conditionService.test.js</code></td>
+                    <td>検索条件APIのヘッダー付与とマスタの整形を検証する（新規）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>tools/localApiServer.js</code></td>
+                    <td>ローカルで認可済みのイベント（<code>requestContext.authorizer.claims</code>）を模倣する（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>.kiro/steering/naming-glossary.md</code></td>
+                    <td>用語辞書に <code>idToken</code> と <code>sub</code> を追加する（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+                <tr>
+                    <td><code>.kiro/steering/ミチシル_前提条件.md</code></td>
+                    <td>「API の認可」を「確定した要素」へ移す（変更）</td>
+                    <td>feature/NZ-176</td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr>
+                <th>ドキュメント</th>
+                <th>何が書いてあるか</th>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td>
+                <td>「確定した要素」の「API の認可」行に、保護対象の3メソッドと接頭辞を付けない方針が載っています。未対応の「照合APIの保護」も同じファイルにあります</td>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td>
+                <td>「認証」の節に <code>idToken</code> / <code>sub</code> / <code>signIn</code> などの定義があります。本文の用語はここに揃えています</td>
+            </tr>
+            <tr>
+                <td><a href="../設計書.md">設計書</a></td>
+                <td>API のパス・リクエストとレスポンスの形・DynamoDB のデータ構造</td>
+            </tr>
+            <tr>
+                <td><a href="../仕様書.md">仕様書</a></td>
+                <td>画面ごとの仕様。どの画面がどの API を呼ぶかを追うときに読みます</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-189_ユーザー登録画面_実装解説.html">ユーザー登録画面</a></td>
+                <td>Cognito のユーザープールと Amplify の使い方。IDトークンがどこで発行されるかが分かります</td>
+            </tr>
+            <tr>
+                <td><a href="./パスワード再設定の改善_実装解説.html">パスワード再設定の改善</a></td>
+                <td>今回あえて認可を付けなかった照合API（<code>POST /api/v1/password-reset-verifications</code>）の中身</td>
+            </tr>
+            <tr>
+                <td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td>
+                <td>このマージで作った型に乗って保護されている API の例。<code>claims.sub</code> で投稿者を判断しています</td>
+            </tr>
+            <tr>
+                <td><a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a></td>
+                <td>歩いた距離やスポット数を計測する機能。計測した実績をユーザー単位で保存する後続の修正は、この認可を土台にしています</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>
