@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-176 APIのアクセス制御（Cognito オーソライザー） - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NZ-176 APIのアクセス制御（Cognito オーソライザー） - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026-10-07（12:50、PR #74、マージコミット <code>75de23f</code>。実装コミットは <code>8c9ce56</code>）<br>
+            <strong>🌿 ブランチ:</strong> feature/NZ-176<br>
+            <strong>📝 課題番号:</strong> NZ-176<br>
+            <strong>🧩 概要:</strong> API Gateway に Cognito オーソライザーを付け、ログイン後に呼ぶAPIをログイン済みの人だけが使えるようにした。フロントは Cognito の IDトークンを <code>Authorization</code> ヘッダーで送る
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            これまで、ミチシルのAPI（<code>/api/v1/...</code>）は<strong>URLを知っていれば誰でも呼べる状態</strong>でした。
+            画面側はログインしていない人をログイン画面へ送り返していましたが、それは「画面の入口に鍵をかけた」だけで、
+            APIそのものには鍵がかかっていませんでした。ブラウザのアドレス欄やコマンドから直接APIを叩けば、
+            ログインせずにルートを生成できてしまいます。
+        </p>
+        <p>
+            今回の変更で、APIの手前に<strong>Cognito オーソライザー</strong>という鍵を置きました。
+            オーソライザーは「このリクエストはログイン済みの人のものか」を調べる見張り役です。
+            ログイン時に Cognito から受け取った引換券（IDトークン）がリクエストに付いていなければ、
+            Lambda まで届く前に API Gateway が <code>401 Unauthorized</code> で追い返します。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li><strong>無料で使い放題にならないようにする。</strong> ルート生成（<code>POST /api/v1/routes</code>）は Amazon Bedrock（AI）と Location Service を呼ぶため、1回ごとに料金がかかります。鍵がないと、第三者が繰り返し叩くだけで費用が膨らみます。</li>
+            <li><strong>口コミの投稿者を特定できるようにする。</strong> 誰でも投稿できる状態だと、荒らしを止める手段がありません。</li>
+            <li><strong>この先「ユーザーごとのデータ」を扱う土台になる。</strong> オーソライザーを通ると、Lambda は <code>event.requestContext.authorizer.claims.sub</code> から「誰からのリクエストか」を受け取れます。散歩の実績やお気に入りをユーザー単位で保存するには、まずこれが必要です。</li>
+        </ul>
+        <div class="info-box">
+            <strong>用語:</strong> <code>sub</code> は Cognito が発行する、ユーザーごとに変わらないIDです。ユーザー名はあとから変更され得るため、データのキーには <code>sub</code> を使います（<code>naming-glossary.md</code> の「認証」節）。
+        </div>
+
+        <h2>🔄 処理の流れ</h2>
+        <pre class="code-block">
+[ブラウザ] ホーム画面で「ルート作成」を押す
+   │
+   ▼
+[routeService.createRoute()]
+   ├─ ① const idToken = await fetchIdToken()   … authService が Cognito から取得
+   │       ↑ 取れなければ例外（name: 'NoValidSession'）→ 画面に日本語のメッセージ
+   │
+   └─ ② fetch('/api/v1/routes', { headers: { Authorization: idToken } })
+   │
+   ▼
+[CloudFront]  /api/* を API Gateway へ転送（ヘッダーもそのまま渡す）
+   │
+   ▼
+[API Gateway] Cognito オーソライザーが Authorization ヘッダーを検証
+   │
+   ├─ トークンが無い・壊れている・期限切れ ─→ 401 Unauthorized（Lambda は呼ばれない）
+   │
+   └─ 正しい
+        ▼
+     [Lambda createRoute]
+        event.requestContext.authorizer.claims.sub で「誰か」が分かる
+        </pre>
+
+        <div class="flow-step">
+            <strong>Step 1:</strong> サービス層（<code>routeService</code> / <code>conditionService</code>）が、通信の直前に <code>fetchIdToken()</code> を呼びます。これは <code>authService</code> にある関数で、Amplify の <code>fetchAuthSession()</code> からIDトークンを取り出します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2:</strong> 取れたトークンを <code>Authorization</code> ヘッダーに入れて <code>fetch</code> します。トークンが取れなかった場合はここで例外が投げられ、通信は行われません。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3:</strong> リクエストは CloudFront を通って API Gateway に届きます。ミチシルはフロントとAPIを同じドメインで配信しているため（同一オリジン）、CORS の設定は不要です。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4:</strong> API Gateway のオーソライザーがトークンを検証します。Lambda の中にトークンを調べる処理を書く必要はありません。<strong>検証はAWS側の仕事</strong>です。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5:</strong> 検証を通ったリクエストだけが Lambda に届きます。このとき、トークンの中身（<code>sub</code> やユーザー名）が <code>event.requestContext.authorizer.claims</code> に入った状態で渡されます。
+        </div>
+
+        <h2>🔐 どのAPIに鍵をかけたか</h2>
+        <p>現在、API Gateway には7つのメソッドがあります。鍵をかけたのは6つ、かけていないのは1つです。</p>
+        <table>
+            <tr>
+                <th>メソッド</th>
+                <th>用途</th>
+                <th>認可</th>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/routes</code></td>
+                <td>既存ルートの取得</td>
+                <td>必須</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/routes</code></td>
+                <td>条件からルートを生成</td>
+                <td>必須</td>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/conditions</code></td>
+                <td>検索条件マスタ（ジャンル・距離）の取得</td>
+                <td>必須</td>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/spots</code></td>
+                <td>長押し位置の既存口コミ場所の解決</td>
+                <td>必須</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/reviews</code></td>
+                <td>口コミの投稿</td>
+                <td>必須</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/review-photo-uploads</code></td>
+                <td>写真アップロード用の署名付きURL発行</td>
+                <td>必須</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/password-reset-verifications</code></td>
+                <td>パスワード再設定前のユーザー名とメールアドレスの照合</td>
+                <td><strong>なし</strong></td>
+            </tr>
+        </table>
+        <p>
+            最後の照合APIだけ鍵をかけていないのは、<strong>パスワードを忘れた人がログインする前に呼ぶ</strong>APIだからです。
+            ログイン済みであることを条件にしてしまうと、パスワードを忘れた人がこのAPIを使えず、機能そのものが成り立ちません。
+            「鍵をかけ忘れた」のではなく「かけられない」ものである点に注意してください。
+        </p>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>iac/lib/michishiru-stack.ts（変更）</h3>
+        <p>オーソライザーを1つ作り、それを3つ（現在は6つ）のメソッドに渡しています。</p>
+        <div class="code-block">
+            <pre>const apiAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(
+  this,
+  'ApiAuthorizer',
+  {
+    cognitoUserPools: [userPool],
+    // API 本体と同じ理由で物理名を指定する（AWSコンソールで識別するため）
+    authorizerName: `michishiru-api-authorizer-${stage}`
+  }
+);</pre>
+        </div>
+        <p>
+            <code>cognitoUserPools: [userPool]</code> で「どのユーザープールのトークンを正とみなすか」を指定します。
+            <code>userPool</code> は <code>withBackend</code> の分岐の外で作られているため、バックエンドの定義ブロックからそのまま参照できます。
+        </p>
+        <div class="code-block">
+            <pre>// 保護する3メソッドへ渡す設定。authorizationType は省略すると
+// 既定値に引きずられるため、COGNITO を明示する。
+const cognitoAuthorized: apigateway.MethodOptions = {
+  authorizer: apiAuthorizer,
+  authorizationType: apigateway.AuthorizationType.COGNITO
+};</pre>
+        </div>
+        <p>
+            設定を1つの定数にまとめ、各メソッドへ<strong>同じオブジェクトを渡す</strong>形にしています。
+            メソッドごとに個別に書き下すと「1つだけ付け忘れる」という事故が起きやすく、しかもその場合エラーにならず静かに穴が開きます。
+            まとめておけば、渡しているかどうかを見た目で確認できます。
+        </p>
+        <div class="code-block">
+            <pre>routesResource.addMethod(
+  'GET',
+  new apigateway.LambdaIntegration(getRouteFn),
+  cognitoAuthorized          // ← 第3引数に渡すだけ
+);</pre>
+        </div>
+        <p>
+            <code>addMethod</code> の第3引数に渡すと、そのメソッドが認可付きになります。
+            照合API（<code>password-reset-verifications</code>）の <code>addMethod</code> だけ第3引数を持ちません。
+        </p>
+
+        <h3>frontend/src/services/authService.js（変更）</h3>
+        <p>IDトークンを取ってくる <code>fetchIdToken</code> を追加しました。</p>
+        <div class="code-block">
+            <pre>export const fetchIdToken = async () =&gt; {
+  const session = await fetchAuthSession();
+  const idToken = session.tokens?.idToken?.toString();
+
+  if (idToken) {
+    return idToken;
+  }
+
+  // composable は error.message をそのまま画面へ出すため、ここに利用者向けの文言を入れる
+  const error = new Error(NO_VALID_SESSION_MESSAGE);
+  error.name = 'NoValidSession';
+  throw error;
+};</pre>
+        </div>
+        <p>この関数には判断が2つ入っています。どちらも意図があるので、変更するときは理由を確認してください。</p>
+        <table>
+            <tr>
+                <th>判断</th>
+                <th>理由</th>
+            </tr>
+            <tr>
+                <td><strong>トークンを変数に取り置き（キャッシュ）しない</strong></td>
+                <td>IDトークンの有効期限は1時間ですが、散歩はそれより長く続くことがあります。<code>fetchAuthSession()</code> はリフレッシュトークン（5日）を使って期限切れのトークンを自動で入れ替えるため、<strong>リクエストごとに呼ぶのが一番単純で安全</strong>です。一度取った値を使い回すと、散歩の途中で期限が切れて 401 になります。</td>
+            </tr>
+            <tr>
+                <td><strong>取得できないときは <code>null</code> ではなく例外を投げる</strong></td>
+                <td>呼び出し側が「通信に失敗した」と「ログインが切れた」を区別できるようにするためです。<code>name</code> に <code>'NoValidSession'</code> を入れているので、あとから種類で分岐できます。</td>
+            </tr>
+        </table>
+        <p>
+            投げる <code>Error</code> の <code>message</code> には、最初から日本語の文言（「ログインの有効期限が切れました。もう一度ログインしてください」）を入れています。
+            ルート作成・検索条件の composable は <code>error.message</code> をそのまま画面に出すため、ここに入れておかないと利用者に伝わりません。
+            同じ文言は <code>ERROR_MESSAGES.NoValidSession</code> にも登録してあり、どちらの経路を通っても同じ文章になるよう定数 <code>NO_VALID_SESSION_MESSAGE</code> から参照しています。
+        </p>
+
+        <h3>frontend/src/services/routeService.js・conditionService.js（変更）</h3>
+        <p>3か所の <code>fetch</code> に <code>Authorization</code> ヘッダーを付けました。</p>
+        <div class="code-block">
+            <pre>const idToken = await fetchIdToken();
+
+const response = await fetch(`${API_BASE_PATH}/routes`, {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    Authorization: idToken
+  },
+  body: JSON.stringify(...)
+});</pre>
+        </div>
+        <div class="important">
+            <strong><code>Bearer </code> を付けてはいけない</strong><br>
+            HTTPの慣例では <code>Authorization: Bearer &lt;トークン&gt;</code> と書くことが多いですが、
+            API Gateway の Cognito オーソライザーは<strong>既定でヘッダーの値全体をトークンそのものとして扱います</strong>。
+            <code>Bearer </code> を付けると、その文字列ごとトークンとして検証しようとして失敗し、全リクエストが 401 になります。
+            テストでもヘッダーの値が <code>'dummy-id-token'</code> と完全一致することを確認し、うっかり接頭辞が入らないよう固定しています。
+        </div>
+        <p>
+            同じ処理を2ファイルに書いていますが、今回はあえて共通化していません。呼び出し箇所が3つだけで、
+            早すぎる共通化は読みづらさを招くためです。3ファイル目が出た時点でまとめる方針をコメントに残しています。
+        </p>
+        <p>
+            <code>passwordResetService.js</code> は変更していません。照合APIはログイン前に呼ぶため、
+            トークンを取りに行くと「まだログインしていない」で必ず失敗します。
+        </p>
+
+        <h3>tools/localApiServer.js（変更）</h3>
+        <p>
+            ローカル開発では API Gateway が存在せず、<code>tools/localApiServer.js</code> という簡易サーバーが Lambda の関数を直接呼んでいます。
+            本番では API Gateway が <code>requestContext.authorizer.claims</code> を埋めてくれますが、ローカルではそれがありません。
+            そのままだと「本番では動くがローカルでは <code>claims</code> が <code>undefined</code>」という差が生まれるため、同じ形のデータを入れておきます。
+        </p>
+        <div class="code-block">
+            <pre>const LOCAL_DEV_USER_SUB = 'local-dev-user';
+const LOCAL_DEV_USERNAME = 'local-dev';
+
+// buildEvent の戻り値に追加
+requestContext: {
+  authorizer: {
+    claims: {
+      sub: LOCAL_DEV_USER_SUB,
+      'cognito:username': LOCAL_DEV_USERNAME
+    }
+  }
+}</pre>
+        </div>
+        <div class="important">
+            <strong>このハーネスは認可の形だけ真似て、検証はしない</strong><br>
+            <code>Authorization</code> ヘッダーの中身は一切見ていません。そうしてよい理由は2つあります。
+            ① <code>127.0.0.1</code>（自分のPC）でだけ待ち受けており、外部から届かない。
+            ② <code>tools/</code> 配下はデプロイの対象外で、AWS上では動かない。<br>
+            値を <code>local-dev-user</code> のように<strong>UUIDに見えない形</strong>にしているのは、万一データに混ざったときに本番のユーザーと見分けられるようにするためです。
+        </div>
+
+        <h2>🧪 テスト</h2>
+        <p>「鍵のかけ忘れ」はエラーにならず静かに穴が開くため、テストで件数を数えて固定しています。</p>
+        <h3>iac/test/iac.test.ts（追加3件）</h3>
+        <table>
+            <tr>
+                <th>テスト名</th>
+                <th>確認していること</th>
+            </tr>
+            <tr>
+                <td>API に Cognito オーソライザーを1つ作成する</td>
+                <td><code>AWS::ApiGateway::Authorizer</code> が1件あり、<code>Type</code> が <code>COGNITO_USER_POOLS</code>、名前が <code>michishiru-api-authorizer-prod</code> であること</td>
+            </tr>
+            <tr>
+                <td>ログイン後に呼ぶ6つのメソッドを Cognito 認可で保護する</td>
+                <td>全メソッドのうち <code>AuthorizationType</code> が <code>COGNITO_USER_POOLS</code> のものが6件あり、すべて <code>AuthorizerId</code> を持つこと</td>
+            </tr>
+            <tr>
+                <td>未認証のメソッドはログイン前に呼ぶ照合APIだけである</td>
+                <td>認可が付いていないメソッドがちょうど1件で、それが <code>password-reset-verifications</code> のものであること。<strong>これが今回の要点</strong>で、鍵をかけ忘れたメソッドを足すと落ちる</td>
+            </tr>
+        </table>
+        <p>
+            3番目のテストは、リソースの論理ID（CDKが自動で付ける長い名前）を直書きせず、
+            <code>PathPart</code> が <code>'password-reset-verifications'</code> のリソースを探して突き合わせています。
+            CDKの命名規則が変わっても壊れないようにするためです。
+        </p>
+        <h3>frontend/src/services/__tests__/（新規2ファイル）</h3>
+        <p>ヘッダーが実際に付くことを確認できる唯一の自動検証です。<code>fetch</code> と <code>authService</code> を差し替えて動かしています。</p>
+        <ul>
+            <li><code>routeService.test.js</code> … <code>createRoute</code> が <code>Authorization</code> と <code>Content-Type</code> の両方を付ける / <code>fetchRoute</code> が <code>Authorization</code> を付ける / トークンにスキーム接頭辞を付けない / セッション失効の例外がそのまま上位へ伝わる</li>
+            <li><code>conditionService.test.js</code> … <code>fetchConditionOptions</code> が <code>Authorization</code> を付けて <code>/api/v1/conditions</code> を呼ぶ</li>
+        </ul>
+
+        <h2>⚠️ 注意ポイント・残課題</h2>
+        <div class="important">
+            <strong>401 のメッセージが英語のまま画面に出る</strong><br>
+            API Gateway のオーソライザーが返すのは <code>{"message":"Unauthorized"}</code> です。
+            <code>routeService</code> の <code>extractErrorMessage</code> はレスポンスの <code>message</code> をそのまま画面へ渡すため、
+            利用者に「Unauthorized」と表示され得ます。<br>
+            起きるのは「トークンは取れたがAPI側で失効と判断された」という狭いケースです
+            （トークンが取れない場合は <code>fetchIdToken</code> が日本語の文言で止めるため、ここには来ません）。
+            今回は既存のエラー処理に手を入れない方針のため未対応です。
+        </div>
+        <div class="important">
+            <strong>照合APIの回数制限が未対応</strong><br>
+            <code>POST /api/v1/password-reset-verifications</code> は認可で守れないため、
+            ユーザー名とメールアドレスの組み合わせを総当たりで試されると当たってしまう可能性があります。
+            API Gateway のスロットリングか WAF で回数を制限する方針ですが、どちらにするかは未決定です
+            （<code>ミチシル_前提条件.md</code> の「今後追加予定の要素」に残置）。
+        </div>
+        <div class="important">
+            <strong><code>VITE_ROUTE_API_URL</code> を使うと別オリジンへトークンが出る</strong><br>
+            <code>fetchRoute</code> のURLは環境変数で任意のオリジンに差し替えられる作り（既存）で、今回そこにIDトークンが乗ります。
+            <code>fetchRoute</code> には現在どこからも呼び出しがないため実害はありませんが、
+            別の API Gateway へ向ける運用を始めるなら、送り先を同一オリジンに限る対応が必要です。
+        </div>
+        <div class="important">
+            <strong>検証していないこと</strong><br>
+            <ul>
+                <li><code>IdentitySource</code>（どのヘッダーを見るか）は CDK の既定値に任せています。フロントは <code>Authorization</code> という名前に依存しているため、既定が変わると全リクエストが落ちます。テストで固定しておくと安全です。</li>
+                <li>バックエンド無効（<code>withBackend</code> なし）のスタックでオーソライザーが作られないことを確かめるテストはありません。</li>
+                <li>Lambda 側で <code>claims.sub</code> を使ってユーザーを識別する実装は、この課題のスコープ外です。<code>backend/</code> は変更していません。</li>
+            </ul>
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <h3>デプロイ後の確認（dev環境）</h3>
+        <ol>
+            <li>ブラウザでログインし、ホーム画面でジャンル・距離が表示されること（<code>GET /api/v1/conditions</code> が通っている）。</li>
+            <li>「ルート作成」でルートが生成されること（<code>POST /api/v1/routes</code> が通っている）。</li>
+            <li>口コミの投稿と写真のアップロードができること。</li>
+            <li>開発者ツールの Network タブでリクエストヘッダーを開き、<code>Authorization</code> に長い文字列が入っていること、<code>Bearer </code> で始まっていないことを確認する。</li>
+            <li><strong>鍵が効いているかの確認:</strong> ログアウトした状態、またはトークンなしで <code>https://&lt;配信ドメイン&gt;/api/v1/conditions</code> を直接開き、<code>401</code> と <code>{"message":"Unauthorized"}</code> が返ること。以前は中身が返っていました。</li>
+            <li>照合APIが未ログインでも動くこと（パスワード再設定画面でユーザー名とメールアドレスを入力して進めること）。</li>
+        </ol>
+        <h3>ローカルでの確認</h3>
+        <ol>
+            <li><code>frontend/.env.local</code> に <code>VITE_COGNITO_USER_POOL_ID</code> と <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code> を用意する（既存の前提と同じ）。</li>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行し、フロントとAPIを同時に起動する。</li>
+            <li>ログインしてホーム画面からルートを作成する。ローカルのAPIハーネスはトークンを検証しないため、通信が通ることの確認までになる。</li>
+        </ol>
+        <h3>チェックコマンド</h3>
+        <ol>
+            <li><code>frontend/</code> で <code>npm run lint</code> → エラー0。</li>
+            <li><code>frontend/</code> で <code>npm test</code> → 全テスト通過。</li>
+            <li><code>frontend/</code> で <code>npm run build</code> → 成功。</li>
+            <li><code>iac/</code> で <code>npm run build</code> と <code>npm test</code> → 成功・全テスト通過。</li>
+            <li><code>iac/</code> で <code>npx cdk synth Michishiru-dev -c withBackend=true</code> → 成功。<br>
+                オーソライザーを作って1つもメソッドに紐付けないと CDK が合成時に例外を出すため、<strong>付け忘れの一部はここで気付けます</strong>。</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                </tr>
+                <tr>
+                    <td><code>iac/lib/michishiru-stack.ts</code>（変更）</td>
+                    <td>Cognito オーソライザーの定義と、各メソッドへの適用</td>
+                </tr>
+                <tr>
+                    <td><code>iac/test/iac.test.ts</code>（変更）</td>
+                    <td>オーソライザーの存在・保護メソッドの件数・未認証が照合APIだけであることの検証</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/authService.js</code>（変更）</td>
+                    <td><code>fetchIdToken</code> の追加。<code>ERROR_MESSAGES.NoValidSession</code> の追加</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/routeService.js</code>（変更）</td>
+                    <td><code>fetchRoute</code> / <code>createRoute</code> に <code>Authorization</code> ヘッダーを付与</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/conditionService.js</code>（変更）</td>
+                    <td><code>fetchConditionOptions</code> に <code>Authorization</code> ヘッダーを付与</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/__tests__/routeService.test.js</code>（新規）</td>
+                    <td>ヘッダー付与・接頭辞なし・例外の伝播の検証</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/__tests__/conditionService.test.js</code>（新規）</td>
+                    <td>ヘッダー付与とマスタ整形の検証</td>
+                </tr>
+                <tr>
+                    <td><code>tools/localApiServer.js</code>（変更）</td>
+                    <td>ローカル開発で <code>requestContext.authorizer.claims</code> と同じ形のデータを用意する</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/passwordResetService.js</code>（変更なし）</td>
+                    <td>照合APIはログイン前に呼ぶため、トークンを付けない</td>
+                </tr>
+                <tr>
+                    <td><code>.kiro/steering/naming-glossary.md</code>（変更）</td>
+                    <td>「認証」節へ <code>idToken</code> / <code>sub</code> を追記</td>
+                </tr>
+                <tr>
+                    <td><code>.kiro/steering/ミチシル_前提条件.md</code>（変更）</td>
+                    <td>「API の認可」を未決事項から確定事項へ移動。照合APIの保護は未対応のまま残置</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
