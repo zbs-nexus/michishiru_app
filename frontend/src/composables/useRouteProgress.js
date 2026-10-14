@@ -108,6 +108,30 @@ export const useRouteProgress = ({
     visitedSpotIds.value = [];
   });
 
+  /**
+   * @description 次の目的地を到達済みにする。
+   * 自動判定と手動の切り替えのどちらもここを通し、一方向にのみ進める。
+   * 配列は丸ごと差し替える（呼び出し側の watch が deep なしで拾えるようにするため）。
+   * @returns {void}
+   */
+  const markNextSpotVisited = () => {
+    if (nextSpot.value === null) {
+      return;
+    }
+
+    visitedSpotIds.value = [...visitedSpotIds.value, nextSpot.value.spotId];
+  };
+
+  /**
+   * @description 利用者の操作で次の目的地へ切り替える。
+   * GPSが届かない・到達半径の外で立ち寄った等で自動判定が進まない場合に使う。
+   * 切り替えたスポットは巡ったものとして扱う。
+   * @returns {void}
+   */
+  const advanceToNextSpot = () => {
+    markNextSpotVisited();
+  };
+
   // 現在地が更新されるたびに、次の目的地への到達を判定する
   watch([currentLocation, accuracy], () => {
     // 初回の測位までは現在地にフォールバック座標が入っているため、判定しない。
@@ -122,7 +146,7 @@ export const useRouteProgress = ({
       return;
     }
 
-    visitedSpotIds.value = [...visitedSpotIds.value, nextSpot.value.spotId];
+    markNextSpotVisited();
   });
 
   return {
@@ -130,6 +154,7 @@ export const useRouteProgress = ({
     distanceToNextM,
     visitedSpotIds,
     visitedCount,
-    isCompleted
+    isCompleted,
+    advanceToNextSpot
   };
 };

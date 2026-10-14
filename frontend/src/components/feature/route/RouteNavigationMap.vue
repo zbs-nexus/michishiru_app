@@ -67,6 +67,11 @@ defineProps({
   showOtherReviews: {
     type: Boolean,
     default: false
+  },
+  /** 到達済みのスポットID。地図のマーカーをスタンプ表示にする */
+  visitedSpotIds: {
+    type: Array,
+    default: () => []
   }
 });
 
@@ -88,6 +93,7 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :show-my-reviews="showMyReviews"
         :other-review-spots="otherReviewSpots"
         :show-other-reviews="showOtherReviews"
+        :visited-spot-ids="visitedSpotIds"
         @long-press-map="$emit('longPressMap', $event)"
         @select-review-spot="$emit('selectReviewSpot', $event)"
       />
@@ -115,11 +121,12 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
 }
 
 /*
- * ズームボタンが次の目的地バナー（top: 12px、高さ約60px）の下に隠れて
+ * ズームボタンが次の目的地バナー（top: 12px、高さ約60px）と、
+ * その右下の「次の目的地へ」ボタン（top: 84px、高さ約30px）に隠れて
  * 押せなくなるため、この画面だけコントロールを下へ寄せる。
  */
 .navigation-map :deep(.maplibregl-ctrl-top-right) {
-  margin-top: 84px;
+  margin-top: 124px;
 }
 
 /*
