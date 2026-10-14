@@ -113,6 +113,11 @@ const props = defineProps({
   showOtherReviews: {
     type: Boolean,
     default: false
+  },
+  /** 到達済みのスポットID。該当するスポットは番号の代わりにスタンプで表示する */
+  visitedSpotIds: {
+    type: Array,
+    default: () => []
   }
 });
 
@@ -256,17 +261,27 @@ const renderOriginMarker = () => {
   originMarker.setLngLat(originPosition);
 };
 
+/** 到達済みのスポットのマーカーに押すスタンプの文字 */
+const VISITED_STAMP_LABEL = '済';
+
 /**
  * @description スポットの見出し要素を組み立てる。
+ * 未到達は巡る順の番号、到達済みは「済」のスタンプを表示する。
  * ライブラリがマーカーをコンポーネントの外側へ挿入するため、
  * スタイルは global.css に置いている。
  * @param {number} order 巡る順序（1始まり）
+ * @param {boolean} isVisited 到達済みかどうか
  * @returns {HTMLElement} マーカーとして使う要素
  */
-const createSpotMarkerElement = (order) => {
+const createSpotMarkerElement = (order, isVisited) => {
   const element = document.createElement('div');
-  element.className = 'spot-marker';
-  element.textContent = String(order);
+  element.className = isVisited ? 'spot-marker is-visited' : 'spot-marker';
+  element.textContent = isVisited ? VISITED_STAMP_LABEL : String(order);
+  // 見た目は「済」だけになるため、何番目のスポットかを読み上げで補う
+  element.setAttribute(
+    'aria-label',
+    isVisited ? `${order}番目のスポット（到達済み）` : `${order}番目のスポット`
+  );
   return element;
 };
 
@@ -612,7 +627,12 @@ const renderSpotMarkers = () => {
   markers = props.spots
     .filter((spot) => spot.lng !== null && spot.lat !== null)
     .map((spot, index) =>
-      new Marker({ element: createSpotMarkerElement(index + 1) })
+      new Marker({
+        element: createSpotMarkerElement(
+          index + 1,
+          props.visitedSpotIds.includes(spot.spotId)
+        )
+      })
         .setLngLat([spot.lng, spot.lat])
         .setPopup(new Popup({ offset: 16 }).setText(spot.name))
         .addTo(map)
@@ -667,6 +687,19 @@ watch(
     renderOriginMarker();
     renderSpotMarkers();
     fitToRoute();
+  }
+);
+
+// スポットへ到達したら、番号をスタンプへ差し替える。
+// 地図の位置は動かさない（歩行中に表示範囲が戻ると現在地を見失うため fitToRoute は呼ばない）
+watch(
+  () => props.visitedSpotIds,
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    renderSpotMarkers();
   }
 );
 

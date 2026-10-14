@@ -137,7 +137,13 @@ const spots = computed(() => routeStore.currentRoute?.spots ?? []);
 /** 経路の形。次の目的地までの距離を道に沿って測るために渡す */
 const geometry = computed(() => routeStore.currentRoute?.geometry ?? null);
 
-const { nextSpot, distanceToNextM, visitedSpotIds, isCompleted } = useRouteProgress({
+const {
+  nextSpot,
+  distanceToNextM,
+  visitedSpotIds,
+  isCompleted,
+  advanceToNextSpot
+} = useRouteProgress({
   spots,
   currentLocation,
   accuracy,
@@ -518,6 +524,19 @@ const handleConfirmEnd = () => {
       :is-completed="isCompleted"
     />
 
+    <!--
+      GPSが届かない・到達半径の外で立ち寄った場合に、手動で次の目的地へ進めるボタン。
+      押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
+    -->
+    <button
+      v-if="nextSpot"
+      class="next-spot-btn"
+      type="button"
+      @click="advanceToNextSpot"
+    >
+      次の目的地へ
+    </button>
+
     <RouteNavigationMap
       :geometry="routeStore.currentRoute.geometry"
       :spots="spots"
@@ -533,6 +552,7 @@ const handleConfirmEnd = () => {
       :show-my-reviews="showMyReviews"
       :other-review-spots="otherReviewSpots"
       :show-other-reviews="showOtherReviews"
+      :visited-spot-ids="visitedSpotIds"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
     />
@@ -604,6 +624,32 @@ const handleConfirmEnd = () => {
  */
 .primary-btn.full-width {
   bottom: 44px;
+}
+
+/*
+ * 「次の目的地へ」ボタン。次の目的地バナーの右下に置く。
+ * バナーは幅 calc(100% - 24px)・最大406pxで中央寄せのため、
+ * 右端をバナーの右端（狭い画面では12px、広い画面では中央から203px）に揃える。
+ * 大きさは口コミの表示切り替えボタンと揃える。
+ */
+.next-spot-btn {
+  position: fixed;
+  top: 84px;
+  right: max(12px, calc(50% - 203px));
+  z-index: 45;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--white);
+  background: var(--primary-color);
+  border: none;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.next-spot-btn:active {
+  background: var(--primary-light);
 }
 
 /*
