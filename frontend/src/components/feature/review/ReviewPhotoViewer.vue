@@ -143,62 +143,74 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div
-    class="photo-viewer"
-    role="dialog"
-    aria-modal="true"
-    aria-label="写真の拡大表示"
-    @touchstart="handleSwipeStart"
-    @touchend="handleSwipeEnd"
-    @click="handleBackdropClick"
-  >
-    <!-- 画像自体のタップでは閉じない（送りの操作と区別するため） -->
-    <img
-      :src="currentPhotoUrl"
-      alt=""
-      class="photo-viewer-image"
-      @click.stop
+  <!--
+    body へ出す。
+    投稿フォーム（.review-form）は translateX(-50%) で中央寄せしており、
+    transform を持つ要素は position: fixed の子孫の基準（包含ブロック）になる。
+    フォームの中に置くと inset: 0 がフォームの矩形を指してしまい、
+    画面全体に広がらず、上部の案内要素にもかぶらない。
+  -->
+  <Teleport to="body">
+    <div
+      class="photo-viewer"
+      role="dialog"
+      aria-modal="true"
+      aria-label="写真の拡大表示"
+      @touchstart="handleSwipeStart"
+      @touchend="handleSwipeEnd"
+      @click="handleBackdropClick"
     >
-
-    <button
-      class="photo-viewer-close"
-      type="button"
-      aria-label="閉じる"
-      @click.stop="$emit('close')"
-    >
-      ×
-    </button>
-
-    <template v-if="hasMultiplePhotos">
-      <button
-        class="photo-viewer-nav is-prev"
-        type="button"
-        aria-label="前の写真"
-        @click.stop="movePhoto(-1)"
+      <!-- 画像自体のタップでは閉じない（送りの操作と区別するため） -->
+      <img
+        :src="currentPhotoUrl"
+        alt=""
+        class="photo-viewer-image"
+        @click.stop
       >
-        ‹
-      </button>
+
       <button
-        class="photo-viewer-nav is-next"
+        class="photo-viewer-close"
         type="button"
-        aria-label="次の写真"
-        @click.stop="movePhoto(1)"
+        aria-label="閉じる"
+        @click.stop="$emit('close')"
       >
-        ›
+        ×
       </button>
 
-      <p
-        class="photo-viewer-count"
-        role="status"
-      >
-        {{ viewerIndex + 1 }} / {{ photoUrls.length }}
-      </p>
-    </template>
-  </div>
+      <template v-if="hasMultiplePhotos">
+        <button
+          class="photo-viewer-nav is-prev"
+          type="button"
+          aria-label="前の写真"
+          @click.stop="movePhoto(-1)"
+        >
+          ‹
+        </button>
+        <button
+          class="photo-viewer-nav is-next"
+          type="button"
+          aria-label="次の写真"
+          @click.stop="movePhoto(1)"
+        >
+          ›
+        </button>
+
+        <p
+          class="photo-viewer-count"
+          role="status"
+        >
+          {{ viewerIndex + 1 }} / {{ photoUrls.length }}
+        </p>
+      </template>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
-/* 投稿フォーム（z-index: 150）より手前に全画面で出す */
+/*
+ * 画面全体に広げる。body へ出しているため inset: 0 がビューポートを指す。
+ * z-index は投稿フォーム（150）と上部の案内要素（40）より手前にする。
+ */
 .photo-viewer {
   position: fixed;
   inset: 0;
