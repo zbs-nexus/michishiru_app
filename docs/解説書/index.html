@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ミチシル 機能解説書 一覧</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .lead {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+            vertical-align: top;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        a {
+            color: #2980b9;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ミチシル 機能解説書 一覧</h1>
+
+        <div class="lead">
+            develop ブランチにマージされた機能の実装解説です。開発に参加したばかりの方は、
+            上から順に読まず、担当する機能のものから読んでください。
+        </div>
+
+        <table>
+            <tr>
+                <th>機能</th>
+                <th>どんな機能か</th>
+                <th>最終更新</th>
+                <th>対象マージ</th>
+            </tr>
+            <tr>
+                <td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td>
+                <td>案内画面の地図を長押ししてピンを立て、ロケーション名・ジャンル・5段階評価・写真（最大4枚）を投稿でき、自分の投稿はオレンジのピンで表示される機能。</td>
+                <td>2026-10-07</td>
+                <td><code>cce3717</code>, <code>8eeaf26</code>, <code>939f1cf</code>, <code>1695300</code>, <code>e8725e4</code></td>
+            </tr>
+            <tr>
+                <td><a href="./パスワード再設定の改善_実装解説.html">パスワード再設定の改善</a></td>
+                <td>既存のパスワード再設定画面に、照合用のLambda・入力チェック・パスワード表示ボタン・文言の見直しを加えた改善。</td>
+                <td>2026-10-07</td>
+                <td><code>5e15505</code>, <code>c7c3ddc</code>, <code>b3f785b</code></td>
+            </tr>
+            <tr>
+                <td><a href="./APIの認可_実装解説.html">APIの認可</a></td>
+                <td>ルートの取得・生成と検索条件マスタの取得を、API Gateway の Cognito オーソライザーでログイン済みの人だけが呼べる状態にした修正。</td>
+                <td>2026-10-07</td>
+                <td><code>75de23f</code></td>
+            </tr>
+            <tr>
+                <td><a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a></td>
+                <td>配色と書体を <code>global.css</code> に集約して全画面を羊皮紙調に揃え、案内役のマスコット（フクロウ）を吹き出しで各画面に登場させたデザイン変更。</td>
+                <td>2026-10-07</td>
+                <td><code>3c4fc0b</code></td>
+            </tr>
+            <tr>
+                <td><a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a></td>
+                <td>案内中の現在地をつなぎ合わせて実際に歩いた距離を積み上げ、散歩結果画面の総距離・スポット数・所要時間を実測値で表示する機能。</td>
+                <td>2026-10-07</td>
+                <td><code>95b51ab</code></td>
+            </tr>
+            <tr>
+                <td><a href="./現在地へ戻るボタン_実装解説.html">現在地へ戻るボタン</a></td>
+                <td>案内画面の地図に、1回押すと現在地を中央へ戻し拡大率も初期状態に戻すボタンを追加した機能。</td>
+                <td>2026-10-07</td>
+                <td><code>cad1042</code>, <code>cc02d5c</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td>
+                <td>案内画面の上部に次の目的地と残り距離（経路沿い）を表示し、40m以内に近づくと到達として次へ切り替える機能。</td>
+                <td>2026-09-30</td>
+                <td><code>2c29b50</code>, <code>3e8aed6</code>, <code>3e9c18d</code>, <code>134185b</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a></td>
+                <td>ホーム画面のジャンルと距離を「おまかせ」にすると、アプリが条件を自動で選び、選ばれた内容をトーストで知らせる機能。</td>
+                <td>2026-09-30</td>
+                <td><code>c4d66d3</code>, <code>9103fce</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-186_パスワード再設定画面_実装解説.html">パスワード再設定画面</a></td>
+                <td>パスワードを忘れた人が、確認コードを受け取って自分で新しいパスワードを決め直せる画面（<code>/password-reset</code>）。</td>
+                <td>2026-09-30</td>
+                <td><code>27a151a</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-189_ユーザー登録画面_実装解説.html">ユーザー登録画面</a></td>
+                <td>利用者が自分でアカウントを作れる画面（<code>/sign-up</code>）の追加と、Cognito ユーザープールの CDK 化。</td>
+                <td>2026-09-30</td>
+                <td><code>bec0487</code>, <code>411c27d</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-197_開始地点の目印_実装解説.html">開始地点の目印</a></td>
+                <td>ルートの出発地に緑の「S」マーカーを立て、現在地マーカーの方向矢印を取りやめた地図の変更。</td>
+                <td>2026-09-30</td>
+                <td><code>e2826da</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-203_サインアウト機能_実装解説.html">サインアウト機能</a></td>
+                <td>ホーム画面右上のメニューから「ログアウト」を選ぶと、ログイン状態を解除してログイン画面へ戻る機能。</td>
+                <td>2026-09-30</td>
+                <td><code>db7756f</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td>
+                <td>入力された目的・ジャンル・距離から、周辺スポットの検索とAIの選定を経て散歩ルートを自動生成する中核のAPI。</td>
+                <td>2026-09-09</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td><a href="../NZ-84_CICDの解説.html">CI/CD</a></td>
+                <td>GitHub Actions による CI（build / lint / test）と、OIDC で AWS へデプロイする CD の仕組みの解説。</td>
+                <td>2026-09-09</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td><a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能</a></td>
+                <td>ルート作成の出発地を固定座標から実際のユーザー現在地に変え、案内画面にリアルタイムの現在地表示を追加した機能。</td>
+                <td>2026-09</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-58_開発規約整備_実装解説.html">開発規約整備</a></td>
+                <td>命名規則・用語辞書・Gitワークフローなど、チーム全員が同じルールでコードを書くための開発規約の整備。</td>
+                <td>2026-09-02</td>
+                <td>-</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>
