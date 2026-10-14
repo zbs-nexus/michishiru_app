@@ -184,6 +184,16 @@ export class MichishiruStack extends cdk.Stack {
             indexName: 'GSI-UserReview',
             partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
             sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING }
+          },
+          {
+            // 口コミが付いた場所を新しい順に引くための GSI（地図の紫ピン用）。
+            // 場所メタ行は sk='SPOT' で揃っているため、これを PK にすると
+            // Scan を使わずに Query 1回で一覧が引ける。
+            // 1パーティションに集まる構成だが、ピン表示は件数上限つきの
+            // 読み取りのみのため、この規模では許容する。
+            indexName: 'GSI-SpotList',
+            partitionKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+            sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING }
           }
         ]
       });
@@ -389,6 +399,20 @@ export class MichishiruStack extends cdk.Stack {
 
       reviewTable.grantReadData(getUserReviewsFn);
 
+      // Lambda: getReviewSpots ハンドラ（口コミが付いた場所の一覧。地図の紫ピン用）
+      const getReviewSpotsFn = new lambda.Function(this, 'GetReviewSpotsFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        handler: 'functions/getReviewSpots/handler.handler',
+        code: backendCode,
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          REVIEW_TABLE_NAME: reviewTable.tableName
+        }
+      });
+
+      reviewTable.grantReadData(getReviewSpotsFn);
+
       // Lambda: createPhotoUploadUrls ハンドラ（口コミ写真の署名付きPUT URLを発行する）
       // s3-request-presigner はランタイム同梱の保証が無いため、バンドルする。
       const createPhotoUploadUrlsFn = new nodejs.NodejsFunction(
@@ -492,6 +516,7 @@ export class MichishiruStack extends cdk.Stack {
       //   POST /api/v1/reviews                     口コミの投稿・本人編集（要認証）
       //   POST /api/v1/review-photo-uploads        写真アップロード用の署名付きURL発行（要認証）
       //   GET  /api/v1/my-reviews                  自分の口コミ一覧（要認証）
+      //   GET  /api/v1/review-spots                口コミが付いた場所の一覧（要認証）
       //   POST /api/v1/walk-results                散歩の実績を保存（要認証）
       //   POST /api/v1/password-reset-verifications ユーザー名とメールアドレスの照合
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
@@ -585,6 +610,14 @@ export class MichishiruStack extends cdk.Stack {
       myReviewsResource.addMethod(
         'GET',
         new apigateway.LambdaIntegration(getUserReviewsFn),
+        cognitoAuthorized
+      );
+
+      // GET /api/v1/review-spots（口コミが付いた場所の一覧。地図の紫ピン用。要認証）
+      const reviewSpotsResource = v1Resource.addResource('review-spots');
+      reviewSpotsResource.addMethod(
+        'GET',
+        new apigateway.LambdaIntegration(getReviewSpotsFn),
         cognitoAuthorized
       );
 

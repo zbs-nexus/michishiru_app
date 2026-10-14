@@ -87,6 +87,27 @@ export const fetchMyReviews = async () => {
 };
 
 /**
+ * @description 口コミが付いた場所の一覧（地図のピン用）を取得する。
+ * 自分が投稿済みの場所も含むため、オレンジ（自分）と紫（他の人）の塗り分けは
+ * `fetchMyReviews` の結果と突き合わせて呼び出し側で行う。
+ * @returns {Promise<Array<{spotId: string, position: {lng: number, lat: number}, spotName: string}>>} 場所の一覧
+ * @throws {Error} 通信に失敗した場合、またはセッションが失効している場合
+ */
+export const fetchReviewSpots = async () => {
+  const idToken = await fetchIdToken();
+
+  const response = await fetch(`${API_BASE_PATH}/review-spots`, {
+    headers: { Authorization: idToken }
+  });
+
+  await ensureUsableResponse(response);
+
+  const { spots } = await response.json();
+
+  return spots;
+};
+
+/**
  * @description 口コミを投稿する。
  * 初回投稿は spotName / genreId / genreName を伴い、2回目以降は評価のみを送る
  * （名前・ジャンルは null で送り、サーバー側で無視される）。

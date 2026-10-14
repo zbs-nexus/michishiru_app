@@ -111,13 +111,20 @@ const existingGenre = computed(() => {
   };
 });
 
-/** 評価のみモードで表示する平均評価のラベル */
+/**
+ * 投稿済みの場所に表示する、現時点の平均評価と口コミ投稿数のラベル。
+ * 新規・本人編集・評価のみの3モードすべてで出す（初回投稿した本人にも見せる）。
+ * 集計値が欠けている場合でも表示が壊れないよう0として扱う。
+ */
 const averageLabel = computed(() => {
   if (props.existingSpot === null) {
     return '';
   }
 
-  return `${props.existingSpot.ratingAverage.toFixed(1)}（${props.existingSpot.ratingCount}件）`;
+  const ratingAverage = props.existingSpot.ratingAverage ?? 0;
+  const ratingCount = props.existingSpot.ratingCount ?? 0;
+
+  return `${ratingAverage.toFixed(1)}（${ratingCount}件）`;
 });
 
 /**
@@ -308,6 +315,17 @@ const handleSubmit = () => {
       </button>
     </div>
 
+    <!--
+      投稿済みの場所の集計。モードに依らず出すことで、初回投稿した本人が
+      開き直したときも現時点の平均と件数が分かるようにする
+    -->
+    <p
+      v-if="existingSpot !== null"
+      class="review-summary"
+    >
+      平均 ★{{ averageLabel }}
+    </p>
+
     <!-- 評価のみモード（他ユーザーが作った場所）: 名前・ジャンルは固定表示 -->
     <template v-if="isRatingOnly">
       <div class="review-existing">
@@ -319,7 +337,6 @@ const handleSubmit = () => {
             <span>{{ existingGenre.icon }}</span>
             <span>{{ existingGenre.label }}</span>
           </span>
-          <span class="review-existing-average">平均 ★{{ averageLabel }}</span>
         </p>
         <ul
           v-if="existingSpot.photoUrls && existingSpot.photoUrls.length > 0"
@@ -658,6 +675,14 @@ const handleSubmit = () => {
   border: none;
   border-radius: 50%;
   cursor: pointer;
+}
+
+/* 投稿済みの場所の平均評価と口コミ投稿数 */
+.review-summary {
+  margin-bottom: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-gray);
 }
 
 /* 投稿済みの場所に付いている写真のサムネイル */

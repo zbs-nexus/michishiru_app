@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
@@ -13,6 +13,7 @@ import { useRouteProgress } from '@/composables/useRouteProgress';
 import { useGenreOptions } from '@/composables/useGenreOptions';
 import { useReviewPosting } from '@/composables/useReviewPosting';
 import { useMyReviews } from '@/composables/useMyReviews';
+import { useReviewSpots } from '@/composables/useReviewSpots';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
@@ -41,20 +42,17 @@ const MEASUREMENT_GAP_THRESHOLD_MS = 60000;
 /** 終了確認モーダルを表示するかどうか */
 const isEndConfirmVisible = ref(false);
 
-/** 長押しで立てた赤いピンの座標 { lng, lat }。未設定はnull */
-const reviewPin = ref(null);
+/** 口コミフォームの対象にしている座標 { lng, lat }。未設定はnull */
+const reviewTargetPosition = ref(null);
+
+/**
+ * 投稿済みのピン（オレンジ・紫）から開いたかどうか。
+ * 既存の場所を選んだときは赤いピンを立てないため、長押しと区別する。
+ */
+const isExistingSpotSelected = ref(false);
 
 /** 口コミ投稿フォームを表示するかどうか */
 const isReviewFormVisible = ref(false);
-
-/** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
-const bannerRef = ref(null);
-
-/** 口コミ投稿フォームの要素。可視範囲の下端を測るために参照する */
-const reviewFormRef = ref(null);
-
-/** ピンを可視範囲の中央へ寄せるための、地図中央からの縦のずれ（ピクセル） */
-const pinOffsetY = ref(0);
 
 const {
   currentLocation,
@@ -84,8 +82,37 @@ const {
 // 自分が投稿した口コミ（地図のオレンジピン）
 const { myReviews, loadMyReviews } = useMyReviews();
 
+// 口コミが付いた場所の一覧（自分のぶんを除いて紫ピンにする）
+const { reviewSpots, loadReviewSpots } = useReviewSpots();
+
 /** 自分の口コミのオレンジピンを表示するか（既定は表示） */
 const showMyReviews = ref(true);
+
+/** 他の人の口コミの紫ピンを表示するか（既定は表示） */
+const showOtherReviews = ref(true);
+
+/**
+ * 他の人の口コミの場所（紫ピン）。
+ * 一覧には自分が投稿済みの場所も含まれるため、オレンジピンと重ならないよう取り除く。
+ */
+const otherReviewSpots = computed(() => {
+  const myReviewedSpotIds = new Set(myReviews.value.map((review) => review.spotId));
+
+  return reviewSpots.value.filter((spot) => !myReviewedSpotIds.has(spot.spotId));
+});
+
+/**
+ * 赤いピンの座標。
+ * 新規で口コミを投稿する場所にだけ立てるため、投稿済みのピンから開いたとき、
+ * および長押しの位置に既存の場所が見つかったときは立てない。
+ */
+const newSpotPin = computed(() => {
+  if (reviewTargetPosition.value === null || isExistingSpotSelected.value) {
+    return null;
+  }
+
+  return existingSpot.value === null ? reviewTargetPosition.value : null;
+});
 
 // 画面上部に出す一時メッセージ（投稿成功・エラー）
 const {
@@ -291,8 +318,9 @@ onMounted(() => {
   startTracking();
   // フォームを開いたときに待たせないよう、先にジャンルを取得しておく
   loadGenreOptions();
-  // 自分の口コミをオレンジピンで出すために取得する
+  // 自分の口コミをオレンジピン、他の人の口コミを紫ピンで出すために取得する
   loadMyReviews();
+  loadReviewSpots();
   requestScreenWakeLock();
   document.addEventListener('visibilitychange', handleVisibilityChange);
 });
@@ -314,43 +342,29 @@ const toggleMyReviews = () => {
 };
 
 /**
- * @description バナーとフォームに挟まれた可視範囲の中央にピンが来るよう、
- * 地図中央からの縦のずれ（ピクセル）を求める。
- * 上端はバナーの下端、下端はフォームの高さで決まる。
- * @returns {number} 地図中央からの縦のずれ（下方向が正）
+ * @description 他の人の口コミの紫ピンの表示/非表示を切り替える
+ * @returns {void}
  */
-const measureVisibleCenterOffsetY = () => {
-  const bannerEl = bannerRef.value?.$el ?? null;
-  const formEl = reviewFormRef.value?.$el ?? null;
-
-  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
-  const topInsetPx = bannerEl ? bannerEl.getBoundingClientRect().bottom : 0;
-  const bottomInsetPx = formEl ? formEl.offsetHeight : 0;
-
-  return (topInsetPx - bottomInsetPx) / 2;
+const toggleOtherReviews = () => {
+  showOtherReviews.value = !showOtherReviews.value;
 };
 
 /**
- * @description 地図の長押しでピンを立て、口コミ投稿フォームを開く。
- * フォームを先に開いてから高さを測り、可視範囲の中央にピンが来るよう
- * オフセットを決めたうえでピンを立てる。
- * @param {{lng: number, lat: number}} position 長押しされた座標
+ * @description 指定座標を対象にして口コミ投稿フォームを開く。
+ * 投稿済みの場所なら名前・ジャンルを固定して評価のみにするため、先に場所を解決する。
+ * @param {{lng: number, lat: number}} position 対象の座標
+ * @param {boolean} isExistingSpot 投稿済みのピンから開いたかどうか
  * @returns {Promise<void>}
  */
-const handleLongPressMap = async (position) => {
+const openReviewForm = async (position, isExistingSpot) => {
   // 前の場所のメッセージ・解決結果を持ち越さない
   hideMessage();
   resetReview();
 
+  isExistingSpotSelected.value = isExistingSpot;
+  reviewTargetPosition.value = position;
   isReviewFormVisible.value = true;
 
-  // フォームが描画されてから高さを測る
-  await nextTick();
-  pinOffsetY.value = measureVisibleCenterOffsetY();
-
-  reviewPin.value = position;
-
-  // 投稿済みの場所なら名前・ジャンルを固定し評価のみにするため、先に解決する
   const isResolved = await resolveReviewSpot(position);
 
   if (!isResolved) {
@@ -359,11 +373,22 @@ const handleLongPressMap = async (position) => {
 };
 
 /**
- * @description オレンジピンをタップしたとき、その場所の口コミフォーム（本人編集）を開く
+ * @description 地図の長押しで、押した場所に赤いピンを立てて投稿フォームを開く。
+ *
+ * 地図は動かさない（押した位置にピンが残る）。解決の結果その場所が投稿済みだった場合は
+ * 新規投稿ではないため、赤いピンは newSpotPin の判定で取り下げられる。
+ * @param {{lng: number, lat: number}} position 長押しされた座標
+ * @returns {Promise<void>}
+ */
+const handleLongPressMap = (position) => openReviewForm(position, false);
+
+/**
+ * @description 投稿済みのピン（自分=オレンジ / 他の人=紫）をタップしたとき、
+ * その場所の口コミを開く。赤いピンは立てない。
  * @param {{lng: number, lat: number}} position タップした場所の座標
  * @returns {Promise<void>}
  */
-const handleSelectMyReview = (position) => handleLongPressMap(position);
+const handleSelectReviewSpot = (position) => openReviewForm(position, true);
 
 /**
  * @description 口コミ投稿フォームを閉じ、立てたピンを消す
@@ -371,7 +396,8 @@ const handleSelectMyReview = (position) => handleLongPressMap(position);
  */
 const handleCloseReview = () => {
   isReviewFormVisible.value = false;
-  reviewPin.value = null;
+  reviewTargetPosition.value = null;
+  isExistingSpotSelected.value = false;
   resetReview();
 };
 
@@ -382,7 +408,10 @@ const handleCloseReview = () => {
  * @returns {Promise<void>}
  */
 const handleSubmitReview = async (review) => {
-  const result = await postReviewContent({ position: reviewPin.value, ...review });
+  const result = await postReviewContent({
+    position: reviewTargetPosition.value,
+    ...review
+  });
 
   if (result === null) {
     showMessage(reviewErrorMessage.value ?? '口コミの投稿に失敗しました');
@@ -391,8 +420,9 @@ const handleSubmitReview = async (review) => {
 
   handleCloseReview();
   showMessage('口コミを投稿しました', 'success');
-  // 新規・編集を地図のオレンジピンへ反映する
+  // 新規・編集を地図のピン（オレンジ・紫）へ反映する
   loadMyReviews();
+  loadReviewSpots();
 };
 
 /**
@@ -436,7 +466,6 @@ const handleConfirmEnd = () => {
     />
 
     <RouteNextSpotBanner
-      ref="bannerRef"
       :spot-name="nextSpot?.name ?? null"
       :distance-to-next-m="distanceToNextM"
       :is-completed="isCompleted"
@@ -450,30 +479,43 @@ const handleConfirmEnd = () => {
       :is-tracking="isTracking"
       :tracking-error="trackingError"
       :is-long-press-enabled="true"
-      :pin-position="reviewPin"
-      :pin-offset-y="pinOffsetY"
+      :pin-position="newSpotPin"
       :my-review-spots="myReviews"
       :show-my-reviews="showMyReviews"
+      :other-review-spots="otherReviewSpots"
+      :show-other-reviews="showOtherReviews"
       @long-press-map="handleLongPressMap"
-      @select-my-review="handleSelectMyReview"
+      @select-review-spot="handleSelectReviewSpot"
     />
 
-    <button
-      class="my-reviews-toggle"
-      :class="{ 'is-on': showMyReviews }"
-      type="button"
-      :aria-pressed="showMyReviews"
-      @click="toggleMyReviews"
-    >
-      <span class="my-reviews-toggle-dot" />
-      自分の口コミ
-    </button>
+    <div class="review-toggles">
+      <button
+        class="review-toggle review-toggle-mine"
+        :class="{ 'is-on': showMyReviews }"
+        type="button"
+        :aria-pressed="showMyReviews"
+        @click="toggleMyReviews"
+      >
+        <span class="review-toggle-dot" />
+        自分の口コミ
+      </button>
+
+      <button
+        class="review-toggle review-toggle-other"
+        :class="{ 'is-on': showOtherReviews }"
+        type="button"
+        :aria-pressed="showOtherReviews"
+        @click="toggleOtherReviews"
+      >
+        <span class="review-toggle-dot" />
+        みんなの口コミ
+      </button>
+    </div>
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
-      ref="reviewFormRef"
       :genre-options="genreOptions"
-      :pin-position="reviewPin"
+      :pin-position="reviewTargetPosition"
       :existing-spot="existingSpot"
       :is-owner="isOwner"
       :initial-rating="userRating"
@@ -514,14 +556,21 @@ const handleConfirmEnd = () => {
 }
 
 /*
- * 自分の口コミピンの表示切り替えボタン。
+ * 口コミピンの表示切り替えボタン（自分・他の人の2つ）。
  * 次の目的地バナー（top: 12px・中央）とズームコントロール（右上）に重ならないよう左上に置く。
  */
-.my-reviews-toggle {
+.review-toggles {
   position: fixed;
   top: 84px;
   left: 12px;
   z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.review-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -536,19 +585,23 @@ const handleConfirmEnd = () => {
   cursor: pointer;
 }
 
-.my-reviews-toggle.is-on {
+.review-toggle.is-on {
   color: var(--text-dark);
 }
 
-.my-reviews-toggle-dot {
+.review-toggle-dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
   background: #D8DEE4;
 }
 
-/* オン状態はオレンジの丸でピンの色と対応づける */
-.my-reviews-toggle.is-on .my-reviews-toggle-dot {
+/* オン状態の丸をピンの色（自分=オレンジ / 他の人=紫）と対応づける */
+.review-toggle-mine.is-on .review-toggle-dot {
   background: #F39C12;
+}
+
+.review-toggle-other.is-on .review-toggle-dot {
+  background: #8E44AD;
 }
 </style>
