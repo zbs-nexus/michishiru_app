@@ -10,6 +10,7 @@ import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.
 import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
 import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
+import { useRouteSnapping } from '@/composables/useRouteSnapping';
 import { useGenreOptions } from '@/composables/useGenreOptions';
 import { useReviewPosting } from '@/composables/useReviewPosting';
 import { useMyReviews } from '@/composables/useMyReviews';
@@ -140,6 +141,10 @@ const {
   currentLocation,
   geometry
 });
+
+// 地図の現在地マーカーだけを経路へ吸着させる。
+// 距離の計算（useRouteProgress / useWalkRecord）には吸着前の currentLocation を渡す
+const { displayLocation } = useRouteSnapping({ currentLocation, geometry });
 
 // 距離の積算は公開する状態を持たず、現在地のwatchでwalkStoreへ直接書き込む
 useWalkRecord({ currentLocation, accuracy });
@@ -493,7 +498,7 @@ const handleConfirmEnd = () => {
     <RouteNavigationMap
       :geometry="routeStore.currentRoute.geometry"
       :spots="spots"
-      :current-location="currentLocation"
+      :current-location="displayLocation"
       :current-accuracy="accuracy"
       :is-tracking="isTracking"
       :tracking-error="trackingError"
