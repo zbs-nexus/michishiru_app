@@ -51,13 +51,17 @@ export const useReviewPosting = () => {
   });
 
   /**
-   * @description 長押し位置に投稿済みの場所があるかを解決する
-   * @param {{lng: number, lat: number}} position 長押しされた座標
+   * @description 指定位置に投稿済みの場所があるかを解決する。
+   *
+   * 解決中は前の結果を保持したままにし、成功したときだけ差し替える。
+   * 先に空にすると、別の場所の口コミへ切り替える間だけ未投稿の扱いになり、
+   * 開いているフォームが新規モード（空の入力欄）で応答を待つことになる。
+   * 前の結果を持ち越したくない呼び出し元（長押し）は、先に reset を呼ぶ。
+   * @param {{lng: number, lat: number}} position 対象の座標
    * @returns {Promise<boolean>} 成功した場合はtrue
    */
   const resolve = async (position) => {
     isResolving.value = true;
-    resolvedSpot.value = null;
     errorMessage.value = null;
 
     try {
