@@ -815,11 +815,11 @@ body {
  * 画面の下端に敷く紙。上辺に金の罫線を引いて、地図と操作の境目を示す。
  */
 .bottom-actions {
-  padding: 16px 20px 24px;
+  padding: 20px 24px 28px;
   background: var(--surface);
   border-top: 2px solid var(--border-gold);
   display: flex;
-  gap: 12px;
+  gap: 16px;
   align-items: center;
   box-shadow: 0 -4px 14px rgba(74,58,36,0.1);
 }
@@ -851,7 +851,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .action-buttons .primary-btn,
