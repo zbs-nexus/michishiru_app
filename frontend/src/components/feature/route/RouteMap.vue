@@ -136,6 +136,8 @@ const hasNoGeometry = ref(false);
  */
 let map = null;
 let markers = [];
+/** スポットのマーカー要素と、表示の切り替えに必要な情報（spotId・巡る順） */
+let spotMarkerStates = [];
 let originMarker = null;
 let currentLocationMarker = null;
 let pinMarker = null;
@@ -243,12 +245,9 @@ const renderOriginMarker = () => {
   originMarker.setLngLat(originPosition);
 };
 
-/** 到達済みのスポットのマーカーに押すスタンプの文字 */
-const VISITED_STAMP_LABEL = '済';
-
 /**
  * @description スポットの見出し要素を組み立てる。
- * 未到達は巡る順の番号、到達済みは「済」のスタンプを表示する。
+ * 未到達は巡る順の番号、到達済みは足跡のスタンプ画像（global.css の背景）を表示する。
  * ライブラリがマーカーをコンポーネントの外側へ挿入するため、
  * スタイルは global.css に置いている。
  * @param {number} order 巡る順序（1始まり）
@@ -257,14 +256,28 @@ const VISITED_STAMP_LABEL = '済';
  */
 const createSpotMarkerElement = (order, isVisited) => {
   const element = document.createElement('div');
-  element.className = isVisited ? 'spot-marker is-visited' : 'spot-marker';
-  element.textContent = isVisited ? VISITED_STAMP_LABEL : String(order);
-  // 見た目は「済」だけになるため、何番目のスポットかを読み上げで補う
+  element.className = 'spot-marker';
+  applySpotMarkerState(element, order, isVisited);
+  return element;
+};
+
+/**
+ * @description スポットのマーカー要素の表示（番号 / 足跡のスタンプ）だけを切り替える。
+ * マーカー自体は作り直さず、位置と開いているポップアップをそのまま残す。
+ * @param {HTMLElement} element マーカーの要素
+ * @param {number} order 巡る順序（1始まり）
+ * @param {boolean} isVisited 到達済みかどうか
+ * @returns {void}
+ */
+const applySpotMarkerState = (element, order, isVisited) => {
+  element.classList.toggle('is-visited', isVisited);
+  // スタンプは背景画像で出すため、到達済みでは番号の文字を消す
+  element.textContent = isVisited ? '' : String(order);
+  // 見た目からは番号も到達済みかどうかも読み取れないため、読み上げで補う
   element.setAttribute(
     'aria-label',
     isVisited ? `${order}番目のスポット（到達済み）` : `${order}番目のスポット`
   );
-  return element;
 };
 
 /**
@@ -588,19 +601,33 @@ const renderRouteLine = () => {
 const renderSpotMarkers = () => {
   markers.forEach((marker) => marker.remove());
 
+  spotMarkerStates = [];
   markers = props.spots
     .filter((spot) => spot.lng !== null && spot.lat !== null)
-    .map((spot, index) =>
-      new Marker({
-        element: createSpotMarkerElement(
-          index + 1,
-          props.visitedSpotIds.includes(spot.spotId)
-        )
-      })
+    .map((spot, index) => {
+      const element = createSpotMarkerElement(
+        index + 1,
+        props.visitedSpotIds.includes(spot.spotId)
+      );
+
+      spotMarkerStates.push({ spotId: spot.spotId, order: index + 1, element });
+
+      return new Marker({ element })
         .setLngLat([spot.lng, spot.lat])
         .setPopup(new Popup({ offset: 16 }).setText(spot.name))
-        .addTo(map)
-    );
+        .addTo(map);
+    });
+};
+
+/**
+ * @description 到達状況に合わせて、スポットのマーカーの表示だけを切り替える。
+ * 位置は動かさない（マーカーを作り直さず、要素の中身だけを差し替える）。
+ * @returns {void}
+ */
+const updateSpotMarkerStates = () => {
+  spotMarkerStates.forEach(({ spotId, order, element }) => {
+    applySpotMarkerState(element, order, props.visitedSpotIds.includes(spotId));
+  });
 };
 
 onMounted(() => {
@@ -654,16 +681,13 @@ watch(
   }
 );
 
-// スポットへ到達したら、番号をスタンプへ差し替える。
-// 地図の位置は動かさない（歩行中に表示範囲が戻ると現在地を見失うため fitToRoute は呼ばない）
+// スポットへ到達したら、番号を「済」スタンプへ差し替える。
+// ピンの位置も地図の表示範囲も動かさず、表示だけを変える。
+// マーカーは load 前に存在しないため、スタイルの読み込み状態に関係なく呼んでよい
 watch(
   () => props.visitedSpotIds,
   () => {
-    if (map === null || !map.isStyleLoaded()) {
-      return;
-    }
-
-    renderSpotMarkers();
+    updateSpotMarkerStates();
   }
 );
 
@@ -714,6 +738,7 @@ watch(
 onBeforeUnmount(() => {
   markers.forEach((marker) => marker.remove());
   markers = [];
+  spotMarkerStates = [];
   originMarker?.remove();
   originMarker = null;
   if (currentLocationMarker !== null) {
