@@ -458,6 +458,17 @@ const handleLongPressMap = async (position) => {
  */
 const handleSelectReviewSpot = async (position) => {
   hideMessage();
+
+  /*
+   * 解決の前にフォームを閉じる。
+   *
+   * 既に別の場所のフォームを開いている場合、閉じずに解決すると
+   * 解決結果が消えた状態（＝新規モードの空の入力欄）で描かれたまま応答を待つことになり、
+   * 投稿内容が出るまで待たされているように見える。
+   * 閉じることで次の場所の内容が揃ってから描き直せる。
+   */
+  isReviewFormVisible.value = false;
+  reviewTargetPosition.value = null;
   resetReview();
 
   isExistingSpotSelected.value = true;
