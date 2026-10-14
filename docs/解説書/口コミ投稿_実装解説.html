@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>口コミ投稿 - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .prereq {
+            background-color: #f0f7ec;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        a {
+            color: #2980b9;
+        }
+        pre {
+            margin: 0;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>口コミ投稿 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
+            <strong>📅 マージ日:</strong> 2026-10-07（5回のマージすべて同日）<br>
+            <strong>🌿 対象ブランチ:</strong> NZ-170_review-post<br>
+            <strong>🔖 対象マージ:</strong> <code>cce3717</code>, <code>8eeaf26</code>, <code>939f1cf</code>, <code>1695300</code>, <code>e8725e4</code><br>
+            <strong>👤 対象読者:</strong> 開発初心者
+        </div>
+
+        <p>
+            散歩の案内画面で地図を長押しすると、その場所に赤いピンが立ち、画面下部に口コミ投稿フォームが開きます。
+            ロケーション名・ジャンル・5段階評価・写真（最大4枚）を入力して投稿すると、場所と評価が保存され、
+            自分が投稿した場所はオレンジのピンで地図に表示されます。
+            この解説書では、フロントエンド・バックエンド・インフラの3方向から、その仕組みを順に追っていきます。
+        </p>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+
+        <div class="prereq">
+            <strong>Composable（コンポーザブル）とは</strong><br>
+            Vue で「画面の見た目を持たない、状態つきの処理のかたまり」を関数として切り出したものです。
+            ファイル名は <code>use〇〇.js</code> で始まり、呼ぶと「状態」と「その状態を変える関数」をまとめて返します。
+            この機能では <code>useReviewPosting.js</code>（投稿の進行状況）、<code>useMyReviews.js</code>（自分の口コミ一覧）、
+            <code>useMapLongPress.js</code>（長押しの検出）の3つが登場します。
+        </div>
+
+        <div class="prereq">
+            <strong>Lambda の4ファイル構成（handler / service / repository / validator）</strong><br>
+            バックエンドの1つの API は、役割ごとに4つのファイルへ分かれています。
+            <code>handler.js</code> がリクエストの受け取りとレスポンスの返却、<code>validator.js</code> が入力の形式チェック、
+            <code>service.js</code> が「どう処理するか」の判断（業務ロジック）、<code>repository.js</code> が DynamoDB や S3 への読み書きです。
+            呼び出しは handler → service → repository の一方向だけで、逆向きには呼びません。
+        </div>
+
+        <div class="prereq">
+            <strong>DynamoDB は「条件で絞り込む検索」が得意ではない</strong><br>
+            DynamoDB はキー（住所のようなもの）を指定して読み書きするデータベースです。
+            「現在地から40m以内の場所」のような条件で全件を探す操作は、遅くて高くつきます。
+            そのため、あらかじめ「探しやすいキー」を一緒に保存しておき、そのキーで引くのが基本になります。
+            この機能では座標を格子状のマス目に変換した <code>geoCell</code> がそのキーです。
+        </div>
+
+        <div class="prereq">
+            <strong>GSI（グローバルセカンダリインデックス）とは</strong><br>
+            DynamoDB のテーブルに対して「別のキーでも引けるようにする索引」です。本の巻末にある索引と同じ役目です。
+            この機能では <code>GSI-GeoCell</code>（マス目から場所を引く）と <code>GSI-UserReview</code>（ユーザーから口コミを引く）の2つを作っています。
+        </div>
+
+        <div class="prereq">
+            <strong>署名付きURL（presigned URL）とは</strong><br>
+            「このURLに、これから5分間だけ、この1ファイルを置いてよい」という限定的な許可が埋め込まれたURLです。
+            S3（AWSのファイル置き場）への書き込み権限をブラウザへ渡さずに、ブラウザから直接アップロードさせるために使います。
+            写真の表示側も同じ仕組み（1時間だけ読める GET 用のURL）を使っています。
+        </div>
+
+        <div class="prereq">
+            <strong>ユーザーの識別は Cognito の <code>sub</code> で行う</strong><br>
+            ログイン基盤（Amazon Cognito）が利用者ごとに発行する、変わらないIDが <code>sub</code> です。
+            ユーザー名は後から変更されうるため、データの持ち主を表すのには <code>sub</code> を使います。
+            API Gateway がトークンを検証したうえで Lambda へ渡してくれるので、Lambda 側でトークンを検証する処理は書きません。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            口コミ投稿は、<strong>散歩中に見つけた「よかった場所」をその場で記録し、評価を共有する機能</strong>です。
+            ルート案内の画面（<code>RouteNavigationView.vue</code>）の上に重ねて動くため、散歩を中断せずに投稿できます。
+        </p>
+        <p>操作としては次の3つができます。</p>
+        <ul>
+            <li><strong>新しい場所に口コミを付ける</strong>（初回投稿）: ロケーション名・ジャンル・評価・写真を登録する</li>
+            <li><strong>すでに誰かが登録した場所に評価を付ける</strong>（評価のみ）: 名前とジャンルは固定表示され、星だけを付ける</li>
+            <li><strong>自分が作った場所を編集する</strong>（本人編集）: 名前・ジャンル・写真・評価を書き換える</li>
+        </ul>
+        <p>
+            この3つの切り替えは、<strong>長押しした座標に「すでに場所があるか」と「その場所を作ったのが自分か」</strong>の2点で自動的に決まります。
+            利用者がモードを選ぶ操作はありません。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            ミチシルは条件を入力すると AI が散歩ルートを自動生成します。ただしルートは毎回その場で作られるため、
+            「この公園のベンチがよかった」「この路地は静かだった」といった<strong>利用者自身が見つけた価値は、散歩が終わると何も残りません</strong>。
+            口コミ投稿は、その情報をアプリの中に残すための機能です。
+        </p>
+        <p>
+            前提条件書のユーザーストーリー（US-1〜US-8）には口コミに該当するものはありません。
+            US-6「案内画面表示」の画面に対して後から追加された機能であり、
+            受け入れ条件は前提条件書ではなく、この解説書と実装（およびブランチ上の各コミット）が実質的な仕様になっています。
+            そのため、辞書（<code>naming-glossary.md</code>）側には口コミの節が追加され、用語が先に固められました。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+
+        <p>まず、どのマージがどこを作ったのかを整理します。すべて同じ <code>NZ-170_review-post</code> ブランチからの5回のマージです。</p>
+
+        <table>
+            <tr>
+                <th>マージ</th>
+                <th>時刻</th>
+                <th>担っている部分</th>
+            </tr>
+            <tr>
+                <td><code>cce3717</code></td>
+                <td>09:45</td>
+                <td>フロントの画面だけを先に作った。長押しの検出（<code>useMapLongPress.js</code>）、赤いピン、投稿フォーム、星の入力部品、用語辞書への口コミ用語の追加。この時点ではまだ保存先がない</td>
+            </tr>
+            <tr>
+                <td><code>8eeaf26</code></td>
+                <td>10:06</td>
+                <td>フォームを画面下部へ移動し、ピンを見えている範囲の中央へ寄せた（見た目の調整）</td>
+            </tr>
+            <tr>
+                <td><code>939f1cf</code></td>
+                <td>10:41</td>
+                <td>フォームの高さを下げ、地図が見える面積を広げた（見た目の調整）</td>
+            </tr>
+            <tr>
+                <td><code>1695300</code></td>
+                <td>14:53</td>
+                <td>バックエンドの本体。<code>createReview</code> / <code>getSpot</code> / <code>createPhotoUploadUrls</code> の3つの Lambda、DynamoDB テーブル、S3 バケット、API の認可設定、写真のUI、フロントとAPIの結線</td>
+            </tr>
+            <tr>
+                <td><code>e8725e4</code></td>
+                <td>15:53</td>
+                <td>本人編集（名前・ジャンル・写真の書き換え）、自分の口コミ一覧 API（<code>getUserReviews</code>）とオレンジピン、写真の原寸表示、未入力チェック</td>
+            </tr>
+        </table>
+
+        <p>次に、利用者が投稿するまでの流れを順に追います。</p>
+
+        <div class="flow-step">
+            <strong>Step 1:</strong> 地図を長押しする（<code>useMapLongPress.js</code>）<br>
+            MapLibre（地図ライブラリ）には「長押し」というイベントがありません。そこで、押し始めてから 500ms の間、
+            指やカーソルが 10px 以上動かず、離されもしなかった場合を長押しとみなします。
+            地図をドラッグしたりズームしたりしたときは「地図を操作したい」のであって長押しではないので、判定を取り消します。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 2:</strong> フォームを開き、ピンを立てる（<code>RouteNavigationView.vue</code>）<br>
+            先にフォームを表示してから、<code>nextTick()</code>（描画が終わるのを待つ処理）のあとにフォームの高さを測ります。
+            画面の上には「次の目的地」のバナー、下にはフォームがあるため、地図の中央にピンを置くと隠れてしまいます。
+            そこで上下に挟まれた「見えている範囲」の中央にピンが来るよう、地図中央からのずれ（<code>pinOffsetY</code>）を計算してから地図を動かします。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 3:</strong> その座標に既存の場所があるか問い合わせる（<code>GET /api/v1/spots</code>）<br>
+            半径40m以内に登録済みの場所があれば、その情報（名前・ジャンル・平均評価・写真）と、
+            自分がすでに付けている評価、そして<strong>自分がその場所の作成者か（<code>isOwner</code>）</strong>が返ってきます。
+            なければ <code>{ exists: false }</code> が返り、初回投稿として扱われます。
+            フォームはこの結果を見て、3つのモード（新規 / 本人編集 / 評価のみ）を切り替えます。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 4:</strong> 入力して投稿ボタンを押す（<code>ReviewPostForm.vue</code>）<br>
+            不足している必須項目があれば、送信せずにフォーム内へ「ロケーション名・5段階評価を入力してください」のような
+            メッセージを出します。評価のみモードでは、名前・ジャンル・写真は送りません（<code>null</code> と空配列を送ります）。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 5:</strong> 写真があれば先に S3 へ直接アップロードする（<code>POST /api/v1/review-photo-uploads</code> → S3 へ PUT）<br>
+            写真の枚数ぶんの署名付きURLとオブジェクトキーをまとめて発行してもらい、ブラウザから S3 へ直接 PUT します。
+            成功したら、受け取った<strong>キーの一覧だけ</strong>を次の投稿リクエストに含めます。画像データ自体は API を通りません。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 6:</strong> 口コミを投稿する（<code>POST /api/v1/reviews</code>）<br>
+            サーバー側は<strong>もう一度</strong>その座標の近くに場所があるかを調べ、次の3つに振り分けます。
+            <ul>
+                <li>場所がない → 新しい場所を作り、同時に自分の口コミを1件作る（初回投稿）</li>
+                <li>場所があり、作成者が自分 → 名前・ジャンル・写真を上書きし、評価も更新する（本人編集）</li>
+                <li>場所があり、作成者が他人 → 自分の評価だけを追加・更新する（評価のみ）</li>
+            </ul>
+            フロントから送られた情報を信じず、サーバー側で再判定するのがポイントです。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 7:</strong> 結果を画面へ反映する（<code>RouteNavigationView.vue</code>）<br>
+            成功したらフォームを閉じ、画面上部に「口コミを投稿しました」というトースト（数秒で消える通知）を出します。
+            そのあと <code>loadMyReviews()</code> を呼び直して、投稿した場所をオレンジのピンとして地図へ反映します。
+            失敗した場合はフォームを閉じずにエラーを出すので、入力をやり直せます。
+        </div>
+
+        <h3>APIの一覧</h3>
+        <p>この機能で追加された API は4本です。いずれもログインが必須です。</p>
+
+        <table>
+            <tr>
+                <th>メソッド・パス</th>
+                <th>Lambda</th>
+                <th>役割</th>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/spots?lng=&amp;lat=</code></td>
+                <td><code>getSpot</code></td>
+                <td>長押しした座標に既存の場所があるかを解決する。写真の表示URL・自分の評価・<code>isOwner</code> も返す</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/reviews</code></td>
+                <td><code>createReview</code></td>
+                <td>口コミの投稿・本人編集。場所の評価の集計も同時に更新する</td>
+            </tr>
+            <tr>
+                <td><code>POST /api/v1/review-photo-uploads</code></td>
+                <td><code>createPhotoUploadUrls</code></td>
+                <td>写真アップロード用の署名付きURL（最大4件）を発行する</td>
+            </tr>
+            <tr>
+                <td><code>GET /api/v1/my-reviews</code></td>
+                <td><code>getUserReviews</code></td>
+                <td>自分が投稿した口コミの一覧を、場所の座標・名前つきで返す</td>
+            </tr>
+        </table>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>backend/shared/utils/geo.js</h3>
+        <p>
+            「半径40m以内なら同じ場所」という判定の土台です。距離の計算（ハバーサイン公式）と、
+            座標をマス目のキーへ変換する処理が入っています。
+        </p>
+        <div class="code-block">
+<pre>/**
+ * 同じ場所とみなす半径（メートル）。
+ * 案内画面の通過判定（ARRIVAL_THRESHOLD_M）と同じ40mに合わせている。
+ */
+export const SAME_PLACE_RADIUS_M = 40;
+
+/**
+ * 候補絞り込み用グリッドの一辺（メートル）。
+ * 半径と同じ40mにすると、対象セルとその周囲8セル（3×3）の問い合わせで
+ * 半径40m以内のスポットを必ず候補に含められる。
+ */
+const GEO_CELL_SIZE_M = SAME_PLACE_RADIUS_M;</pre>
+        </div>
+        <p>
+            <strong>なぜマス目に分けるのか：</strong> DynamoDB には「40m以内を探す」という問い合わせがありません。
+            そこで地球全体を一辺40mのマス目で区切り、場所を保存するときに「どのマスに入るか」を <code>geoCell</code>
+            （例: <code>"99123:388540"</code>）として一緒に保存しておきます。
+            探すときは<strong>自分のマスと周囲8マスの計9マス</strong>だけを引けば済みます。
+        </p>
+        <p>
+            <strong>なぜ9マスなのか：</strong> マスの一辺が半径と同じ40mなので、自分のマスの端にいる場合でも、
+            40m先はせいぜい隣のマスまでしか届きません。斜め方向も含めて3×3の9マスを見れば、取りこぼしがなくなります。
+            1マスだけでは、マスの境界ぎわにある場所を見落とします。
+        </p>
+        <div class="code-block">
+<pre>export const toNeighborGeoCells = (position) =&gt; {
+  const { latIndex, lngIndex } = toCellIndices(position);
+  const cells = [];
+
+  for (let deltaLat = -1; deltaLat &lt;= 1; deltaLat += 1) {
+    for (let deltaLng = -1; deltaLng &lt;= 1; deltaLng += 1) {
+      cells.push(`${latIndex + deltaLat}:${lngIndex + deltaLng}`);
+    }
+  }
+
+  return cells;
+};</pre>
+        </div>
+        <p>
+            9マスで集めた候補は「だいたい近い」だけなので、最後に <code>findNearestWithinRadiusM()</code> で実距離を測り、
+            40m以内で最も近いものを1つ選びます。<strong>マス目は候補をしぼるため、距離は正確に判定するため</strong>という二段構えです。
+        </p>
+
+        <h3>backend/functions/createReview/service.js</h3>
+        <p>投稿の振り分けを決めている中心部分です。handler から渡された値だけを見て、HTTP のことは知りません。</p>
+        <div class="code-block">
+<pre>export const createReview = async (input, repository = reviewRepository, { retried = false } = {}) =&gt; {
+  if (!input.userId) {
+    throw createUnauthorizedError('口コミの投稿にはログインが必要です');
+  }
+
+  const candidates = await repository.findNearbySpots(input.position);
+  const existingSpot = findNearestWithinRadiusM(
+    input.position, candidates, SAME_PLACE_RADIUS_M
+  );
+
+  if (existingSpot !== null) {
+    // 作成者本人は名前・ジャンル・写真も編集でき、他ユーザーは評価のみ
+    if (existingSpot.createdByUserId === input.userId) {
+      return editOwnedSpot({ spot: existingSpot, input }, repository);
+    }
+
+    return postSubsequentReview(
+      { spot: existingSpot, rating: input.rating, userId: input.userId },
+      repository
+    );
+  }
+
+  try {
+    return await postFirstReview(input, repository);
+  } catch (error) {
+    // 別のユーザーが同じ場所を先に作成した競合。1度だけ2回目以降として再試行する
+    if (error.code === ERROR_CODES.REVIEW_CONFLICT &amp;&amp; !retried) {
+      return createReview(input, repository, { retried: true });
+    }
+
+    throw error;
+  }
+};</pre>
+        </div>
+        <p>
+            <strong>最後の <code>catch</code> が何をしているか：</strong> 「場所があるか調べる」と「場所を作る」の間に、
+            別の人が同じ場所を先に作ってしまうことがあります（ごく短い時間ですが起こりえます）。
+            その場合は DynamoDB 側の条件付き書き込みが失敗し、競合エラーになります。
+            そこで<strong>1回だけ処理全体をやり直し</strong>ます。やり直したときには場所が見つかるので、
+            「2回目以降（評価のみ）」の経路に自然に流れます。<code>retried</code> フラグがあるのは、
+            やり直しが無限に続かないようにするためです。
+        </p>
+
+        <h3>backend/functions/createReview/repository.js</h3>
+        <p>
+            DynamoDB と S3 への読み書きを担当します。評価の集計を壊さないため、書き込みはトランザクション（複数の書き込みをまとめて、
+            全部成功か全部失敗のどちらかにする仕組み）で行います。
+        </p>
+        <div class="code-block">
+<pre>export const addReview = async ({ spotId, userId, rating, now }) =&gt; {
+  await sendTransaction(
+    new TransactWriteCommand({
+      TransactItems: [
+        {
+          Put: { /* 自分の口コミ行（sk = REVIEW#&lt;userId&gt;）を作る */
+            ConditionExpression: 'attribute_not_exists(sk)'
+          }
+        },
+        {
+          Update: { /* 場所メタ行（sk = SPOT）の集計へ加算する */
+            UpdateExpression:
+              'ADD ratingSum :rating, ratingCount :one SET updatedAt = :now',
+            ConditionExpression: 'attribute_exists(spotId)',
+            ExpressionAttributeValues: { ':rating': rating, ':one': 1, ':now': now }
+          }
+        }
+      ]
+    })
+  );
+};</pre>
+        </div>
+        <p>
+            <strong>テーブルの形：</strong> 1つのテーブル（<code>Review-&lt;環境&gt;</code>）に2種類の行が入っています。
+            パーティションキーはどちらも <code>spotId</code> で、ソートキーで区別します。
+        </p>
+        <table>
+            <tr>
+                <th>ソートキー（<code>sk</code>）</th>
+                <th>何の行か</th>
+                <th>主な属性</th>
+            </tr>
+            <tr>
+                <td><code>SPOT</code></td>
+                <td>場所そのものの情報（場所メタ）</td>
+                <td><code>spotName</code>, <code>genreId</code>, <code>position</code>, <code>geoCell</code>, <code>ratingSum</code>, <code>ratingCount</code>, <code>photoKeys</code>, <code>createdByUserId</code></td>
+            </tr>
+            <tr>
+                <td><code>REVIEW#&lt;userId&gt;</code></td>
+                <td>1人のユーザーがその場所に付けた口コミ</td>
+                <td><code>userId</code>, <code>rating</code>, <code>createdAt</code></td>
+            </tr>
+        </table>
+        <p>
+            <code>ConditionExpression</code> は「この条件を満たすときだけ書く」という指定です。
+            <code>attribute_not_exists(sk)</code> なら「まだ自分の口コミ行がないときだけ作る」という意味で、
+            同じ人が二重に投稿して件数が2つ増えるのを防ぎます。条件を満たさないと書き込みは失敗し、
+            repository が競合エラーへ変換して service に伝えます。
+        </p>
+        <p>
+            評価を<strong>書き換える</strong>ときは、合計（<code>ratingSum</code>）に差分だけを足します（<code>updateReviewRating</code>）。
+            星3から星5へ変えたなら <code>+2</code> です。件数（<code>ratingCount</code>）は変わりません。
+        </p>
+
+        <h3>backend/functions/getSpot/service.js</h3>
+        <p>長押しした座標に既存の場所があるかを返します。ここで <code>isOwner</code> が決まります。</p>
+        <div class="code-block">
+<pre>// 写真は非公開バケットにあるため、表示用の署名付きURLを付けて返す
+const photoUrls = await repository.createPhotoViewUrls(spot.photoKeys ?? []);
+
+// 認証済みなら、呼び出し元が既にこの場所へ投稿しているかを合わせて返す
+const userReview =
+  userId === null ? null : await repository.getUserReview(spot.spotId, userId);
+
+// 呼び出し元がこの場所の作成者か（本人なら名前・ジャンル・写真も編集できる）。
+// 他ユーザーのIDは外へ出さないよう、createdByUserId は返却から除く
+const { createdByUserId, ...publicSpot } = spot;
+const isOwner = userId !== null &amp;&amp; createdByUserId === userId;
+
+return { exists: true, spot: { ...publicSpot, photoUrls }, isOwner, userReview };</pre>
+        </div>
+        <p>
+            <strong>注目したいのは最後の3行</strong>です。<code>createdByUserId</code>（作成者のID）を使って <code>isOwner</code> を計算した後、
+            分割代入でその項目をレスポンスから<strong>取り除いて</strong>います。
+            フロントが必要なのは「自分が作成者かどうか」という真偽値だけで、他人のIDを知る必要はありません。
+            判定に使った材料をそのまま返さないのは、個人を特定できる値を外に出さないための配慮です。
+        </p>
+
+        <h3>frontend/src/composables/useReviewPosting.js</h3>
+        <p>
+            投稿の進行状況（解決中・投稿中・エラー）を持ち、写真のアップロードと投稿の順番を組み立てます。
+            API の呼び出しそのものは <code>reviewService.js</code> に任せ、ここでは状態の移り変わりだけを扱います。
+        </p>
+        <div class="code-block">
+<pre>const post = async ({ photos = [], keptPhotoKeys = [], ...payload }) =&gt; {
+  isPosting.value = true;
+  errorMessage.value = null;
+
+  try {
+    let newPhotoKeys = [];
+
+    if (photos.length &gt; 0) {
+      const uploads = await fetchPhotoUploadUrls(photos.length);
+      await Promise.all(
+        uploads.map((upload, index) =&gt; uploadPhoto(upload.uploadUrl, photos[index]))
+      );
+      newPhotoKeys = uploads.map((upload) =&gt; upload.key);
+    }
+
+    // 残す既存写真＋新規アップロードぶんが、最終的な写真キーになる
+    const photoKeys = [...keptPhotoKeys, ...newPhotoKeys];
+
+    return await postReview({ ...payload, photoKeys });
+  } catch (error) {
+    errorMessage.value = error.message;
+    return null;
+  } finally {
+    isPosting.value = false;
+  }
+};</pre>
+        </div>
+        <p>
+            <strong><code>Promise.all</code> は何をしているか：</strong> 複数の写真を1枚ずつ順番に待つのではなく、まとめて同時にアップロードします。
+            4枚あっても待ち時間は1枚ぶんに近くなります。
+        </p>
+        <p>
+            <strong><code>finally</code> が必要な理由：</strong> 成功しても失敗しても <code>isPosting</code> を <code>false</code> に戻さないと、
+            投稿ボタンが押せないまま固まります。<code>finally</code> はどちらの場合も必ず通るので、
+            このような「後片付け」を書く場所になります。
+        </p>
+
+        <h3>frontend/src/services/reviewService.js</h3>
+        <p>口コミ関連の API 通信をまとめたファイルです。認可の付け方と、S3 への直接 PUT の違いが見どころです。</p>
+        <div class="code-block">
+<pre>export const resolveSpot = async ({ lng, lat }) =&gt; {
+  const idToken = await fetchIdToken();
+  const query = new URLSearchParams({ lng: String(lng), lat: String(lat) });
+
+  const response = await fetch(`${API_BASE_PATH}/spots?${query.toString()}`, {
+    headers: { Authorization: idToken }
+  });
+
+  await ensureUsableResponse(response);
+
+  return response.json();
+};
+
+/**
+ * 署名付きURLへ写真を直接アップロードする（S3へのPUT）。
+ * S3への直PUTのため、Authorizationヘッダーは付けない（URL自体が署名を含む）。
+ */
+export const uploadPhoto = async (uploadUrl, file) =&gt; {
+  const response = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file
+  });
+
+  if (!response.ok) {
+    throw new Error(`写真のアップロードに失敗しました（${response.status}）`);
+  }
+};
+</pre>
+        </div>
+        <p>
+            ミチシルの API はログイン必須なので、IDトークンを <code>Authorization</code> ヘッダーに載せます。
+            <strong><code>Bearer </code> のような接頭辞は付けません</strong>（API Gateway がヘッダーの値をそのままトークンとして扱う設定のため）。
+            一方 S3 への PUT は、URL 自体に許可が埋め込まれているため <code>Authorization</code> を付けません。付けると署名の検証が通りません。
+        </p>
+        <p>
+            <code>ensureUsableResponse()</code> では、応答が成功かどうかだけでなく<strong>JSONかどうか</strong>も確認しています。
+            API をまだ繋いでいない環境では SPA の <code>index.html</code>（HTML）が 200 で返ってくるため、
+            そのまま解析しようとすると意味の分からないエラーになるからです。
+        </p>
+
+        <h3>frontend/src/composables/useMapLongPress.js</h3>
+        <p>長押しの判定を、地図ライブラリのポインターイベントから組み立てています。</p>
+        <div class="code-block">
+<pre>/** 長押しと判定するまで押し続ける時間（ミリ秒） */
+const LONG_PRESS_DURATION_MS = 500;
+
+/** 長押し中に許容する指・カーソルのずれ（ピクセル）。これを超えたら地図操作とみなす */
+const MOVE_TOLERANCE_PX = 10;
+
+const handlePressStart = (event) =&gt; {
+  // 直前の判定が残っていても、新しい押下を優先する
+  cancelPress();
+  startPoint = event.point;
+
+  timerId = setTimeout(() =&gt; {
+    onLongPress({ lng: event.lngLat.lng, lat: event.lngLat.lat });
+    cancelPress();
+  }, LONG_PRESS_DURATION_MS);
+};</pre>
+        </div>
+        <p>
+            押下で <code>setTimeout</code> を仕掛け、指が離れる・大きく動く・地図のドラッグやズームが始まるといった
+            「長押しではない」合図が来たらタイマーを取り消します。500ms 生き残ったタイマーだけが <code>onLongPress</code> を呼びます。
+        </p>
+        <p>
+            <code>attach</code> / <code>detach</code> という形で地図への購読の着脱を外に出しているのは、
+            地図のインスタンスを持っているのが <code>RouteMap.vue</code> 側だからです。
+            また <code>onBeforeUnmount(detach)</code> で画面を離れるときに必ず購読とタイマーを片付けます。
+            これを忘れると、画面を離れた後にタイマーが動いて不具合になります。
+        </p>
+
+        <h3>frontend/src/components/feature/review/ReviewPostForm.vue</h3>
+        <p>3つのモードは、親から受け取った props の組み合わせだけで決まります。</p>
+        <div class="code-block">
+<pre>/** 評価のみモードか（他ユーザーが作った場所） */
+const isRatingOnly = computed(() =&gt; props.existingSpot !== null &amp;&amp; !props.isOwner);
+
+/** 本人編集モードか（自分が作った既存の場所） */
+const isEditing = computed(() =&gt; props.existingSpot !== null &amp;&amp; props.isOwner);
+
+// ピンが別の場所に立て直されたら、前の場所の入力を持ち越さない
+watch(() =&gt; props.pinPosition, () =&gt; { resetInputs(); });
+
+// 場所の解決後に既存情報が分かったら、本人編集ならプリフィルする
+watch(() =&gt; props.existingSpot, () =&gt; { resetInputs(); prefillForEditing(); });</pre>
+        </div>
+        <p>
+            <code>watch</code>（値の変化を見張る仕組み）が2つあるのが大事な点です。
+            ピンを立て直したのに前の場所の入力が残っていると、<strong>別の場所の名前で投稿してしまう</strong>ため、
+            座標が変わった時点で入力を白紙に戻します。
+            そのあと場所の解決結果が届き、自分が作った場所だと分かったら、既存の名前・ジャンル・写真をフォームへ流し込みます。
+        </p>
+
+        <h3>frontend/src/components/feature/route/RouteMap.vue</h3>
+        <p>地図のピンの描画です。赤いピン（長押し位置）とオレンジのピン（自分の口コミ）の2種類を扱います。</p>
+        <div class="code-block">
+<pre>if (pinMarker === null) {
+  // ピンの先端が座標を指すよう、下端を基準にする
+  pinMarker = new Marker({ element: createPinElement(), anchor: 'bottom' })
+    .setLngLat(lngLat)
+    .addTo(map);
+} else {
+  pinMarker.setLngLat(lngLat);
+}
+
+// 立てたピンが、見えている地図範囲の中央に来るように寄せる。
+// offsetは地図中央からのずれ（上部バナー・下部フォームの分だけ親が指定する）
+map.easeTo({ center: lngLat, offset: [0, props.pinOffsetY] });</pre>
+        </div>
+        <p>
+            <code>anchor: 'bottom'</code> はピンの<strong>下端</strong>を座標に合わせる指定です。これを指定しないと画像の中心が座標に合い、
+            ピンの先が実際の位置からずれて見えます。
+        </p>
+        <p>
+            オレンジのピンはクリックできます。クリック時に <code>event.stopPropagation()</code> を呼んでいるのは、
+            クリックが地図本体にも伝わって<strong>長押し判定やピンの立て直しが同時に起きるのを防ぐ</strong>ためです。
+            オレンジピンのタップは、その座標を長押ししたのと同じ扱い（<code>handleSelectMyReview</code> → <code>handleLongPressMap</code>）になり、
+            本人編集フォームが開きます。
+        </p>
+
+        <h3>iac/lib/michishiru-stack.ts</h3>
+        <p>テーブル・バケット・Lambda・API の定義です。GSI の設計意図がコメントに書かれています。</p>
+        <div class="code-block">
+<pre>// DynamoDB: 口コミ（場所メタ＋口コミ）を格納するテーブル（単一テーブル設計）
+//   pk=spotId, sk='SPOT'（場所メタ）/ 'REVIEW#&lt;userId&gt;'（各ユーザーの口コミ）
+const reviewTable = new dynamodb.TableV2(this, 'ReviewTable', {
+  tableName: `Review-${stage}`,
+  partitionKey: { name: 'spotId', type: dynamodb.AttributeType.STRING },
+  sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+  billing: dynamodb.Billing.onDemand(),
+  removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY,
+  globalSecondaryIndexes: [
+    {
+      // 近接する場所をグリッドのセルで引くための GSI（半径40mの候補絞り込み）。
+      // 場所メタ行のみ geoCell を持つため、口コミ行は含まれない（疎なインデックス）
+      indexName: 'GSI-GeoCell',
+      partitionKey: { name: 'geoCell', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'spotId', type: dynamodb.AttributeType.STRING }
+    },
+    {
+      // ユーザーが投稿した口コミを新しい順に引くための GSI。
+      // 口コミ行のみ userId を持つため、場所メタ行は含まれない（疎なインデックス）
+      indexName: 'GSI-UserReview',
+      partitionKey: { name: 'userId', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'createdAt', type: dynamodb.AttributeType.STRING }
+    }
+  ]
+});</pre>
+        </div>
+        <p>
+            <strong>「疎なインデックス」とは：</strong> DynamoDB の GSI には、キーに指定した属性を<strong>持っている行だけ</strong>が入ります。
+            場所メタの行だけが <code>geoCell</code> を持つので、<code>GSI-GeoCell</code> を引くと場所だけが返り、口コミの行は混ざりません。
+            同じ理屈で、<code>userId</code> を持つのは口コミの行だけなので、<code>GSI-UserReview</code> には口コミだけが入ります。
+            この性質を利用して、1つのテーブルに入れた2種類のデータを、索引側で自然に分けています。
+        </p>
+        <p>
+            API 側は4本すべてに Cognito オーソライザー（<code>cognitoAuthorized</code>）を付けています。
+            認可は API Gateway が行うため、Lambda にトークンの検証処理はありません。
+            Lambda は <code>event.requestContext.authorizer.claims.sub</code> から利用者を読み取るだけです
+            （<code>backend/shared/utils/requestContext.js</code>）。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>1. 平均評価（ratingAverage）は保存していない</h3>
+            <p>
+                DynamoDB に保存しているのは<strong>合計（<code>ratingSum</code>）と件数（<code>ratingCount</code>）だけ</strong>で、
+                平均は読み出すときに計算しています。
+            </p>
+            <div class="code-block">
+<pre>ratingAverage: ratingCount === 0 ? 0 : ratingSum / ratingCount</pre>
+            </div>
+            <p>
+                平均も一緒に保存すると、合計・件数・平均の3つを常に同時に正しく更新しなければならず、
+                どこかで更新が漏れると「平均が実態と合わない」という、気付きにくいずれが起きます。
+                計算で求めれば、その食い違いが起こる余地そのものがなくなります。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>2. 写真は「場所ごと」に最大4枚で、設定できるのは初回投稿と本人編集のとき</h3>
+            <p>
+                写真は口コミ（個人の評価）ではなく<strong>場所</strong>に紐づきます（<code>sk = SPOT</code> の行の <code>photoKeys</code>）。
+                そのため、他人が作った場所に評価を付けるときは写真を送れません（送っても <code>service.js</code> が扱いません）。
+                名前・ジャンル・写真を変えられるのは、その場所を最初に登録した本人だけです。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>3. 写真の実体の削除は「ベストエフォート」</h3>
+            <p>
+                本人編集で写真を外したとき、DynamoDB の <code>photoKeys</code> から消すのと合わせて S3 の実体も削除しますが、
+                この削除は失敗しても投稿は成功扱いにし、警告ログだけを残します。
+            </p>
+            <div class="code-block">
+<pre>} catch (error) {
+  logWarn('不要になった写真の削除に失敗しました', {
+    errorName: error.name,
+    count: photoKeys.length
+  });
+}</pre>
+            </div>
+            <p>
+                理由は、本体（DynamoDB）の更新がすでに終わっているためです。削除の失敗でエラーを返すと、
+                利用者には「投稿に失敗した」と見えるのに実際は保存されている、という混乱が起きます。
+                残ってしまったファイルは参照されないだけなので、影響はストレージ費用に限られます。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>4. 写真は CloudFront 経由で配信していない（循環参照を避けるため）</h3>
+            <p>
+                当初は他の静的ファイルと同じく CloudFront から配信する想定でしたが、そうすると次の依存の輪ができます。
+            </p>
+            <div class="code-block">
+<pre>写真バケットのポリシー → 配信（CloudFront）を参照
+配信（CloudFront） → /api/* 経由で API Gateway → 写真URL発行Lambda
+写真URL発行Lambda → 写真バケットを参照   ← 一周して戻ってくる</pre>
+            </div>
+            <p>
+                CloudFormation はこの輪を解決できずデプロイに失敗します。
+                そのため写真は CloudFront を通さず、<code>getSpot</code> が返す署名付きGET URL（有効期限1時間）で直接取得する形にしています。
+                同じ理由で、アップロード用の CORS 設定も配信ドメインではなく <code>'*'</code> を許可しています
+                （PUT 先のURL自体が5分間しか有効でないため、オリジンを絞らなくても成立します）。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>5. spot と waypoint を混同しない</h3>
+            <p>
+                この機能で出てくる <code>spot</code> は「利用者が立ち寄る場所」です。
+                経路の線を描くための座標の点は <code>waypoint</code> で、まったく別のものです。
+                混同すると「巡ったスポット数」に道の曲がり角まで数えてしまい、エラーにならないまま数字だけがおかしくなります。
+                詳細は<a href="../../.kiro/steering/naming-glossary.md">用語辞書</a>の「特に間違えやすい2組」を参照してください。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>6. ロケーション名は <code>spotName</code>。<code>location</code> 単独は使わない</h3>
+            <p>
+                口コミ対象の場所の名称は <code>spotName</code> に統一されています。
+                <code>location</code> だけだと「現在地」なのか「口コミの対象」なのか判別できないため、用語辞書で禁止されています。
+                画面に出る「ロケーション名」というラベルに引かれて <code>locationName</code> と書かないよう注意してください。
+            </p>
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+
+        <h3>ローカルで画面を動かす</h3>
+        <ol>
+            <li>
+                リポジトリのルートでフロントとローカルAPIを同時に起動する
+                <div class="code-block">
+<pre>npm run dev</pre>
+                </div>
+            </li>
+            <li>ブラウザでフロント（<code>http://localhost:5173</code>）を開き、ログインしてからホーム画面でルートを作成し、案内画面まで進む</li>
+            <li>地図を 0.5 秒ほど押し続け、赤いピンが立ってフォームが開くことを確認する</li>
+            <li>押しながら指を動かした場合・地図をドラッグした場合に<strong>フォームが開かない</strong>ことも確認する（長押しの取り消しが効いているか）</li>
+            <li>ロケーション名・ジャンル・星を入れて投稿し、画面上部に「口コミを投稿しました」が出てオレンジのピンが増えることを確認する</li>
+            <li>同じ場所をもう一度長押しし、名前とジャンルが入った「口コミを編集」の形で開くことを確認する（本人編集）</li>
+            <li>左上の「自分の口コミ」ボタンで、オレンジのピンの表示が切り替わることを確認する</li>
+        </ol>
+
+        <div class="info-box">
+            <strong>ローカルで口コミAPIを叩くには AWS の準備が必要です。</strong><br>
+            <code>tools/localApiServer.js</code> は Lambda のハンドラを直接呼び出す仕組みなので、
+            口コミ系の API は実際の DynamoDB と S3 へアクセスします。
+            AWS の認証情報に加えて、環境変数 <code>REVIEW_TABLE_NAME</code>（例: <code>Review-dev</code>）と
+            <code>PHOTO_BUCKET_NAME</code> が必要です。未設定のままだとフォームは開きますが、場所の解決と投稿が失敗します。
+        </div>
+
+        <h3>テストを実行する</h3>
+        <div class="code-block">
+<pre># バックエンド（Node.js の標準テストランナー）
+cd backend
+npm test
+
+# インフラ（Jest。API の認可が外れていないかも検査している）
+cd iac
+npm run build
+npm test
+
+# フロントエンド
+cd frontend
+npm run lint
+npm run build</pre>
+        </div>
+        <p>
+            バックエンドには <code>createReview</code>（service / validator）、<code>getSpot</code>（service）、
+            <code>getUserReviews</code>（service）、<code>createPhotoUploadUrls</code>（service / validator）のテストがあります。
+            フロントエンド側にはこの機能のテストはまだないため、画面の確認は手動で行います。
+        </p>
+
+        <h2>📁 関連ファイル一覧</h2>
+
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                    <th>由来のマージ</th>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useMapLongPress.js</code></td>
+                    <td>地図の長押しを検出して座標を通知する（MapLibre に長押しイベントがないため自作）</td>
+                    <td><code>cce3717</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/review/ReviewPostForm.vue</code></td>
+                    <td>画面下部の投稿フォーム。新規・本人編集・評価のみの3モードを切り替える</td>
+                    <td><code>cce3717</code> ほか4件</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/review/ReviewRatingInput.vue</code></td>
+                    <td>5段階の星評価を選ぶ入力部品</td>
+                    <td><code>cce3717</code>, <code>939f1cf</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/review/ReviewPhotoInput.vue</code></td>
+                    <td>写真を選ぶ入力部品。プレビューの表示と追加・削除を行う</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useReviewPosting.js</code></td>
+                    <td>場所の解決と投稿の進行状況・エラーを管理する</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useMyReviews.js</code></td>
+                    <td>自分の口コミ一覧を取得して保持する（取得失敗時は空で続行）</td>
+                    <td><code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useGenreOptions.js</code></td>
+                    <td>検索条件マスタからジャンルの選択肢だけを取得する</td>
+                    <td><code>cce3717</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/reviewService.js</code></td>
+                    <td>口コミ関連4本の API 通信と、S3 への直接アップロード</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteNavigationView.vue</code></td>
+                    <td>案内画面。長押しからフォーム表示・投稿・ピン反映までをつなぐ</td>
+                    <td><code>cce3717</code>, <code>939f1cf</code>, <code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteMap.vue</code></td>
+                    <td>赤いピン・オレンジのピンの描画と、長押しの購読</td>
+                    <td><code>cce3717</code>, <code>8eeaf26</code>, <code>939f1cf</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteNavigationMap.vue</code></td>
+                    <td>案内画面用の地図。View から受けた値を RouteMap へ渡す</td>
+                    <td><code>cce3717</code>, <code>939f1cf</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useToastMessage.js</code></td>
+                    <td>画面上部の一時メッセージ（投稿成功・エラー）の状態管理</td>
+                    <td><code>1695300</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/base/BaseToast.vue</code></td>
+                    <td>一時メッセージの表示部品（成功表示の種類を追加）</td>
+                    <td><code>1695300</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/shared/utils/geo.js</code></td>
+                    <td>距離の計算、geoCell の算出、半径内で最も近い場所の選択</td>
+                    <td><code>1695300</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/shared/utils/requestContext.js</code></td>
+                    <td>イベントから認証済みユーザーID（Cognito の sub）を取り出す</td>
+                    <td><code>1695300</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/shared/constants/errorCodes.js</code></td>
+                    <td>エラーコードの一覧。競合を表す <code>REVIEW_CONFLICT</code>（409）を追加</td>
+                    <td><code>1695300</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/shared/utils/errorHandler.js</code></td>
+                    <td>アプリ固有のエラーの生成と、HTTP応答への変換</td>
+                    <td><code>1695300</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createReview/</code></td>
+                    <td>口コミの投稿・本人編集。集計の更新をトランザクションで行う</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/getSpot/</code></td>
+                    <td>長押し位置の既存の場所を解決し、写真の表示URLと <code>isOwner</code> を返す</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/getUserReviews/</code></td>
+                    <td>自分の口コミ一覧を、場所の座標・名前つきで返す</td>
+                    <td><code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/createPhotoUploadUrls/</code></td>
+                    <td>写真アップロード用の署名付きURL（最大4件）を発行する</td>
+                    <td><code>1695300</code></td>
+                </tr>
+                <tr>
+                    <td><code>iac/lib/michishiru-stack.ts</code></td>
+                    <td>口コミテーブル・写真バケット・4つの Lambda・API の定義と認可</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>iac/test/iac.test.ts</code></td>
+                    <td>インフラのテスト。認可の付け忘れなどを検査する</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>tools/localApiServer.js</code></td>
+                    <td>ローカル開発用のAPIサーバー。口コミ系4本の経路を追加</td>
+                    <td><code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+                <tr>
+                    <td><code>.kiro/steering/naming-glossary.md</code></td>
+                    <td>用語辞書。口コミの節を新設し、用語を追加</td>
+                    <td><code>cce3717</code>, <code>1695300</code>, <code>e8725e4</code></td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr>
+                <th>ドキュメント</th>
+                <th>何が書いてあるか</th>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td>
+                <td>「口コミ」の節に <code>review</code> / <code>rating</code> / <code>ratingAverage</code> / <code>geoCell</code> / <code>photoKeys</code> / <code>isOwner</code> / <code>myReviews</code> などの定義がある。<code>spot</code> と <code>waypoint</code> の違いもここ</td>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td>
+                <td>システム構成（CloudFront + API Gateway + Lambda + DynamoDB）と「確定した要素」。API の認可方式（Cognito オーソライザー）と認証基盤の決定もここに記録されている</td>
+            </tr>
+            <tr>
+                <td><a href="../設計書.md">設計書</a></td>
+                <td>ルート関連の API 仕様と DynamoDB の設計。口コミ API（<code>/spots</code> / <code>/reviews</code> / <code>/review-photo-uploads</code> / <code>/my-reviews</code>）はこの時点では未記載なので、仕様はコードと本解説書を参照する</td>
+            </tr>
+            <tr>
+                <td><a href="../仕様書.md">仕様書</a></td>
+                <td>画面仕様と開発コマンド（<code>npm run dev</code> などの一覧）。口コミ画面の記載はまだない</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

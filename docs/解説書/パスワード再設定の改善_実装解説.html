@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>パスワード再設定の改善 - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .prereq {
+            background-color: #f0f7ec;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        a {
+            color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>パスワード再設定の改善 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
+            <strong>📅 マージ日:</strong> 2026-10-07（3件すべて）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-207, fix/auth-error-messages<br>
+            <strong>🔖 対象マージ:</strong> <code>5e15505</code>（照合APIの追加）, <code>c7c3ddc</code>（パスワード表示ボタン・完了メッセージの見直し）, <code>b3f785b</code>（エラー文言の修正）
+        </div>
+
+        <p>
+            パスワードを忘れた利用者が自分で再設定できる画面は以前からありました。この3つのマージは、その画面の
+            <strong>「入力の間違いに気付けない」「エラーの文言が実態と合っていない」「パスワードを確認しづらい」</strong>
+            という3つの困りごとをまとめて直したものです。
+            バックエンドに照合用の Lambda 関数を1つ追加し、フロントは入力チェック・表示ボタン・文言を整えました。
+        </p>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+
+        <div class="prereq">
+            <strong>Amazon Cognito とユーザープール</strong><br>
+            ミチシルのログイン・ユーザー登録・パスワード再設定は、AWS の認証サービス
+            <strong>Amazon Cognito</strong> の「ユーザープール」が担っています。ユーザー名・メールアドレス・パスワードはアプリの
+            DynamoDB ではなくユーザープールに保存され、ブラウザからは <code>aws-amplify/auth</code> というライブラリ経由で呼び出します。
+            画面そのものの作りは <a href="./NZ-186_パスワード再設定画面_実装解説.html">パスワード再設定画面の解説書</a> にあります。
+        </div>
+
+        <div class="prereq">
+            <strong>Lambda の4ファイル構成（handler / service / repository / validator）</strong><br>
+            バックエンドの1機能は1フォルダにまとまっていて、ファイル名が役割を表します。<code>handler.js</code> が入口（受付と返却）、
+            <code>service.js</code> が判断（業務ロジック）、<code>repository.js</code> が外部サービスへのアクセス、
+            <code>validator.js</code> が入力チェックです。詳しくは
+            <a href="./NZ-106_ルート作成API_実装解説.html">ルート作成APIの解説書</a> の「レイヤーの責務を守る」を参照してください。
+        </div>
+
+        <div class="prereq">
+            <strong>Composable（コンポーザブル）</strong><br>
+            Vue で「画面をまたいで使い回したい状態と処理」をまとめた関数のことです。名前は必ず <code>use</code> で始まり、
+            <code>frontend/src/composables/</code> に置きます。呼ぶと状態（<code>ref</code>）と操作する関数がセットで返ってくるので、
+            複数の画面で同じ挙動を再現できます。今回は「パスワードを平文で見せるかどうか」をこの形で切り出しています。
+        </div>
+
+        <div class="prereq">
+            <strong>API Gateway の Cognito オーソライザー</strong><br>
+            ミチシルの API は、ログイン済みの人だけが呼べるように API Gateway 側で入口をふさいでいます。
+            ブラウザは Cognito から受け取った <code>idToken</code> を <code>Authorization</code> ヘッダーに載せて送り、
+            API Gateway がそれを検証します。ログイン前に呼ぶ必要があるAPIは、この保護を付けられません（後述の注意ポイントで触れます）。
+        </div>
+
+        <div class="prereq">
+            <strong>例外の <code>name</code> で文言を切り替える作り</strong><br>
+            このプロジェクトのフロントは、失敗したときに例外（<code>Error</code>）を投げ、
+            その例外の <code>name</code>（例: <code>CodeMismatchException</code>）をキーに表示用の日本語を引く作りになっています。
+            つまり <strong><code>name</code> が対応表に無いと、ひとつ上の「〜に失敗しました」という大まかな文言に落ちます。</strong>
+            今回の文言修正はここを直したものです。
+        </div>
+
+        <h2>📖 この機能について</h2>
+
+        <p>この3つのマージで入ったものは、大きく4つです。</p>
+
+        <table>
+            <tr>
+                <th>入ったもの</th>
+                <th>何をするか</th>
+                <th>由来のマージ</th>
+            </tr>
+            <tr>
+                <td>照合API（<code>verifyPasswordResetTarget</code>）</td>
+                <td>確認コードを送る前に、入力されたユーザー名とメールアドレスの組み合わせが登録内容と一致するかをサーバー側で確かめる</td>
+                <td><code>5e15505</code></td>
+            </tr>
+            <tr>
+                <td>入力チェック（<code>fieldErrors</code>）</td>
+                <td>送信前にユーザー名・メールアドレス・パスワード・確認コードの形を調べ、問題のある項目の下に理由を出す</td>
+                <td><code>5e15505</code></td>
+            </tr>
+            <tr>
+                <td>パスワードの表示ボタン（目のアイコン）</td>
+                <td>入力欄の右端に重ねた目のアイコンで、入力中のパスワードを平文表示に切り替える</td>
+                <td><code>5e15505</code> で導入し <code>c7c3ddc</code> で作り直し</td>
+            </tr>
+            <tr>
+                <td>エラー文言の修正</td>
+                <td>通信できなかったとき・未確認のユーザーがログインしたときに、実態と合った文言を出す</td>
+                <td><code>b3f785b</code></td>
+            </tr>
+        </table>
+
+        <p>
+            あわせて <code>c7c3ddc</code> では、ユーザー登録とパスワード再設定を終えてログイン画面へ戻ったときの完了メッセージを、
+            画面に居座る文字から画面上部のポップアップ（トースト）に変えています。
+            再設定画面の冒頭にあった説明文も、入力欄のラベルだけで用が足りるため削除しました。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+
+        <h3>Cognito は「そのユーザーが居るか」を教えてくれない</h3>
+        <p>
+            パスワード再設定は、Cognito の <code>resetPassword</code> を呼ぶと登録済みのメールアドレスへ確認コードが飛ぶ仕組みです。
+            ところがこのAPIは、<strong>存在しないユーザー名を渡しても成功したかのように振る舞う</strong>ことがあります。
+            これはセキュリティ上わざとそうなっていて、「このユーザー名は登録されている／されていない」を外部から探られないための配慮です。
+        </p>
+        <p>
+            利用者から見ると、こうなります。
+        </p>
+        <ul>
+            <li>ユーザー名を打ち間違えた → 画面には「確認コードを送信しました」と出る</li>
+            <li>いくら待ってもメールは届かない</li>
+            <li>何が悪いのか分からないまま詰まる</li>
+        </ul>
+        <p>
+            そこで、<strong>コードを送る前に「ユーザー名」と「そのユーザーに登録されているメールアドレス」の組み合わせを照合する</strong>
+            手順を挟みました。一致したときだけコードを送り、一致しなければその場で
+            「ユーザー名とメールアドレスの組み合わせが一致しません」と伝えます。
+            利用者は自分の入力を見直せますし、他人のユーザー名を当て推量で入れただけでは
+            「メールアドレスが何なのか」は分からないままです。
+        </p>
+
+        <h3>なぜブラウザからは照合できないのか</h3>
+        <p>
+            「登録されているメールアドレスを取ってきて比べるだけなら、ブラウザでできそう」と思えますが、できません。
+            Cognito が利用者の登録情報を返すのは<strong>その本人のトークンがあるとき</strong>だけで、
+            パスワードを忘れている＝ログインできていない状況ではトークンがありません。
+        </p>
+        <p>
+            登録情報を参照するには、管理者向けの API（<code>AdminGetUser</code>）を使う必要があります。これは強い権限なので、
+            ブラウザに権限を持たせるわけにはいきません。<strong>だからサーバー側（Lambda）に照合だけを任せる</strong>という形になりました。
+        </p>
+
+        <h3>関連するユーザーストーリー</h3>
+        <p>
+            US-1〜US-8 はルート作成と案内のストーリーで、認証はそこに含まれていません。
+            パスワード再設定は前提条件書の「確定した要素」にある認証基盤（Amazon Cognito のユーザープール。ログイン画面はアプリ内に自作する）
+            に属する機能で、その画面を使いやすく・安全にするのが今回の修正です。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+
+        <p>パスワードの再設定は2段階の画面で進みます。1段目が「誰のパスワードを再設定するか」、2段目が「新しいパスワードを決める」です。</p>
+
+        <div class="code-block">
+<pre>【1段目】ユーザー名 + メールアドレスを入力
+   ↓ 送信前に入力チェック（authValidator）
+   ↓ POST /api/v1/password-reset-verifications  ← 今回追加した照合API
+   ↓ 一致した場合のみ
+   ↓ Cognito の resetPassword で確認コードを送信
+【2段目】確認コード + 新しいパスワード + 確認入力
+   ↓ 送信前に入力チェック
+   ↓ Cognito の confirmResetPassword で確定
+   ↓ ログイン画面へ戻り、トーストで完了を知らせる</pre>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 1: 送信前に入力の形を調べる（フロント / <code>5e15505</code>）</strong>
+            <p>
+                <code>PasswordResetRequestForm.vue</code> の送信ボタンを押すと、まず <code>authValidator.js</code> の関数で
+                ユーザー名とメールアドレスを調べます。問題があればその項目の下に理由を出し、<strong>APIは呼びません</strong>。
+                前後の空白はコピー貼り付けで混ざりやすいため、調べる前に取り除きます。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 2: 照合APIへ問い合わせる（フロント / <code>5e15505</code>・<code>b3f785b</code>）</strong>
+            <p>
+                <code>passwordResetService.js</code> が <code>POST /api/v1/password-reset-verifications</code> へ
+                ユーザー名とメールアドレスを送ります。応答が返らなかった場合（オフラインなど）や、
+                JSON ではないものが返った場合は <code>VerificationUnavailable</code> という名前の例外を投げます。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 3: Lambda の入口で受け取り、入力を検証する（バックエンド / <code>5e15505</code>）</strong>
+            <p>
+                <code>handler.js</code> がリクエストボディを JSON として解析し、<code>validator.js</code> に渡します。
+                解析できない・必須項目が無い・文字数や文字種が条件に合わない場合は、ここで
+                <code>400</code> と <code>VALIDATION_ERROR</code> を返して終わります。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 4: Cognito から登録済みのメールアドレスを取り、比べる（バックエンド / <code>5e15505</code>）</strong>
+            <p>
+                <code>service.js</code> が <code>repository.js</code> を通じて Cognito の <code>AdminGetUser</code> を呼び、
+                そのユーザーの <code>email</code> 属性を取り出します。比べるときは大文字小文字の違いと前後の空白を無視します
+                （<code>USER@EXAMPLE.COM</code> と <code>user@example.com</code> は同じアドレスとして扱う）。
+            </p>
+            <p>
+                ユーザーが存在しない場合、Cognito は <code>UserNotFoundException</code> を投げます。
+                これはエラーとして扱わず「見つからなかった（<code>null</code>）」として上に返し、結果は不一致になります。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 5: 一致したときだけ確認コードを送る（フロント / <code>5e15505</code>）</strong>
+            <p>
+                照合APIは <code>{ "isMatched": true }</code> または <code>{ "isMatched": false }</code> だけを返します。
+                <code>authStore.resetPassword</code> は、照合が通った場合に限って Cognito の
+                <code>resetPassword</code> を呼び、確認コードの送信先（<code>a***@example.com</code> のようにマスクされた形）を
+                受け取って2段目の画面に表示します。
+            </p>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 6: 新しいパスワードを確定し、ログイン画面で知らせる（フロント / <code>5e15505</code>・<code>c7c3ddc</code>）</strong>
+            <p>
+                2段目では確認コード・新しいパスワード・確認用のもう一度の入力を調べたうえで、Cognito の
+                <code>confirmResetPassword</code> を呼びます。成功したらログイン画面へ
+                <code>?reset=1</code> 付きで遷移し、ログイン画面がそれを見てトーストで
+                「パスワードを再設定しました。新しいパスワードでログインしてください。」と知らせます。
+            </p>
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>backend/functions/verifyPasswordResetTarget/handler.js</h3>
+        <p>照合APIの入口です。入力チェックの呼び出しと、結果の返却だけを行います。</p>
+        <div class="code-block">
+<pre>const { isMatched } = await verifyPasswordResetTarget(
+  validationResult.value
+);
+
+// 一致しない場合もエラーではなく結果として返す。
+// 理由を返さないことで、ユーザーの有無や登録アドレスを推測させない
+return buildSuccessResponse({ isMatched });</pre>
+        </div>
+        <p>
+            ここが設計の勘所です。不一致は<strong>エラー（4xx）ではなく成功（200）で <code>isMatched: false</code></strong> として返します。
+            「ユーザーが居ない」と「メールアドレスが違う」を呼び出し側から区別できないようにするためで、
+            どちらの場合も同じ応答になります。
+        </p>
+
+        <h3>backend/functions/verifyPasswordResetTarget/service.js</h3>
+        <p>照合の判断そのものを担います。HTTP の知識は持たず、オブジェクトを受け取ってオブジェクトを返します。</p>
+        <div class="code-block">
+<pre>const normalizeEmail = (email) => email.trim().toLowerCase();
+
+export const verifyPasswordResetTarget = async (
+  { username, email },
+  repositories = defaultRepositories
+) => {
+  const registeredEmail = await repositories.findUserEmail(username);
+
+  if (registeredEmail === null) {
+    logInfo('照合の結果、対象のユーザーが見つかりませんでした', { username });
+
+    return { isMatched: false };
+  }
+
+  const isMatched = normalizeEmail(registeredEmail) === normalizeEmail(email);
+
+  return { isMatched };
+};</pre>
+        </div>
+        <p>
+            第2引数の <code>repositories</code> に注目してください。既定では本物の
+            <code>findUserEmail</code> が入りますが、テストのときは「決まった値を返す偽物」を渡せます。
+            そのおかげで、<strong>Cognito に接続しなくても照合の判断だけをテストできます</strong>
+            （<code>__tests__/service.test.js</code> がそうしています）。
+        </p>
+
+        <h3>backend/functions/verifyPasswordResetTarget/repository.js</h3>
+        <p>Cognito とのやり取りを閉じ込めた層です。判断はせず、取得だけを行います。</p>
+        <div class="code-block">
+<pre>const response = await getClient().send(
+  new AdminGetUserCommand({
+    UserPoolId: USER_POOL_ID,
+    Username: username
+  })
+);
+
+const emailAttribute = (response.UserAttributes ?? []).find(
+  (attribute) => attribute.Name === 'email'
+);
+
+return emailAttribute?.Value ?? null;</pre>
+        </div>
+        <p>
+            <code>AdminGetUser</code> は管理者向けのAPIで、ユーザーの属性を一覧（<code>UserAttributes</code>）で返します。
+            その中から <code>email</code> という名前の属性を探して値を取り出しています。
+        </p>
+        <p>
+            例外の扱いも決まっています。<code>UserNotFoundException</code>（そのユーザーが居ない）は
+            <code>null</code> を返して正常系として処理し、それ以外の失敗は
+            <code>createDataSourceError</code> でアプリ共通のエラーに変換して投げます。
+            AWS SDK のエラーをそのまま上の層へ流さないのは、このプロジェクトのバックエンド共通のルールです。
+        </p>
+        <p>
+            ユーザープールIDは <code>constants.js</code> が <code>process.env.USER_POOL_ID</code> から読み、
+            未設定なら照合する前に分かるようエラーにします。
+        </p>
+
+        <h3>backend/functions/verifyPasswordResetTarget/validator.js</h3>
+        <p>副作用を持たない純粋な関数として入力を調べます。</p>
+        <div class="code-block">
+<pre>/** 受け付ける文字の範囲（半角英数字と半角記号。空白は含まない） */
+const HALF_WIDTH_PATTERN = /^[\x21-\x7E]+$/;</pre>
+        </div>
+        <p>
+            <code>\x21</code> は <code>!</code>、<code>\x7E</code> は <code>~</code> を表す書き方で、
+            この2つの間にある半角の文字だけを通します。全角文字や空白は弾かれます。
+            文字数の上限（ユーザー名20文字・メールアドレス254文字）は <code>constants.js</code> に置かれ、
+            <strong>フロントの <code>authValidation.js</code> と同じ値</strong>になるよう揃えてあります。
+        </p>
+
+        <h3>frontend/src/services/passwordResetService.js</h3>
+        <p>照合APIとの通信を担当します。<code>b3f785b</code> で <code>fetch</code> の囲みが足されたのがこのファイルです。</p>
+        <div class="code-block">
+<pre>let response;
+
+try {
+  response = await fetch(`${API_BASE_PATH}/password-reset-verifications`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, email })
+  });
+} catch (error) {
+  // オフラインや通信の遮断では応答が返らず、fetch が TypeError を投げる。
+  // 応答のエラーと同じく「確認できなかった」として扱う
+  throw createNamedError(
+    'VerificationUnavailable',
+    `組み合わせの確認に失敗しました（通信エラー: ${error.message}）`
+  );
+}
+
+// APIが未配線の環境ではSPAのindex.html（HTML）が200で返るため、解析前に判定する
+if (!response.ok || !isJsonResponse(response)) {
+  throw createNamedError('VerificationUnavailable', ...);
+}
+
+const { isMatched } = await response.json();
+
+if (!isMatched) {
+  throw createNamedError('EmailMismatch', ...);
+}</pre>
+        </div>
+        <p>
+            ポイントは3つあります。
+        </p>
+        <ul>
+            <li><strong>不一致を例外にしている。</strong> API は <code>isMatched: false</code> を正常応答で返しますが、
+                フロント側では <code>EmailMismatch</code> という例外に変換します。こうすると呼び出し側は
+                「例外が出なければ一致」とだけ考えればよくなります。</li>
+            <li><strong>JSON かどうかを解析前に調べる。</strong> API が繋がっていない環境では、
+                SPA の <code>index.html</code>（HTML）が <code>200</code> で返ってきます。
+                これをそのまま <code>response.json()</code> にかけると意味の分からないエラーになるため、先に中身の種類を確かめます。</li>
+            <li><strong>応答が返らない場合も同じ名前にする。</strong> オフラインのとき <code>fetch</code> 自身が
+                <code>TypeError</code> を投げます。<code>b3f785b</code> 以前はこれが素通りしていました（後述）。</li>
+        </ul>
+
+        <h3>frontend/src/stores/authStore.js</h3>
+        <p>「照合してから送る」という順番を守っているのがここです。</p>
+        <div class="code-block">
+<pre>const resetPassword = async (inputUsername, inputEmail) => {
+  isResettingPassword.value = true;
+  errorMessage.value = null;
+
+  try {
+    // 先に組み合わせを照合する。一致しない場合は例外になり、コードは送らない
+    await verifyPasswordResetTarget(inputUsername, inputEmail);
+
+    const codeDeliveryDestination = await sendPasswordResetCode(inputUsername);
+
+    return { isSucceeded: true, codeDeliveryDestination };
+  } catch (error) {
+    errorMessage.value = toPasswordResetErrorMessage(error);
+
+    return { isSucceeded: false, codeDeliveryDestination: null };
+  } finally {
+    isResettingPassword.value = false;
+  }
+};</pre>
+        </div>
+        <p>
+            照合で例外が出れば <code>sendPasswordResetCode</code> には進まないため、確認コードは送られません。
+            失敗の理由は <code>errorMessage</code> に入り、フォームがそれを表示します。
+            <code>finally</code> で通信中フラグを戻しているので、成功・失敗どちらでもボタンは押せる状態に戻ります。
+        </p>
+
+        <h3>frontend/src/services/authService.js（文言の対応表）</h3>
+        <p>例外の <code>name</code> から画面に出す日本語を引く表が置かれています。再設定のときだけ文言を変えたい例外は別の表に分けています。</p>
+        <div class="code-block">
+<pre>const PASSWORD_RESET_ERROR_MESSAGES = {
+  // ユーザーの有無を画面で言い当てないよう、あいまいな文言にする
+  UserNotFoundException: 'ユーザー名を確認してください',
+  // 入力されたユーザー名とメールアドレスの組み合わせが、登録内容と一致しなかった場合
+  EmailMismatch: 'ユーザー名とメールアドレスの組み合わせが一致しません',
+  // 照合そのものができなかった場合（APIへ到達できない等）
+  VerificationUnavailable:
+    '組み合わせを確認できませんでした。通信状況を確認してください',
+  ...
+};
+
+export const toPasswordResetErrorMessage = (error) =>
+  PASSWORD_RESET_ERROR_MESSAGES[error?.name] ??
+  ERROR_MESSAGES[error?.name] ??
+  PASSWORD_RESET_DEFAULT_ERROR_MESSAGE;</pre>
+        </div>
+        <p>
+            <code>??</code> は「左が <code>null</code> か <code>undefined</code> なら右を使う」という書き方です。
+            再設定専用の表 → 共通の表 → 既定の文言、という順で探します。
+            同じ <code>UserNotFoundException</code> でも、ログインでは「ユーザー名またはパスワードが違います」、
+            再設定では「ユーザー名を確認してください」と出し分けられるのはこの仕組みのおかげです。
+        </p>
+
+        <h3>エラー文言をどう直したか（<code>b3f785b</code>）</h3>
+        <p>2か所です。どちらも「文言を書き換えた」のではなく、<strong>正しい文言が引かれるように例外の名前を整えた</strong>修正です。</p>
+
+        <h4>1. 照合APIへ届かなかったとき</h4>
+        <table>
+            <tr>
+                <th>　</th>
+                <th>起きていたこと</th>
+                <th>画面に出た文言</th>
+            </tr>
+            <tr>
+                <td><strong>修正前</strong></td>
+                <td><code>fetch</code> が投げる <code>TypeError</code> がそのまま上がり、対応表に当たらなかった</td>
+                <td>パスワードの再設定に失敗しました。通信状況を確認してください</td>
+            </tr>
+            <tr>
+                <td><strong>修正後</strong></td>
+                <td><code>fetch</code> を <code>try</code> で囲み、<code>VerificationUnavailable</code> に変換する</td>
+                <td>組み合わせを確認できませんでした。通信状況を確認してください</td>
+            </tr>
+        </table>
+        <p>
+            修正前の文言でも間違いではありませんが、<strong>まだ再設定そのものは始まっていない</strong>段階です。
+            実際には「組み合わせを確認する通信ができなかった」ので、どこで止まったのかが伝わる文言に寄せました。
+            応答が返ってきたうえでの失敗（404 や HTML が返るなど）はもともと
+            <code>VerificationUnavailable</code> になっていたため、これで両方の経路の文言が揃いました。
+        </p>
+
+        <h4>2. 未確認のユーザーがログインしようとしたとき</h4>
+        <p>
+            ユーザー登録した直後は「未確認」の状態で、メールで届いた確認コードを入れるまでログインできません。
+            この状態でログインすると、Amplify v6 は例外を投げるのではなく
+            <strong>「次の手続きが必要（<code>CONFIRM_SIGN_UP</code>）」として正常に返してきます。</strong>
+            ミチシルにはその手続きの画面が無いため、失敗として扱う必要があります。
+        </p>
+        <div class="code-block">
+<pre>/**
+ * サインインで追加の手続きを求められたとき、例外名を読み替える対応。
+ * Amplify v6 は未確認のユーザーに対して UserNotConfirmedException を投げず、
+ * 次の手続き（CONFIRM_SIGN_UP）として返すため、例外として扱う名前へ寄せる。
+ */
+const SIGN_IN_STEP_ERROR_NAMES = {
+  CONFIRM_SIGN_UP: 'UserNotConfirmedException'
+};
+
+// ...
+
+error.name =
+  SIGN_IN_STEP_ERROR_NAMES[nextStep.signInStep] ?? nextStep.signInStep;
+throw error;</pre>
+        </div>
+        <table>
+            <tr>
+                <th>　</th>
+                <th>例外の <code>name</code></th>
+                <th>画面に出た文言</th>
+            </tr>
+            <tr>
+                <td><strong>修正前</strong></td>
+                <td><code>CONFIRM_SIGN_UP</code>（対応表に無い）</td>
+                <td>ログインに失敗しました。通信状況を確認してください</td>
+            </tr>
+            <tr>
+                <td><strong>修正後</strong></td>
+                <td><code>UserNotConfirmedException</code>（対応表にある）</td>
+                <td>このユーザーは有効化されていません。管理者に連絡してください</td>
+            </tr>
+        </table>
+        <p>
+            修正前は通信が正常でも「通信状況を確認してください」と出ていました。原因が通信ではないため、利用者は直しようがありません。
+            例外の名前を対応表にある <code>UserNotConfirmedException</code> へ読み替えることで、
+            すでに用意されていた正しい文言が出るようになりました。
+        </p>
+
+        <h3>frontend/src/utils/authValidator.js と fieldErrors の仕組み</h3>
+        <p>
+            入力チェックは「Vue に依存しない純粋な関数」として <code>utils/</code> に置かれています。
+            関数は<strong>エラーがあれば表示用の日本語を返し、問題なければ <code>null</code> を返します</strong>。
+        </p>
+        <div class="code-block">
+<pre>export const validateUsername = (username) => {
+  if (username === '') {
+    return 'ユーザー名を入力してください';
+  }
+
+  if (username.length > USERNAME_MAX_LENGTH) {
+    return `ユーザー名は${USERNAME_MAX_LENGTH}文字以内で入力してください`;
+  }
+
+  if (!HALF_WIDTH_PATTERN.test(username)) {
+    return `ユーザー名は${HALF_WIDTH_HINT}`;
+  }
+
+  return null;
+};
+
+export const hasNoFieldError = (fieldErrors) =>
+  Object.values(fieldErrors).every((error) => error === null);</pre>
+        </div>
+        <p>画面側は、項目名をキーにした <code>fieldErrors</code> というオブジェクトでその戻り値を保持します。</p>
+        <div class="code-block">
+<pre>const fieldErrors = ref({
+  username: null,
+  email: null
+});
+
+const handleSubmit = () => {
+  const trimmedUsername = username.value.trim();
+  const trimmedEmail = email.value.trim();
+
+  fieldErrors.value = {
+    username: validateUsername(trimmedUsername),
+    email: validateEmail(trimmedEmail)
+  };
+
+  if (!hasNoFieldError(fieldErrors.value)) {
+    return;
+  }
+
+  emit('submitPasswordResetRequest', {
+    username: trimmedUsername,
+    email: trimmedEmail
+  });
+};</pre>
+        </div>
+        <p>この形の良いところは3つあります。</p>
+        <ul>
+            <li><strong>どの項目が悪いか分かる。</strong> フォーム全体に1つのエラーを出すのではなく、
+                問題のある入力欄の真下に理由を出せます。</li>
+            <li><strong>直したら消える。</strong> 入力欄の <code>@input</code> で
+                <code>clearFieldError('username')</code> を呼び、その項目のエラーだけを <code>null</code> に戻します。</li>
+            <li><strong>支援技術にも伝わる。</strong> エラーのある入力欄には <code>aria-invalid</code> が付き、
+                <code>aria-describedby</code> でエラー文と結び付けられています。</li>
+        </ul>
+        <p>
+            なお <code>&lt;form&gt;</code> には <code>novalidate</code> が付いています。
+            ブラウザが標準で出す吹き出し（「このフィールドを入力してください」など）は文言を揃えられないため止めて、
+            チェックを <code>authValidator</code> に一本化しています。
+        </p>
+
+        <h3>frontend/src/composables/usePasswordVisibility.js</h3>
+        <p>
+            目のアイコンの状態を持つ Composable です。<strong>入力欄1つにつき1回呼びます</strong>
+            （新しいパスワードと確認用の2欄がある画面では2回呼び、片方を平文にしてももう片方は隠れたままになります）。
+        </p>
+        <div class="code-block">
+<pre>export const usePasswordVisibility = () => {
+  /** パスワードを平文で表示しているかどうか */
+  const isPasswordVisible = ref(false);
+
+  /** 表示ボタンを出してよい状態かどうか。エラー直後はfalseにする */
+  const isPasswordRevealAvailable = ref(true);
+
+  /** パスワード欄に渡す input の type */
+  const passwordInputType = computed(() =>
+    isPasswordVisible.value ? 'text' : 'password'
+  );
+
+  const disablePasswordReveal = () => {
+    isPasswordVisible.value = false;
+    isPasswordRevealAvailable.value = false;
+  };
+
+  const enablePasswordReveal = () => {
+    isPasswordRevealAvailable.value = true;
+  };
+  ...
+};</pre>
+        </div>
+        <p>似た名前の状態が2つあるので、役割を分けて覚えてください。</p>
+        <table>
+            <tr>
+                <th>状態</th>
+                <th>意味</th>
+                <th>変わるきっかけ</th>
+            </tr>
+            <tr>
+                <td><code>isPasswordVisible</code></td>
+                <td>いま平文で見えているか。<code>true</code> なら入力欄の <code>type</code> が <code>text</code> になる</td>
+                <td>目のアイコンを押したとき</td>
+            </tr>
+            <tr>
+                <td><code>isPasswordRevealAvailable</code></td>
+                <td>目のアイコン自体を出してよいか。<code>false</code> ならボタンが消える</td>
+                <td>エラーが出たら <code>false</code>、入力が直されたら <code>true</code></td>
+            </tr>
+        </table>
+
+        <h4>なぜエラー直後は表示ボタンを出さないのか</h4>
+        <p>
+            パスワードを間違えた直後の画面には、エラー文が出たままパスワードが入力欄に残っています。
+            そこで平文表示に切り替えられると、<strong>「エラーが見えている画面」と「パスワードが読める状態」が同時に成立します。</strong>
+            誰かが画面を覗いている状況や、画面共有・スクリーンショットの場面でそのまま漏れてしまいます。
+        </p>
+        <p>
+            そのため、エラーが出た時点で <code>disablePasswordReveal()</code> を呼んでボタンを隠し、
+            <strong>入力が1文字でも直されるまで出しません</strong>。入力し直す＝内容が変わるので、
+            そのとき平文にできても古い（間違った）パスワードが見えることはありません。
+        </p>
+        <p>
+            引き金は2つあります。1つは送信前の入力チェックで落ちたとき、もう1つは
+            サーバーから失敗が返って <code>errorMessage</code> が入ったときで、後者は <code>watch</code> で拾っています。
+        </p>
+        <div class="code-block">
+<pre>// 再設定に失敗したときも、修正されるまで表示ボタンを出さない
+watch(
+  () => props.errorMessage,
+  (message) => {
+    if (message !== null) {
+      disableAllPasswordReveal();
+    }
+  }
+);</pre>
+        </div>
+        <p>テンプレート側は、この状態をボタンの表示条件にそのまま使います。</p>
+        <div class="code-block">
+<pre>&lt;!-- エラーが出た後は、入力が修正されるまでこのボタンを出さない --&gt;
+&lt;PasswordVisibilityButton
+  v-if="newPasswordVisibility.isPasswordRevealAvailable.value"
+  :is-password-visible="newPasswordVisibility.isPasswordVisible.value"
+  :is-disabled="isResettingPassword"
+  label="新しいパスワード"
+  @toggle-visibility="newPasswordVisibility.togglePasswordVisibility"
+/&gt;</pre>
+        </div>
+
+        <h3>frontend/src/components/feature/auth/PasswordVisibilityButton.vue（<code>c7c3ddc</code>）</h3>
+        <p>
+            <code>5e15505</code> の時点では「表示」という文字のボタンが入力欄の横に並んでいました。
+            <code>c7c3ddc</code> でこれを<strong>入力欄の右端に重ねる目のアイコン</strong>に作り替え、部品として切り出しています。
+            ボタン自身は状態を持たず、押されたことを <code>toggleVisibility</code> で親へ伝えるだけです。
+        </p>
+        <p>アイコンだけのボタンなので、何のボタンかは <code>aria-label</code> で伝えます。</p>
+        <div class="code-block">
+<pre>&lt;button
+  class="password-visibility-btn"
+  type="button"
+  :aria-label="isPasswordVisible ? `${label}を隠す` : `${label}を表示する`"
+  :aria-pressed="isPasswordVisible"
+  :disabled="isDisabled"
+  @click="$emit('toggleVisibility')"
+&gt;</pre>
+        </div>
+        <p>
+            重ねる位置は <code>global.css</code> の <code>.auth-password</code> が
+            <code>position: relative</code> で基準になり、入力欄には文字がアイコンに重ならないよう右側の余白を取っています。
+            あわせて Edge が標準で出す同じ役目のボタンを <code>::-ms-reveal</code> で隠しています
+            （ブラウザによって有無が変わるため、自前のボタンに揃えるためです）。
+        </p>
+
+        <h3>frontend/src/views/LoginView.vue（<code>c7c3ddc</code>）</h3>
+        <p>
+            登録完了・再設定完了の知らせ方が変わりました。以前は画面に <code>&lt;p&gt;</code> の文字列を出していましたが、
+            画面上部のトースト（<code>BaseToast</code>）に差し替えています。
+        </p>
+        <div class="code-block">
+<pre>// ユーザー登録またはパスワード再設定を終えて戻ってきた場合は、
+// 画面上部のポップアップで知らせる。状態は持ち越さずクエリで判断する
+if (route.query.registered === '1') {
+  showMessage('ユーザー登録が完了しました。登録した内容でログインしてください。');
+} else if (route.query.reset === '1') {
+  showMessage('パスワードを再設定しました。新しいパスワードでログインしてください。');
+}</pre>
+        </div>
+        <p>
+            「クエリで判断する」のがポイントです。完了したかどうかをストアに持たせると、
+            どこで消すかを管理しなければなりません。URL の <code>?reset=1</code> で判断すれば、
+            画面を離れた時点で情報も消えるので後始末が不要になります。
+        </p>
+
+        <h3>iac/lib/michishiru-stack.ts</h3>
+        <p>照合用の Lambda と、その入口の定義です。他のAPIと違う扱いになっている箇所が2つあります。</p>
+        <div class="code-block">
+<pre>// 照合に必要な読み取りだけを、作成したユーザープールに限って許可する
+verifyPasswordResetTargetFn.addToRolePolicy(
+  new iam.PolicyStatement({
+    sid: 'ReadUserForPasswordReset',
+    actions: ['cognito-idp:AdminGetUser'],
+    resources: [userPool.userPoolArn]
+  })
+);
+
+// POST /api/v1/password-reset-verifications
+// ここだけ認可を付けない。パスワードを忘れた利用者がログインする前に呼ぶため、
+// Cognito オーソライザーで守ると機能しなくなる。
+const passwordResetVerificationsResource = v1Resource.addResource(
+  'password-reset-verifications'
+);
+passwordResetVerificationsResource.addMethod(
+  'POST',
+  new apigateway.LambdaIntegration(verifyPasswordResetTargetFn)
+);</pre>
+        </div>
+        <p>
+            1つめは <strong>IAM の権限</strong>です。この Lambda に与えているのは <code>AdminGetUser</code> という
+            1つの操作だけで、対象もこのスタックが作ったユーザープールだけに絞っています。
+            管理者向けAPIを使う関数なので、できることを最小限にしてあります。
+        </p>
+        <p>
+            2つめは <strong>認可を付けていないこと</strong>です。他のメソッド（<code>/api/v1/routes</code> など）には
+            <code>cognitoAuthorized</code> を渡していますが、ここには渡していません。
+            パスワードを忘れた＝ログインできない人が呼ぶAPIなので、ログイン必須にすると機能しなくなります。
+            この判断の裏返しが次の注意ポイントです。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>1. 照合APIには総当たり対策がまだ入っていない</h3>
+            <p>
+                上に書いたとおり、このAPIはログイン前に呼ぶため Cognito オーソライザーで保護できません。
+                つまり<strong>URL を知っていれば誰でも呼べる状態</strong>です。
+                1回の応答は <code>isMatched</code> だけなので、1回では何も分かりませんが、
+                メールアドレスを機械的に大量に試せば「このユーザー名に紐づくアドレス」を当てられる余地が残ります。
+            </p>
+            <p>
+                方針は決まっていて、<strong>回数制限（API Gateway のスロットリング / WAF）で抑える</strong>ことになっています。
+                ただし<strong>実装はまだです。</strong>前提条件書の「今後追加予定の要素」に
+                「照合APIの保護」として残っているので、触る人はそこを確認してください。
+                CDK のコードにも同じ内容がコメントで書かれています。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>2. 不一致の理由を増やしてはいけない</h3>
+            <p>
+                「ユーザーが存在しない」と「メールアドレスが違う」は、どちらも <code>isMatched: false</code> として同じ応答になります。
+                親切心で「そのユーザーは登録されていません」と返す作りに変えると、
+                <strong>ユーザー名の一覧を外部から確かめられるようになります</strong>。Cognito が応答を揃えているのと同じ理由です。
+                応答の形を変えるときは、この意図を壊していないか確かめてください。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>3. フロントの入力チェックはサーバー側の代わりにならない</h3>
+            <p>
+                <code>authValidator.js</code> のチェックは「往復を待たずに気付けるようにする」ためのもので、
+                ブラウザの外から直接APIを叩けば通り抜けられます。
+                そのため <code>validator.js</code> がサーバー側でも同じ条件を調べています。
+                どちらか片方だけにするのではなく、<strong>両方に置いて値を揃える</strong>のが前提です
+                （文字数の上限はフロントとバックエンドの <code>constants</code> に同じ数字が書かれています）。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>4. ローカルで照合APIを動かすには準備が必要</h3>
+            <p>
+                この Lambda は実際に Cognito を呼ぶため、ローカルAPIハーネス経由で叩く場合も
+                <strong>AWS の認証情報（<code>AWS_PROFILE</code> など）と環境変数 <code>USER_POOL_ID</code></strong> が必要です。
+                <code>USER_POOL_ID</code> が空のときは照合に進まず、「ユーザープールIDが未設定のため照合できません」というエラーになります。
+                これは設定漏れにその場で気付けるようにわざとそうしています。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>5. 目のアイコンの状態は「欄ごと」に持つ</h3>
+            <p>
+                <code>usePasswordVisibility()</code> を1回だけ呼んで2つの入力欄で共有すると、
+                片方を平文にしたときに<strong>もう片方も一緒に平文になります</strong>。
+                新しいパスワードと確認用の欄があるフォームでは、必ず欄ごとに呼んでください
+                （<code>PasswordResetConfirmForm.vue</code> と <code>SignUpForm.vue</code> がそうしています）。
+            </p>
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+
+        <h3>画面での確認</h3>
+        <ol>
+            <li>
+                <strong>フロントとローカルAPIを同時に起動する</strong>
+                <div class="code-block">
+<pre># リポジトリのルートで実行
+npm run dev</pre>
+                </div>
+                <p>
+                    照合APIを実際に動かす場合は、起動前に <code>USER_POOL_ID</code> を設定し、
+                    AWS の認証情報が使える状態にしておきます。
+                </p>
+            </li>
+            <li>
+                <strong>入力チェックを確かめる</strong>
+                <p>
+                    ログイン画面の「パスワードの再設定」から再設定画面へ進み、
+                    何も入れずに「確認コードを送る」を押します。各欄の下に
+                    「ユーザー名を入力してください」「メールアドレスを入力してください」が出て、
+                    APIは呼ばれないことを確認します（ブラウザの開発者ツールの Network タブで確認できます）。
+                </p>
+            </li>
+            <li>
+                <strong>組み合わせが違う場合を確かめる</strong>
+                <p>
+                    登録済みのユーザー名と、そのユーザーとは別のメールアドレスを入れて送信します。
+                    「ユーザー名とメールアドレスの組み合わせが一致しません」と出て、
+                    確認コードの入力画面へ進まないことを確認します。存在しないユーザー名でも同じ結果になります。
+                </p>
+            </li>
+            <li>
+                <strong>一致する場合を確かめる</strong>
+                <p>
+                    正しい組み合わせを入れると確認コードの入力画面へ進み、送信先が
+                    <code>a***@example.com</code> のような形で表示されます。
+                    メールのコードと新しいパスワードを入れて再設定すると、ログイン画面に戻り、
+                    画面上部にトーストで完了が知らされます。
+                </p>
+            </li>
+            <li>
+                <strong>目のアイコンの挙動を確かめる</strong>
+                <p>
+                    パスワード欄の右端のアイコンを押すと平文になります。
+                    次にパスワードをわざと短くして送信し、エラーが出た直後に<strong>アイコンが消えること</strong>、
+                    そのあと1文字入力し直すと<strong>再び現れること</strong>を確認します。
+                </p>
+            </li>
+            <li>
+                <strong>通信できないときの文言を確かめる（<code>b3f785b</code> の確認）</strong>
+                <p>
+                    開発者ツールの Network タブでオフラインにしてから送信すると、
+                    「組み合わせを確認できませんでした。通信状況を確認してください」と出ます。
+                </p>
+            </li>
+        </ol>
+
+        <h3>テストの実行</h3>
+        <div class="code-block">
+<pre># バックエンド（照合の判断と入力チェック）
+cd backend
+npm test
+
+# フロント（フォーム・サービス・入力チェック）
+cd frontend
+npm test
+
+# インフラ（Lambdaと経路、認可の有無）
+cd iac
+npm test</pre>
+        </div>
+        <p>
+            フロントのテストは Vitest で、設定は <code>frontend/vite.config.js</code> の <code>test</code> にあります。
+            <code>environment: 'jsdom'</code> はブラウザのDOMを模したものを用意する指定で、
+            これによりコンポーネントを実際に描画して確かめられます。対象は
+            <code>src/**/__tests__/**/*.test.js</code> です。
+        </p>
+        <p>今回の修正で増えたテストの主な内容は次のとおりです。</p>
+        <table>
+            <tr>
+                <th>テスト</th>
+                <th>確かめていること</th>
+            </tr>
+            <tr>
+                <td><code>backend/.../verifyPasswordResetTarget/__tests__/service.test.js</code></td>
+                <td>一致・不一致の判定、大文字小文字と前後の空白を無視すること、ユーザーが居ない場合も不一致になること、リポジトリの例外を握りつぶさないこと</td>
+            </tr>
+            <tr>
+                <td><code>backend/.../verifyPasswordResetTarget/__tests__/validator.test.js</code></td>
+                <td>必須・文字数・文字種のチェック</td>
+            </tr>
+            <tr>
+                <td><code>frontend/src/services/__tests__/passwordResetService.test.js</code></td>
+                <td>不一致で <code>EmailMismatch</code> を投げること、応答が異常／JSON以外／通信自体が失敗した場合に <code>VerificationUnavailable</code> を投げること</td>
+            </tr>
+            <tr>
+                <td><code>frontend/src/services/__tests__/authService.test.js</code></td>
+                <td>未確認のユーザー（<code>CONFIRM_SIGN_UP</code>）が <code>UserNotConfirmedException</code> として扱われ、有効化されていない旨の文言になること</td>
+            </tr>
+            <tr>
+                <td><code>frontend/src/components/feature/auth/__tests__/*.test.js</code></td>
+                <td>各フォームの入力チェックと、エラー後に表示ボタンが消えること</td>
+            </tr>
+            <tr>
+                <td><code>iac/test/iac.test.ts</code></td>
+                <td>照合用の Lambda と <code>password-reset-verifications</code> の経路が作られること、そのメソッドに認可が付いていないこと</td>
+            </tr>
+        </table>
+
+        <h2>📁 関連ファイル一覧</h2>
+
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                    <th>由来のブランチ</th>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/verifyPasswordResetTarget/handler.js</code></td>
+                    <td>照合APIの入口。入力チェックを呼び、<code>isMatched</code> を返す</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/verifyPasswordResetTarget/service.js</code></td>
+                    <td>照合の判断。メールアドレスを正規化して比べる</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/verifyPasswordResetTarget/repository.js</code></td>
+                    <td>Cognito の <code>AdminGetUser</code> で登録済みメールアドレスを取得する</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/verifyPasswordResetTarget/validator.js</code></td>
+                    <td>リクエストの必須・文字数・文字種のチェック</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/verifyPasswordResetTarget/constants.js</code></td>
+                    <td><code>USER_POOL_ID</code> と文字数上限。<code>process.env</code> を読むのはここだけ</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/verifyPasswordResetTarget/package.json</code></td>
+                    <td>この関数が使う依存（Cognito のクライアント）の記録</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>backend/functions/verifyPasswordResetTarget/__tests__/</code></td>
+                    <td>照合の判断と入力チェックのテスト</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/passwordResetService.js</code></td>
+                    <td>照合APIとの通信。不一致・確認不能を例外に変換する</td>
+                    <td>feature/NZ-207 / fix/auth-error-messages</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/authService.js</code></td>
+                    <td>Cognito の呼び出しと、例外から表示文言への変換表</td>
+                    <td>feature/NZ-207 / fix/auth-error-messages</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/stores/authStore.js</code></td>
+                    <td>「照合してから確認コードを送る」順序と、通信中・エラーの状態</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/utils/authValidator.js</code></td>
+                    <td>認証フォームの入力チェック（Vueに依存しない純粋関数）</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/constants/authValidation.js</code></td>
+                    <td>文字数の上限・使える文字・パスワード条件の文言</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/usePasswordVisibility.js</code></td>
+                    <td>パスワードの表示・非表示と、表示ボタンを出してよいかの状態</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/auth/PasswordVisibilityButton.vue</code></td>
+                    <td>入力欄の右端に重ねる目のアイコンのボタン</td>
+                    <td>feature/NZ-207（<code>c7c3ddc</code> で追加）</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/auth/PasswordResetRequestForm.vue</code></td>
+                    <td>1段目。ユーザー名とメールアドレスの入力欄</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/auth/PasswordResetConfirmForm.vue</code></td>
+                    <td>2段目。確認コードと新しいパスワードの入力欄</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/auth/LoginForm.vue</code></td>
+                    <td>ログインフォーム。入力チェックと目のアイコンを同じ作りで持つ</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/auth/SignUpForm.vue</code></td>
+                    <td>ユーザー登録フォーム。同上</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/PasswordResetView.vue</code></td>
+                    <td>再設定画面。2段の切り替えと、照合に使うユーザー名・メールアドレスの保持</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/LoginView.vue</code></td>
+                    <td>ログイン画面。完了メッセージをトーストで出す</td>
+                    <td>feature/NZ-207（<code>c7c3ddc</code>）</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/assets/styles/global.css</code></td>
+                    <td>入力欄とボタンの共通スタイル。目のアイコンを重ねる土台</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/vite.config.js</code></td>
+                    <td>Vitest の設定（<code>jsdom</code> と対象パターン）を追加</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>iac/lib/michishiru-stack.ts</code></td>
+                    <td>照合用 Lambda、IAM権限、認可を付けないAPI経路の定義</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>iac/test/iac.test.ts</code></td>
+                    <td>Lambda・経路・認可の有無を確かめるテスト</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+                <tr>
+                    <td><code>tools/localApiServer.js</code></td>
+                    <td>ローカルで <code>POST /api/v1/password-reset-verifications</code> を受け付ける登録</td>
+                    <td>feature/NZ-207</td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr>
+                <th>ドキュメント</th>
+                <th>何が書いてあるか</th>
+            </tr>
+            <tr>
+                <td><a href="./NZ-186_パスワード再設定画面_実装解説.html">パスワード再設定画面</a></td>
+                <td>再設定の画面そのものの解説。2段構成の作りと Cognito の呼び出し。この解説書はその「前に走る照合」を足したもので、先に読むと流れが掴みやすい</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-189_ユーザー登録画面_実装解説.html">ユーザー登録画面</a></td>
+                <td>ユーザー登録と確認コードの仕組み。今回の文言修正で出てくる「未確認のユーザー」がどういう状態かが分かる</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td>
+                <td>handler / service / repository のレイヤー責務。照合APIも同じ構成で作られている</td>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td>
+                <td>システム構成と「確定した要素」。認証基盤（Cognito）とAPIの認可の方針、および未対応として残っている「照合APIの保護」</td>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td>
+                <td>本文に出てくる <code>resetPassword</code> / <code>confirmResetPassword</code> / <code>fieldErrors</code> / <code>isPasswordVisible</code> / <code>isPasswordRevealAvailable</code> などの定義</td>
+            </tr>
+            <tr>
+                <td><a href="../設計書.md">設計書</a></td>
+                <td>APIのパスとリクエスト・レスポンスの仕様。<strong>今回の照合API（<code>POST /api/v1/password-reset-verifications</code>）はまだ未記載</strong>なので、追記するとよい箇所</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

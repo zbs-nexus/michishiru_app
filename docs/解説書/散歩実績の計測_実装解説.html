@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>散歩実績の計測 - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .prereq {
+            background-color: #f0f7ec;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        a {
+            color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>散歩実績の計測 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
+            <strong>📅 マージ日:</strong> 2026-10-07（10:23）<br>
+            <strong>🌿 対象ブランチ:</strong> <code>feature/NZ-230</code>（PR #69「散歩実測値の取得」）<br>
+            <strong>🔖 対象マージ:</strong> <code>95b51ab</code><br>
+            <small>※ このマージで追加されたのは「GPSの軌跡から距離を積む」部分（計画ファイルでは段階1と呼ばれています）です。計測の欠落を検知する <code>measurementStatus</code> は、対象期間より後のマージ <code>dc87c1c</code>（2026-10-14 / <code>feature/NZ-176</code>）で加わりました。現在のコードを読むときに混乱しないよう、この解説書では後者も区別して触れます。</small>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>Pinia のストアとは</strong><br>
+            Vue で「複数の画面から読み書きできる値の置き場所」を作る仕組みです。案内画面から結果画面へ移動すると案内画面は破棄され、その中で宣言した変数は消えてしまいます。画面をまたいで残したい値はストアに置きます。
+        </div>
+        <div class="prereq">
+            <strong>Composable とは</strong><br>
+            <code>use</code> で始まる名前の関数で、画面の見た目を持たずにロジックだけを切り出したものです。<code>useWalkRecord</code> は画面に何も表示せず、現在地が変わったときに距離を計算してストアへ書き込むだけを担います。
+        </div>
+        <div class="prereq">
+            <strong>watch（監視）とは</strong><br>
+            Vue の機能で、指定した値が変わったときに関数を実行します。この機能では「現在地が更新されるたびに距離を測り直す」ために使っています。
+        </div>
+        <div class="prereq">
+            <strong>GPSの精度（accuracy）とは</strong><br>
+            ブラウザが返す「本当の位置はこの半径○メートルの円のどこか」という目安の数字で、小さいほど正確です。立ち止まっていても座標は数メートル揺れ続けます。現在地を取得する仕組み自体は <a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能の実装解説</a> で説明済みです。
+        </div>
+        <div class="prereq">
+            <strong>SPA はリロードで状態が消える</strong><br>
+            この画面はブラウザのメモリ上で動くため、再読み込みするとストアの中身は初期値に戻ります。実績をサーバーへ保存する処理は、このマージの時点ではまだありません。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>案内中にブラウザから届く現在地をつなぎ合わせて「実際に歩いた距離」を積み上げ、散歩結果画面の<strong>総距離・巡ったスポット・所要時間</strong>を実測値で表示する機能です。</p>
+        <p>このマージで追加されたファイルは2つだけです。</p>
+        <table>
+            <tr><th>ファイル</th><th>担うこと</th></tr>
+            <tr><td><code>frontend/src/composables/useWalkRecord.js</code></td><td>現在地の変化を監視し、「歩いたとみなせる区間」だけを選んで距離を積む</td></tr>
+            <tr><td><code>frontend/src/stores/walkStore.js</code></td><td>積んだ距離・到達したスポット・開始/終了時刻を、画面をまたいで保持する</td></tr>
+        </table>
+        <p>残りの変更は、この2つを案内画面から呼び出し、結果画面の表示元を差し替える配線です。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>関連するユーザーストーリーは <strong>US-8（散歩結果確認）</strong>「散歩の結果を確認したい。なぜなら、距離や訪れたスポットを確認したいからだ」です。</p>
+        <p>このマージの前、結果画面はルート作成時の<strong>予測値</strong>を出していました。</p>
+        <div class="code-block"><pre>&lt;!-- 変更前（routeStore = ルート作成時の予測値） --&gt;
+:distance-km="routeStore.currentRoute.distanceKm"
+:spot-count="spotCount"
+:duration-minutes="routeStore.currentRoute.durationMinutes"</pre></div>
+        <p>この値は Amazon Location Service が計算した「このルートを歩けばこれくらい」という見積もりなので、途中で近道をしても、1か所しか立ち寄らずに終了しても、いつも同じ数字が出ます。歩いた本人にとって確認する意味がありません。そこで、案内中に自分で測った値へ差し替えました。</p>
+
+        <h2>🔄 処理の流れ</h2>
+        <pre class="code-block">useLocationTracking（ブラウザの watchPosition から現在地を受け取る）
+   │
+   ▼  currentLocation / accuracy
+useWalkRecord（8段のガードで「歩いた区間」だけを選ぶ）
+   │
+   ▼  walkStore.addDistanceM(segmentDistanceM)
+walkStore（totalDistanceM に積む / 到達スポット・開始終了時刻も持つ）
+   │
+   ▼  totalDistanceKm / spotCount / elapsedMinutes
+WalkResultView → WalkResultStats（結果画面に表示）</pre>
+
+        <div class="flow-step">
+            <strong>Step 1: 案内開始と同時に計測を初期化する（RouteNavigationView.vue）</strong><br>
+            <code>onMounted</code> で <code>walkStore.startWalk()</code> を呼び、そのあとで <code>startTracking()</code>（現在地の追跡開始）を呼びます。順番が逆だと、初回の測位で積んだ距離を直後の初期化が消してしまいます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 現在地が1件届く（useLocationTracking.js）</strong><br>
+            ブラウザの <code>watchPosition</code> が位置を知らせるたびに、<code>currentLocation</code>（座標）と <code>accuracy</code>（精度）が更新されます。測位前の <code>currentLocation</code> には仮の座標（新宿）が入っていて、<code>accuracy</code> は <code>null</code> です。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 区間距離を測り、採用するか決める（useWalkRecord.js）</strong><br>
+            前回採用した地点（起点）から現在地までの距離を <code>segmentDistanceM</code>（区間距離）として計算し、ゆらぎ・飛び・精度の3種類のふるいにかけます。判定の内容は次章で詳しく説明します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 採用した区間だけを積む（walkStore.addDistanceM）</strong><br>
+            ふるいを通った区間距離を <code>totalDistanceM</code> に足し、起点を現在地へ進めます。<code>useWalkRecord</code> は値を返さず、ストアへ直接書き込みます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: 到達したスポットをストアへ写す（RouteNavigationView.vue）</strong><br>
+            到達判定そのものは既存の <code>useRouteProgress</code> が行います。その結果（<code>visitedSpotIds</code>）を <code>watch</code> で監視し、変わるたびに <code>walkStore.setVisitedSpotIds()</code> へ渡します。案内画面が破棄されても結果画面から読めるようにするためです。
+        </div>
+        <div class="flow-step">
+            <strong>Step 6: 終了ボタンで時刻を確定して遷移する（handleConfirmEnd）</strong><br>
+            確認モーダルで「終了する」が押されたら、<code>router.push</code> の<strong>前</strong>に <code>walkStore.endWalk()</code> を呼んで終了時刻を確定させます。結果画面は所要時間をそこから計算します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 7: 結果画面が実績を表示する（WalkResultView.vue）</strong><br>
+            <code>walkStore</code> の <code>totalDistanceKm</code> / <code>spotCount</code> / <code>elapsedMinutes</code> を <code>WalkResultStats</code> に渡します。測位できなかった場合は、数値の下に注記を出します。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/composables/useWalkRecord.js — どの区間を「歩いた」とみなすか</h3>
+        <p>このファイルの本体は「判定の順番」です。しきい値は3つあり、それぞれ防ぎたいものが違います。</p>
+        <table>
+            <tr><th>定数</th><th>値</th><th>これが無いと起きること</th></tr>
+            <tr><td><code>MIN_SEGMENT_DISTANCE_M</code></td><td>10 m</td><td>立ち止まっていても座標が数メートル揺れるため、歩いていない距離が増え続ける（GPSのゆらぎ）</td></tr>
+            <tr><td><code>MAX_SEGMENT_DISTANCE_M</code></td><td>200 m</td><td>徒歩では1回の測位間隔で進めない距離が一気に加算される。移動ではなく座標の誤り（測位の飛び）</td></tr>
+            <tr><td><code>MAX_MEASURABLE_ACCURACY_M</code></td><td>100 m</td><td>精度が極端に悪い測位では、歩いた分とゆらぎを区別できないのに積んでしまう</td></tr>
+        </table>
+        <div class="code-block"><pre>const MIN_SEGMENT_DISTANCE_M = 10;
+const MAX_SEGMENT_DISTANCE_M = 200;
+export const MAX_MEASURABLE_ACCURACY_M = 100;</pre></div>
+        <p>（上はコメントを省いた宣言部分です。ファイルには、それぞれの値を選んだ理由がコメントで書かれています。）</p>
+
+        <p>監視の中は番号付きのガードが8段並びます。最初の3段は次のとおりです。</p>
+        <div class="code-block"><pre>    // ① 初回の測位までは現在地がフォールバック座標（新宿）のままなので弾く。
+    // 弾かないと実際の現在地との間に巨大な偽の区間が生まれる。
+    // accuracyは実際に測位できた時点で数値が入る
+    if (accuracy.value === null) {
+      return;
+    }
+
+    // ② 測位そのものは届いたので、精度の良し悪しに関わらず記録する。
+    // 距離を積めたかどうかとは別の事実で、結果画面が
+    // 「位置情報を取得できなかった」と「歩いた距離が0だった」を言い分けるために使う
+    walkStore.markLocationFixed();
+
+    // ③ 精度が悪すぎる測位は、歩いた距離とゆらぎを区別できないため積算しない。
+    // 起点は据え置き、精度が回復した時点でそれまでの移動を測れるようにする
+    if (accuracy.value &gt; MAX_MEASURABLE_ACCURACY_M) {
+      return;
+    }</pre></div>
+
+        <p>後半で、ゆらぎと飛びを分けて扱います。<strong>どちらも距離は積まないのに、起点の扱いが逆</strong>なのがこの実装の要点です。</p>
+        <div class="code-block"><pre>    // ⑥ 飛び判定。加算はしないが起点は打ち直す。
+    // 古い起点を残すと、以降の測位でも同じ巨大な区間を測り続けてしまう
+    if (segmentDistanceM &gt; MAX_SEGMENT_DISTANCE_M) {
+      previousPosition = {
+        lat: currentLocation.value.lat,
+        lng: currentLocation.value.lng
+      };
+      return;
+    }
+
+    // ⑦ ゆらぎ判定。加算せず、起点も据え置く。
+    // 起点を据え置くことで、小さな移動が累積してしきい値を超えた時点でまとめて積める。
+    // しきい値に精度を使うのは、精度が悪い場所では揺れの幅もその分大きくなるため。
+    // ③で精度を MAX_MEASURABLE_ACCURACY_M 以下に絞っているため、このしきい値が
+    // ⑥の MAX_SEGMENT_DISTANCE_M を超えることはない（採用できる区間が必ず存在する）
+    if (segmentDistanceM &lt; Math.max(accuracy.value, MIN_SEGMENT_DISTANCE_M)) {
+      return;
+    }
+
+    // ⑧ 実際に歩いた区間として積算し、起点を現在地へ進める
+    walkStore.addDistanceM(segmentDistanceM);</pre></div>
+        <table>
+            <tr><th>ガード</th><th>条件</th><th>距離を積むか</th><th>起点（<code>previousPosition</code>）</th></tr>
+            <tr><td>① 未測位</td><td><code>accuracy</code> が <code>null</code></td><td>積まない</td><td>そのまま</td></tr>
+            <tr><td>③ 精度が悪い</td><td><code>accuracy &gt; 100</code></td><td>積まない</td><td>据え置き（回復後にまとめて測れる）</td></tr>
+            <tr><td>④ 最初の1件</td><td>起点が未設定</td><td>積まない</td><td>現在地を起点にする</td></tr>
+            <tr><td>⑤ 座標が不正</td><td>距離が <code>null</code></td><td>積まない</td><td>そのまま</td></tr>
+            <tr><td>⑥ 飛び</td><td>区間距離 &gt; 200 m</td><td>積まない</td><td><strong>打ち直す</strong></td></tr>
+            <tr><td>⑦ ゆらぎ</td><td>区間距離 &lt; max(精度, 10 m)</td><td>積まない</td><td><strong>据え置く</strong></td></tr>
+            <tr><td>⑧ 採用</td><td>上のどれにも当たらない</td><td>積む</td><td>現在地へ進める</td></tr>
+        </table>
+        <ul>
+            <li><strong>飛びで起点を打ち直す理由:</strong> 誤った座標を起点のまま残すと、次の測位でも同じ巨大な区間を測り続け、以降ずっと距離が積めなくなります。</li>
+            <li><strong>ゆらぎで起点を据え置く理由:</strong> ゆっくり歩いている人は1回の測位で数メートルしか進みません。毎回起点を進めてしまうと、どの区間も10m未満で永久に加算されません。起点を動かさなければ、合計が10mを超えた時点でまとめて積めます。</li>
+            <li>ゆらぎのしきい値に <code>accuracy</code> を混ぜているのは、精度が悪い場所では揺れの幅もその分大きくなるためです（精度が30mなら30m未満は揺れとみなす）。</li>
+        </ul>
+        <p>距離の計算そのものは <code>frontend/src/utils/geoDistance.js</code> の <code>calculateDistanceM</code>（球面上の2点間の距離を求めるハバーサイン公式）に任せています。座標として扱えない値が渡されると <code>null</code> を返すため、⑤でそれを見ています。</p>
+
+        <h3>frontend/src/stores/walkStore.js — 実績の置き場所</h3>
+        <p>ストアID は <code>'walk'</code>。ルート作成時の予測値を持つ <code>routeStore</code> とは別に作られています。責務が違い、リセットするタイミングも別（条件のリセットと実績のリセットを分けたい）だからです。</p>
+        <table>
+            <tr><th>種別</th><th>名前</th><th>内容</th></tr>
+            <tr><td>状態</td><td><code>totalDistanceM</code></td><td>積算した距離（メートル）。内部は常にメートルで持つ</td></tr>
+            <tr><td>状態</td><td><code>visitedSpotIds</code></td><td>到達したスポットのIDの一覧</td></tr>
+            <tr><td>状態</td><td><code>startedAt</code> / <code>endedAt</code></td><td>案内の開始・終了時刻（エポックミリ秒）</td></tr>
+            <tr><td>状態</td><td><code>hasLocationFix</code></td><td>一度でも現在地を採用できたか</td></tr>
+            <tr><td>算出値</td><td><code>totalDistanceKm</code></td><td>表示直前にkmへ換算する（丸め誤差を積み上げないため）</td></tr>
+            <tr><td>算出値</td><td><code>spotCount</code></td><td><code>visitedSpotIds.length</code>。経路の折れ点（waypoint）ではなく立ち寄り先の数</td></tr>
+            <tr><td>算出値</td><td><code>elapsedMinutes</code></td><td>開始から終了までの分数</td></tr>
+            <tr><td>操作</td><td><code>startWalk()</code></td><td>距離・スポット・終了時刻などを初期化し、開始時刻を入れる</td></tr>
+            <tr><td>操作</td><td><code>addDistanceM()</code> / <code>markLocationFixed()</code> / <code>setVisitedSpotIds()</code></td><td>計測結果の書き込み</td></tr>
+            <tr><td>操作</td><td><code>endWalk()</code> / <code>resetWalk()</code></td><td>終了時刻の確定 / 全状態を初期値へ戻す</td></tr>
+        </table>
+        <div class="code-block"><pre>  const elapsedMinutes = computed(() => {
+    if (startedAt.value === null) {
+      return 0;
+    }
+
+    return Math.round(
+      ((endedAt.value ?? Date.now()) - startedAt.value) / MILLISECONDS_PER_MINUTE
+    );
+  });</pre></div>
+        <p><code>endedAt</code> がまだ無い（案内中の）場合は現在時刻までを返すので、案内中でも経過時間が読めます。<code>??</code> は「左が <code>null</code> か <code>undefined</code> なら右を使う」という書き方です。</p>
+
+        <h3>frontend/src/views/RouteNavigationView.vue — 配線</h3>
+        <div class="code-block"><pre>// 距離の積算は公開する状態を持たず、現在地のwatchでwalkStoreへ直接書き込む
+useWalkRecord({ currentLocation, accuracy });
+
+// 到達状況をストアへ写し、結果画面でも巡ったスポット数が読めるようにする。
+// useRouteProgressは配列を丸ごと差し替えるためdeepは不要
+watch(visitedSpotIds, (spotIds) => {
+  walkStore.setVisitedSpotIds(spotIds);
+});</pre></div>
+        <p>現在地の追跡（<code>useLocationTracking</code>）はこの画面で1回だけ開始し、地図・次の目的地バナー・距離の積算の3者に同じ値を渡しています。それぞれが追跡を始めると <code>watchPosition</code> が二重に動いてしまうためです。</p>
+
+        <h3>frontend/src/views/WalkResultView.vue — 表示元の差し替え</h3>
+        <div class="code-block"><pre>      &lt;WalkResultStats
+        :distance-km="walkStore.totalDistanceKm"
+        :spot-count="walkStore.spotCount"
+        :duration-minutes="walkStore.elapsedMinutes"
+      /&gt;</pre></div>
+        <p><code>WalkResultStats</code> は受け取った3つの数値を「総距離 / 巡ったスポット / 所要時間」として並べるだけの表示部品です。props はすべて <code>Number</code> の必須なので、ストア側は <code>null</code> を返さず必ず数値（初期値は0）を返すようにしてあります。</p>
+        <p>このマージの時点では、測位できなかった場合だけ注記を出していました。</p>
+        <div class="code-block"><pre>      &lt;p
+        v-if="!walkStore.hasLocationFix"
+        class="hint"
+        role="status"
+      &gt;
+        位置情報を取得できなかったため、実績を計測できませんでした
+      &lt;/p&gt;</pre></div>
+        <p><code>role="status"</code> は、画面読み上げソフトにこの文章の出現を伝えるための指定です。</p>
+
+        <h3>計測状態（measurementStatus）— 対象期間より後の追補</h3>
+        <p>現在の <code>walkStore.js</code> には、上の <code>hasLocationFix</code> だけでは言い分けられない状況のために、3値の <code>measurementStatus</code> が入っています。これは <code>dc87c1c</code>（2026-10-14 / <code>feature/NZ-176</code>）で加わったもので、<strong>対象期間の外</strong>です。段階1のコードを読むときは存在しない点に注意してください。</p>
+        <div class="code-block"><pre>  const measurementStatus = computed(() => {
+    if (hasLocationFix.value === false) {
+      return MEASUREMENT_STATUS.UNAVAILABLE;
+    }
+
+    if (hasMeasurementGap.value === true) {
+      return MEASUREMENT_STATUS.PARTIAL;
+    }
+
+    if (totalDistanceM.value === 0) {
+      return MEASUREMENT_STATUS.PARTIAL;
+    }
+
+    return MEASUREMENT_STATUS.COMPLETE;
+  });</pre></div>
+        <table>
+            <tr><th>値</th><th>どんな状態か</th><th>結果画面の注記</th></tr>
+            <tr><td><code>unavailable</code></td><td>一度も測位できていない</td><td>位置情報を取得できなかったため、実績を計測できませんでした</td></tr>
+            <tr><td><code>partial</code></td><td>測位はできたが、途切れた区間がある／距離が0のまま</td><td>一部の区間を計測できなかったため、実際より短く表示されている可能性があります</td></tr>
+            <tr><td><code>complete</code></td><td>測位できて距離も積めた</td><td>注記なし</td></tr>
+        </table>
+        <p>2値（測れた／測れなかった）ではなく3値にしているのは、「測れてはいるが足りていない」という状態が実際に起きるためです。トンネルで測位が止まった、画面を消していた、精度が悪い区間が続いた、といった場合に数値は出ますが実際より短くなります。そこで<strong>数値は常に表示したうえで、足りない可能性を注記で正直に伝える</strong>形にしています。判定は強い事実から順に見ます（測位できていない → 欠落を検知した → 距離が0のまま）。</p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>実績は1回の散歩分しか残らず、リロードで消える</strong><br>
+            <code>walkStore</code> はブラウザのメモリ上にあるだけで、このマージの時点では保存先を持ちません。結果画面で再読み込みすると値は0に戻り、「ホームに戻る」を押すと <code>resetWalk()</code> で消えます。累積距離や散歩回数といった長期の実績は対象外で、サーバーへ保存する処理（<code>useWalkResultSave</code>）は対象期間より後のマージで追加されました。
+        </div>
+        <div class="important">
+            <strong><code>hasLocationFix</code> は「距離を積めた」ではなく「測位が届いた」</strong><br>
+            精度が悪くて距離を積めなかった場合でも、測位そのものが届けば <code>true</code> になります（ガード②）。これは「位置情報を取得できなかった」と「歩いた距離が0だった」を結果画面で言い分けるための区別です。混同すると、注記が出る条件を読み間違えます。
+        </div>
+        <div class="important">
+            <strong>しきい値は単独で変えない</strong><br>
+            <code>MAX_MEASURABLE_ACCURACY_M</code>（100m）は、必ず <code>MAX_SEGMENT_DISTANCE_M</code>（200m）より小さくしておく必要があります。ゆらぎ判定のしきい値は <code>max(精度, 10m)</code> なので、精度の上限が200mを超えると「飛びでもゆらぎでもない区間」が存在しなくなり、距離が一切積まれなくなります。
+        </div>
+        <div class="important">
+            <strong>実測値は予測値より短く出るのが普通</strong><br>
+            10m未満の細かい往復や、精度が悪い区間の移動は捨てられます。GPSの軌跡を直線でつないで測るため、カーブも内側を通ります。ルート作成時の距離と一致しなくても不具合ではありません。
+        </div>
+        <div class="important">
+            <strong><code>spot</code> と <code>waypoint</code> を混同しない</strong><br>
+            「巡ったスポット」は立ち寄り先（<code>spot</code>）の数です。経路を描くための座標点（<code>waypoint</code>、1ルートに数十個）を数えると、4箇所のはずが37箇所と表示されます。エラーにならないため気付きにくい不具合です。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行します（フロントとローカルAPIが同時に起動します）。</li>
+            <li>ホーム画面で条件を選んでルートを作成し、提案 → 決定で案内画面へ進みます。</li>
+            <li>Chrome の開発者ツールで位置を動かします。F12 →「︙」→「More tools」→「Sensors」→「Location」で「Other…」を選び、緯度・経度を入力します。</li>
+            <li>数十メートル〜百メートル程度ずつ動かし、終了後の「総距離」が動かした分だけ増えることを確認します。
+                <ul>
+                    <li>ほんの少し（10m未満）だけ動かした場合は増えません（ゆらぎ判定）。</li>
+                    <li>一度に200mより遠くへ飛ばした場合も増えません（飛び判定）。</li>
+                </ul>
+            </li>
+            <li>スポットの座標に40m以内まで近づけると「巡ったスポット」が増えることを確認します。</li>
+            <li>「終了」→「終了する」で結果画面に進み、「所要時間」が案内を始めてからの分数になっていることを確認します。</li>
+            <li>位置情報の許可をブロックしたまま案内を終了し、「位置情報を取得できなかったため、実績を計測できませんでした」が出ることを確認します。</li>
+            <li>「ホームに戻る」からもう一度ルートを作って案内・終了し、前回の距離やスポット数が積み上がっていないことを確認します。</li>
+            <li>静的検査とビルド: <code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code>。</li>
+            <li>自動テスト: <code>frontend/</code> で <code>npm test</code>（Vitest）。<code>src/stores/__tests__/walkStore.test.js</code> が <code>measurementStatus</code> の4通りを検証します。<small>※ このテストは対象マージの時点では存在せず、<code>dc87c1c</code> で追加されたものです。段階1の検証は lint とビルド、手動確認で行われました。</small></li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                    <th>由来のブランチ</th>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useWalkRecord.js</code></td>
+                    <td>（新規）現在地を監視し、ゆらぎと飛びを除いた区間距離だけをストアへ積む</td>
+                    <td><code>feature/NZ-230</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/stores/walkStore.js</code></td>
+                    <td>（新規）距離・到達スポット・開始終了時刻を画面をまたいで保持する Pinia ストア</td>
+                    <td><code>feature/NZ-230</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteNavigationView.vue</code></td>
+                    <td>計測の開始・終了、<code>useWalkRecord</code> の呼び出し、到達スポットの同期</td>
+                    <td><code>feature/NZ-230</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/WalkResultView.vue</code></td>
+                    <td>集計値の表示元を予測値から実績へ差し替え、測位できなかった場合の注記を追加</td>
+                    <td><code>feature/NZ-230</code></td>
+                </tr>
+                <tr>
+                    <td><code>.kiro/steering/naming-glossary.md</code></td>
+                    <td><code>totalDistanceM</code> / <code>segmentDistanceM</code> / <code>hasLocationFix</code> / 3つのしきい値 / <code>startedAt</code> / <code>endedAt</code> / <code>elapsedMinutes</code> を登録</td>
+                    <td><code>feature/NZ-230</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/utils/geoDistance.js</code></td>
+                    <td>（変更なし・利用元）2点間の直線距離を求める <code>calculateDistanceM</code></td>
+                    <td>既存（<code>feature/NZ-153</code>）</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useLocationTracking.js</code></td>
+                    <td>（変更なし・利用元）<code>watchPosition</code> で現在地と精度を供給する</td>
+                    <td>既存（<code>feature/NZ-153</code>）</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/.agents/tasks/walk-record-stage1/</code></td>
+                    <td>実装計画・レビュー・検証の記録（<code>plan.md</code> / <code>review.md</code> / <code>verification.md</code>）</td>
+                    <td><code>feature/NZ-230</code></td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr>
+                <th>ドキュメント</th>
+                <th>何が書いてあるか</th>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td>
+                <td>US-8（散歩結果確認）の受け入れ条件。「今後追加予定の要素」に、実績の保存先が未定であることも書かれています</td>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td>
+                <td>本文に出てくる <code>totalDistanceM</code> / <code>segmentDistanceM</code> / <code>measurementStatus</code> などの定義。<code>spot</code> と <code>waypoint</code> の使い分けも載っています</td>
+            </tr>
+            <tr>
+                <td><a href="../設計書.md">設計書</a></td>
+                <td>「4.3 状態管理」に Pinia ストアの書き方、「4.2」にストアを永続化していない（リロードで初期化される）理由。<code>walkStore</code> はまだ未記載です</td>
+            </tr>
+            <tr>
+                <td><a href="../仕様書.md">仕様書</a></td>
+                <td>「4.1 URLと画面の対応」で <code>/result</code> が散歩結果画面であること。「3.2 未実装」の記述は今回の変更が反映されておらず古いままです</td>
+            </tr>
+            <tr>
+                <td><a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能の実装解説</a></td>
+                <td>前提になる機能。<code>watchPosition</code> で現在地を取り続ける仕組みと権限の扱い</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示の実装解説</a></td>
+                <td>到達判定（40m以内）と <code>visitedSpotIds</code> の作り方。この機能が「巡ったスポット」として受け取る値の出どころ</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>
