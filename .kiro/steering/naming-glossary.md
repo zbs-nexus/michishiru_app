@@ -156,10 +156,27 @@ inclusion: always
 | 写真表示URL | photoUrls | 写真表示用の署名付きGET URLの配列（getSpotが返す） |
 | 作成者本人か | isOwner | 呼び出し元がその場所の作成者か。本人は名前・ジャンル・写真も編集できる |
 | 自分の口コミ一覧 | myReviews | 自分が投稿した口コミ（場所つき）。地図のオレンジピン表示に使う |
+| 口コミが付いた場所の一覧 | reviewSpots | 誰かが口コミを投稿した場所の全件。自分のぶんも含む |
+| 他の人の口コミの場所 | otherReviewSpots | `reviewSpots` から自分が投稿済みの場所を除いたもの。地図の紫ピン表示に使う |
+| 自分の口コミを表示するか | showMyReviews | オレンジピンの表示切り替え |
+| 他の人の口コミを表示するか | showOtherReviews | 紫ピンの表示切り替え |
 | ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
+| 口コミフォームの対象座標 | reviewTargetPosition | 投稿フォームが対象にしている座標。長押しした位置、または選んだピンの位置 |
+| 新規投稿の場所のピン | newSpotPin | 赤いピンの座標。まだ口コミが無い場所にだけ立てる |
+| 投稿済みのピンから開いたか | isExistingSpotSelected | 真のとき赤いピンを立てない（長押しと区別する） |
 | 丸めセル | geoCell | 近接する場所を同一視するためのグリッドのセルキー。半径40mの候補絞り込みに使う |
 
 `location`（単独）は使わない。口コミ対象の場所の名称は `spotName` に統一する（辞書の「使ってはいけない表記揺れ」で `place` / `location` を `spot` に寄せているため）。
+
+#### 口コミのピンの色
+
+色と意味は1対1で固定する。色を増やす場合はこの表に追記する。
+
+| 色 | 意味 | コード上のクラス |
+|---|---|---|
+| 赤 | 新規で口コミ投稿をする場所 | `location-pin` |
+| オレンジ | 自分が口コミ投稿済みの場所 | `review-pin-mine` |
+| 紫 | 他の人の口コミ投稿の場所 | `review-pin-other` |
 
 ### マスコット
 
@@ -350,3 +367,4 @@ inclusion: always
 | 2026/10/07 | 欠落の判定を継続時間のしきい値に変更したことに伴い MEASUREMENT_GAP_THRESHOLD_MS を追加 |
 | 2026/10/07 | 実績のDB保存に伴い walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults を追加 |
 | 2026/10/07 | 退避した実績を持ち主ごとに送り直すようにしたことに伴い ownerUsername を追加 |
+| 2026/10/14 | 他の人の口コミの紫ピン表示に伴い「口コミ」へ reviewSpots / otherReviewSpots / showMyReviews / showOtherReviews / reviewTargetPosition / newSpotPin / isExistingSpotSelected を追加。ピンの色と意味の対応表（赤＝新規 / オレンジ＝自分 / 紫＝他の人）を明記 |
