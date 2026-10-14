@@ -89,6 +89,10 @@ const handleReturnHome = () => {
     class="is-result"
     :has-content-padding="false"
   >
+    <template #background>
+      <div class="paper-map-bg" />
+    </template>
+
     <BaseToast
       v-if="toastMessage"
       :message="toastMessage"

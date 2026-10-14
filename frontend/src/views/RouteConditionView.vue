@@ -117,9 +117,16 @@ const handleSignOut = async () => {
 <template>
   <RouteLoadingOverlay v-if="isCreating" />
 
-  <DefaultLayout v-else>
+  <!--
+    is-home は、この画面だけの見た目（見出しの扱い・下部の余白）を
+    global.css の .screen.is-home から当てるための目印。
+  -->
+  <DefaultLayout
+    v-else
+    class="is-home"
+  >
     <template #background>
-      <div class="header-bg" />
+      <div class="paper-map-bg" />
     </template>
 
     <BaseToast
@@ -173,8 +180,14 @@ const handleSignOut = async () => {
         @toggle-distance-random="routeStore.toggleDistanceRandom"
       />
 
-      <!-- 未選択でも押せるようにし、押下時にポップアップで不足を知らせる -->
-      <BaseButton @click="handleCreateRoute">
+      <!--
+        未選択でも押せるようにし、押下時にポップアップで不足を知らせる。
+        画面の下端に固定して、条件を見ながらいつでも押せるようにする。
+      -->
+      <BaseButton
+        is-full-width
+        @click="handleCreateRoute"
+      >
         ルートを作成
       </BaseButton>
     </template>

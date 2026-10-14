@@ -82,11 +82,11 @@ const isError = computed(() => props.variant === 'error');
   width: calc(100% - 40px);
   max-width: 390px;
   padding: 14px 16px;
-  border-radius: 12px;
-  border: 2px solid var(--border-gold);
-  border-left: 4px solid var(--danger);
+  border-radius: 10px;
+  border: 2px solid var(--border-ink);
+  border-left: 5px solid var(--danger);
   background: var(--surface);
-  box-shadow: 0 4px 16px rgba(58, 46, 32, 0.22);
+  box-shadow: var(--shadow-raised);
   animation: toast-slide-in 0.2s ease-out;
 }
 
@@ -134,12 +134,11 @@ const isError = computed(() => props.variant === 'error');
  */
 .toast.is-omakase {
   padding: 12px 14px;
-  border: 2px solid transparent;
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg, var(--surface) 0%, var(--bg-deep) 100%) padding-box,
-    linear-gradient(135deg, var(--accent-gold) 0%, var(--primary-light) 100%) border-box;
-  box-shadow: 0 8px 24px rgba(58, 46, 32, 0.28);
+  border: 2px solid var(--border-ink);
+  border-left-width: 2px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--surface) 0%, var(--bg-deep) 100%);
+  box-shadow: var(--shadow-raised);
   animation: toast-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -147,9 +146,9 @@ const isError = computed(() => props.variant === 'error');
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
-  border: 2px solid var(--border-gold);
-  box-shadow: 0 3px 8px rgba(58, 46, 32, 0.32);
+  border-radius: 10px;
+  border: 2px solid var(--border-ink);
+  box-shadow: var(--shadow);
   animation: toast-logo-bounce 0.6s ease-out 0.35s;
 }
 

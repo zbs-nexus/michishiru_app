@@ -125,11 +125,11 @@ const distanceLabel = computed(() => {
   width: calc(100% - 24px);
   max-width: 406px;
   padding: 10px 16px 10px 12px;
-  border-radius: 16px;
-  border: 2px solid var(--border-gold);
+  border-radius: 10px;
+  border: 2px solid var(--border-ink);
   border-left: 5px solid var(--accent-green);
   background: var(--surface);
-  box-shadow: 0 4px 16px rgba(58, 46, 32, 0.28);
+  box-shadow: var(--shadow-raised);
 }
 
 /* 文言の側。マスコットの右に縦並びで置く */
