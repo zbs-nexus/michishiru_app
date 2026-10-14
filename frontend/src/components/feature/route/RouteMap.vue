@@ -71,19 +71,10 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  /** 長押しで立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
+  /** 新規で口コミを投稿する場所に立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
   pinPosition: {
     type: Object,
     default: null
-  },
-  /**
-   * ピンを中央へ寄せるときの、地図中央からの縦のずれ（ピクセル）。
-   * 画面上部のバナーや下部のフォームで地図が隠れる場合に、
-   * 見えている範囲の中央へピンが来るよう親が指定する。下方向が正。
-   */
-  pinOffsetY: {
-    type: Number,
-    default: 0
   },
   /** 自分が投稿した口コミの場所（{ spotId, position, spotName } の配列） */
   myReviewSpots: {
@@ -94,10 +85,20 @@ const props = defineProps({
   showMyReviews: {
     type: Boolean,
     default: false
+  },
+  /** 他の人が投稿した口コミの場所（{ spotId, position, spotName } の配列） */
+  otherReviewSpots: {
+    type: Array,
+    default: () => []
+  },
+  /** 他の人の口コミの紫ピンを表示するかどうか */
+  showOtherReviews: {
+    type: Boolean,
+    default: false
   }
 });
 
-const emit = defineEmits(['longPressMap', 'selectMyReview']);
+const emit = defineEmits(['longPressMap', 'selectReviewSpot']);
 
 /** ルートの経路を保持するソースのID */
 const ROUTE_SOURCE_ID = 'route';
@@ -133,7 +134,7 @@ let markers = [];
 let originMarker = null;
 let currentLocationMarker = null;
 let pinMarker = null;
-let myReviewMarkers = [];
+let reviewMarkers = [];
 let recenterControl = null;
 
 /**
@@ -390,8 +391,11 @@ const createPinElement = () => {
 };
 
 /**
- * @description 長押しで立てる赤いピンを描き直す。
+ * @description 新規投稿の場所に立てる赤いピンを描き直す。
  * 座標が無い場合はピンを消す。
+ *
+ * 地図は動かさない。押した場所にそのままピンが残るようにするため、
+ * ここで中央へ寄せる（easeTo）ことはしない。
  * @returns {void}
  */
 const renderPinMarker = () => {
@@ -411,59 +415,80 @@ const renderPinMarker = () => {
   } else {
     pinMarker.setLngLat(lngLat);
   }
-
-  // 立てたピンが、見えている地図範囲の中央に来るように寄せる。
-  // offsetは地図中央からのずれ（上部バナー・下部フォームの分だけ親が指定する）
-  map.easeTo({ center: lngLat, offset: [0, props.pinOffsetY] });
 };
 
+/** 自分が投稿した口コミのピン（オレンジ）を表す修飾クラス */
+const MY_REVIEW_PIN_CLASS = 'review-pin-mine';
+
+/** 他の人が投稿した口コミのピン（紫）を表す修飾クラス */
+const OTHER_REVIEW_PIN_CLASS = 'review-pin-other';
+
 /**
- * @description 自分の口コミ（オレンジピン）のDOM要素を作る。
+ * @description 投稿済みの口コミのピンのDOM要素を作る。
  * 回転がMapLibreの位置transformと競合しないよう、内側の要素で回転させる。
+ * 支援技術からも押せるようボタンにし、どの場所のピンかを読み上げさせる。
+ * @param {string} modifierClass 色を決める修飾クラス
+ * @param {string} spotName 場所の名称（読み上げ用）
  * @returns {HTMLElement} マーカーとして使う要素
  */
-const createMyReviewMarkerElement = () => {
-  const container = document.createElement('div');
-  container.className = 'my-review-pin';
+const createReviewPinElement = (modifierClass, spotName) => {
+  const container = document.createElement('button');
+  container.className = `review-pin ${modifierClass}`;
+  container.type = 'button';
+  container.setAttribute('aria-label', `${spotName ?? ''}の口コミを見る`);
 
   const head = document.createElement('div');
-  head.className = 'my-review-pin-head';
+  head.className = 'review-pin-head';
   container.appendChild(head);
 
   return container;
 };
 
 /**
- * @description 自分の口コミのオレンジピンを描き直す。
- * 表示オフのときは消す。ピンをタップするとその場所を親へ通知する。
- * @returns {void}
+ * @description 口コミの場所の一覧からマーカーを作る。
+ * ピンを押すとその場所を親へ通知する。
+ * @param {Array<{position: {lng: number, lat: number}, spotName: string}>} spots 場所の一覧
+ * @param {string} modifierClass 色を決める修飾クラス
+ * @returns {object[]} 生成したマーカー
  */
-const renderMyReviewMarkers = () => {
-  myReviewMarkers.forEach((marker) => marker.remove());
-  myReviewMarkers = [];
-
-  if (!props.showMyReviews) {
-    return;
-  }
-
-  myReviewMarkers = props.myReviewSpots
+const toReviewMarkers = (spots, modifierClass) =>
+  spots
     .filter(
       (spot) =>
         Number.isFinite(spot.position?.lng) && Number.isFinite(spot.position?.lat)
     )
     .map((spot) => {
-      const element = createMyReviewMarkerElement();
+      const element = createReviewPinElement(modifierClass, spot.spotName);
 
       element.addEventListener('click', (event) => {
         // 地図のクリックや長押し判定に伝播させない
         event.stopPropagation();
-        emit('selectMyReview', { lng: spot.position.lng, lat: spot.position.lat });
+        emit('selectReviewSpot', { lng: spot.position.lng, lat: spot.position.lat });
       });
 
       return new Marker({ element, anchor: 'bottom' })
         .setLngLat([spot.position.lng, spot.position.lat])
         .addTo(map);
     });
+
+/**
+ * @description 投稿済みの口コミのピンを描き直す。
+ * 自分の口コミはオレンジ、他の人の口コミは紫で出し、表示オフのぶんは作らない。
+ * @returns {void}
+ */
+const renderReviewMarkers = () => {
+  reviewMarkers.forEach((marker) => marker.remove());
+  reviewMarkers = [];
+
+  if (props.showMyReviews) {
+    reviewMarkers.push(...toReviewMarkers(props.myReviewSpots, MY_REVIEW_PIN_CLASS));
+  }
+
+  if (props.showOtherReviews) {
+    reviewMarkers.push(
+      ...toReviewMarkers(props.otherReviewSpots, OTHER_REVIEW_PIN_CLASS)
+    );
+  }
 };
 
 /**
@@ -589,7 +614,7 @@ onMounted(() => {
     renderSpotMarkers();
     renderCurrentLocationMarker();
     renderPinMarker();
-    renderMyReviewMarkers();
+    renderReviewMarkers();
     fitToRoute();
   });
 });
@@ -635,15 +660,20 @@ watch(
   { deep: true }
 );
 
-// 自分の口コミピンの一覧・表示切り替えに追従する
+// 口コミピンの一覧・表示切り替えに追従する
 watch(
-  () => [props.myReviewSpots, props.showMyReviews],
+  () => [
+    props.myReviewSpots,
+    props.showMyReviews,
+    props.otherReviewSpots,
+    props.showOtherReviews
+  ],
   () => {
     if (map === null || !map.isStyleLoaded()) {
       return;
     }
 
-    renderMyReviewMarkers();
+    renderReviewMarkers();
   },
   { deep: true }
 );
@@ -659,8 +689,8 @@ onBeforeUnmount(() => {
   }
   pinMarker?.remove();
   pinMarker = null;
-  myReviewMarkers.forEach((marker) => marker.remove());
-  myReviewMarkers = [];
+  reviewMarkers.forEach((marker) => marker.remove());
+  reviewMarkers = [];
   // コントロールは map.remove() で破棄されるため、参照だけ落とす
   recenterControl = null;
   map?.remove();

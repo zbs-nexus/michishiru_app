@@ -43,15 +43,10 @@ defineProps({
     type: Boolean,
     default: false
   },
-  /** 長押しで立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
+  /** 新規で口コミを投稿する場所に立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
   pinPosition: {
     type: Object,
     default: null
-  },
-  /** ピンを中央へ寄せるときの、地図中央からの縦のずれ（ピクセル）。下方向が正 */
-  pinOffsetY: {
-    type: Number,
-    default: 0
   },
   /** 自分が投稿した口コミの場所の一覧 */
   myReviewSpots: {
@@ -62,10 +57,20 @@ defineProps({
   showMyReviews: {
     type: Boolean,
     default: false
+  },
+  /** 他の人が投稿した口コミの場所の一覧 */
+  otherReviewSpots: {
+    type: Array,
+    default: () => []
+  },
+  /** 他の人の口コミの紫ピンを表示するかどうか */
+  showOtherReviews: {
+    type: Boolean,
+    default: false
   }
 });
 
-defineEmits(['longPressMap', 'selectMyReview']);
+defineEmits(['longPressMap', 'selectReviewSpot']);
 </script>
 
 <template>
@@ -79,11 +84,12 @@ defineEmits(['longPressMap', 'selectMyReview']);
         :current-accuracy="currentAccuracy"
         :is-long-press-enabled="isLongPressEnabled"
         :pin-position="pinPosition"
-        :pin-offset-y="pinOffsetY"
         :my-review-spots="myReviewSpots"
         :show-my-reviews="showMyReviews"
+        :other-review-spots="otherReviewSpots"
+        :show-other-reviews="showOtherReviews"
         @long-press-map="$emit('longPressMap', $event)"
-        @select-my-review="$emit('selectMyReview', $event)"
+        @select-review-spot="$emit('selectReviewSpot', $event)"
       />
     </div>
     <div
