@@ -164,6 +164,10 @@ inclusion: always
 | 口コミフォームの対象座標 | reviewTargetPosition | 投稿フォームが対象にしている座標。長押しした位置、または選んだピンの位置 |
 | 新規投稿の場所のピン | newSpotPin | 赤いピンの座標。まだ口コミが無い場所にだけ立てる |
 | 投稿済みのピンから開いたか | isExistingSpotSelected | 真のとき赤いピンを立てない（長押しと区別する） |
+| 寄せる対象の座標 | focusPosition | 見えている地図範囲の中央へ持ってくる座標。ピンを描く `pinPosition` とは別概念 |
+| 寄せ位置の縦のずれ | focusOffsetY | 地図中央からの縦のずれ（ピクセル）。バナーとフォームで隠れるぶんを親が測って渡す。下方向が正 |
+| フォームを全体表示しているか | isExpanded | 投稿フォームの高さの状態。偽は半分（42vh）、真は全体（85vh） |
+| スワイプと判定する最小の移動量 | SWIPE_THRESHOLD_PX | 上下スワイプを展開・収納とみなす移動量（ピクセル）。`ReviewPostForm.vue` の定数 |
 | 丸めセル | geoCell | 近接する場所を同一視するためのグリッドのセルキー。半径40mの候補絞り込みに使う |
 
 `location`（単独）は使わない。口コミ対象の場所の名称は `spotName` に統一する（辞書の「使ってはいけない表記揺れ」で `place` / `location` を `spot` に寄せているため）。
@@ -368,3 +372,4 @@ inclusion: always
 | 2026/10/07 | 実績のDB保存に伴い walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults を追加 |
 | 2026/10/07 | 退避した実績を持ち主ごとに送り直すようにしたことに伴い ownerUsername を追加 |
 | 2026/10/14 | 他の人の口コミの紫ピン表示に伴い「口コミ」へ reviewSpots / otherReviewSpots / showMyReviews / showOtherReviews / reviewTargetPosition / newSpotPin / isExistingSpotSelected を追加。ピンの色と意味の対応表（赤＝新規 / オレンジ＝自分 / 紫＝他の人）を明記 |
+| 2026/10/14 | 投稿フォームのボトムシート化とピンの寄せ位置の分離に伴い focusPosition / focusOffsetY / isExpanded / SWIPE_THRESHOLD_PX を追加。ピンを描く座標（pinPosition）と可視範囲の中央へ寄せる座標（focusPosition）を別概念として区別する |
