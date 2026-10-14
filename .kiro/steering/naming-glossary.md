@@ -71,6 +71,8 @@ inclusion: always
 | 次の目的地までの距離 | distanceToNextM | 現在地から次の目的地までの直線距離（メートル） |
 | 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
 | 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
+| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。`useRouteProgress.js` の関数 |
+| 到達済みのスタンプの文字 | VISITED_STAMP_LABEL | 到達済みのスポットのマーカーに番号の代わりに出す文字（`済`）。`RouteMap.vue` の定数 |
 | 到達判定の距離 | ARRIVAL_THRESHOLD_M | 到達とみなす距離（メートル）。`useRouteProgress.js` の定数 |
 | 距離表示の丸め単位 | DISTANCE_ROUNDING_UNIT_M | 距離表示を丸める単位（メートル）。`RouteNextSpotBanner.vue` の定数 |
 | 採用する測位精度の上限 | MAX_ACCEPTABLE_ACCURACY_M | この値より精度が悪い測位は現在地に採用しない（メートル）。`useLocationTracking.js` の定数 |
@@ -368,3 +370,4 @@ inclusion: always
 | 2026/10/07 | 実績のDB保存に伴い walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults を追加 |
 | 2026/10/07 | 退避した実績を持ち主ごとに送り直すようにしたことに伴い ownerUsername を追加 |
 | 2026/10/14 | 他の人の口コミの紫ピン表示に伴い「口コミ」へ reviewSpots / otherReviewSpots / showMyReviews / showOtherReviews / reviewTargetPosition / newSpotPin / isExistingSpotSelected を追加。ピンの色と意味の対応表（赤＝新規 / オレンジ＝自分 / 紫＝他の人）を明記 |
+| 2026/10/14 | 案内中に手動で次の目的地へ進めるボタンの追加に伴い「ルートとスポット」へ advanceToNextSpot / VISITED_STAMP_LABEL を追加 |
