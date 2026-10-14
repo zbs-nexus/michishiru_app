@@ -1,86 +1,126 @@
-# API Gateway に Cognito オーソライザーを付け、フロントが idToken を送る
+# 段階3b: 散歩実績のDB保存（ユーザー単位） — イテレーション2のレビュー
 
-ログイン後に呼ぶ3メソッド（`GET`/`POST /api/v1/routes`、`GET /api/v1/conditions`）を API Gateway の Cognito オーソライザーで保護し、フロントの `routeService` / `conditionService` が `fetchAuthSession` 由来の idToken を `Authorization` ヘッダーに載せるようにした変更。パスワード再設定の照合API（`POST /api/v1/password-reset-verifications`）はログイン前に呼ぶ必要があるため意図的に未認証のまま残し、その事実を IaC のテストで「未認証はこの1件だけ」と固定している。ローカルのAPIハーネスは本番のイベント形に合わせて `requestContext.authorizer.claims` を模倣するだけで検証はしない。steering 2ファイルも「API の認可」を未決事項から確定事項へ移した。
+前回のレビュー（verdict: CHANGES_REQUESTED / 指摘8件）を受けた修正を含む差分を見直した。blocking だった退避キューの持ち主なし問題は `{ walkId, ownerUsername, walkResult }` の形と「サインイン中の本人の分だけ送る」判定で閉じ、残り7件（`endedAt` の書式、`repository.js` のテスト、結果画面と `App.vue` の配線のテスト、`grant` の絞り込み、非表示と測位中断の二重計上、`startedAt` 未設定のガード、サーバー文言の非表示）もすべて実装・テストで固定されている。手元で再実行した検証も基準を上回った（backend 91件/12 suites、frontend lint 0・140件/16ファイル、iac build・20件）。
 
-Watch for: ブロッキングな穴は無い（3メソッドすべてに `authorizer` + `authorizationType: COGNITO` が付き、`Bearer ` 接頭辞なし、トークンのモジュールスコープキャッシュなし＝いずれも確認済み）。残るのは文言経路の不整合 — `ERROR_MESSAGES.NoValidSession` を追加したが、ルート作成／検索条件の経路は `toAuthErrorMessage` を通らないためこの文言に到達しない（confirmed）。401 の本文がそのまま画面に出る点も未解消（likely、計画で対象外と明記）。
+Watch for: 保存は結果画面の `onMounted` で起こすため、ブラウザの戻る／進むで結果画面が再マウントされると**別の `walkId`** で2件目が保存される（`attribute_not_exists(pk)` は別キーなので効かない。non-blocking / likely）。低精度の測位が続く区間は、その測位が現在地として採用されるまで中断として数え始めない（最大10秒遅れ。non-blocking / confirmed）。実績テーブルには `deletionProtection` も PITR も無く、隣のユーザープールとは保護の水準が揃っていない（non-blocking / confirmed）。
 
 **Verdict**: APPROVED
 
-## High-level view
+## 高レベル像
 
-IaC 側は `MethodOptions` を1つの定数（`cognitoAuthorized`）にまとめ、3箇所の `addMethod` へ同じオブジェクトを渡す形。個別に書き写すより漏れにくく、`authorizationType` も省略せず明示している。既存の論理ID（`UserPool` / `MichishiruApi` 等）は変更なし、CloudFront の `cachePolicy` / `originRequestPolicy` も差分に含まれない。
+冪等性の中核に初めてテストが通った。`repository.test.js` は `DynamoDBDocumentClient.from` を差し替えて送信コマンドを記録し、Put の `attribute_not_exists(pk)`、`pk`/`sk` の組み立て、累計の `ADD` 式と4つの値、`TOTAL` のキー、`TransactionCanceledException` の `ConditionalCheckFailed` 読み替え、条件エラーを再試行しないことを固定している。式のタイプミスがデプロイまで見えない状態は解消された。
 
-テストは「NONE が0件」ではなく「COGNITO_USER_POOLS 以外のメソッドはちょうど1件で、それは `password-reset-verifications` リソースのもの」という形に変えている。レビュー観点の文面（NONE が0件）とは異なるが、実コードには照合APIという4つ目のメソッドがあり、これはログイン前に呼べなければ機能しない。計画書と steering の「照合APIの保護」行の両方がこの前提を明記しているため、この読み替えは正しく、しかも「無認可のメソッドを足したら落ちる」という保護の意図は保てている。論理IDを直書きせず `findResources` から引いているのも CDK の生成規則への依存を避けていて良い。
+退避と再送の持ち主問題は、退避項目に `ownerUsername` を持たせ、`flushPendingWalkResults` が①未サインインなら送らない②持ち主が一致する項目だけを送り他人の分は残す、の2段で閉じている。送信ボディには持ち主を載せないため、サーバーが `claims.sub` だけで利用者を決める前提も崩れていない。残るのは「誰の分とも一致しない項目」の扱いで、`ownerUsername` が null の項目や旧形式の項目は送られも捨てられもせず、20件の上限に押し出されるまで残る。
 
-フロントは `fetchIdToken` をリクエストごとに呼び、取得できなければ `null` を返さず `name = 'NoValidSession'` の例外を投げる。キャッシュしない理由（idToken は1時間、散歩はそれより長い、`fetchAuthSession` がリフレッシュトークンで自動更新する）がコメントに残っている。ヘッダー値はトークンそのもので、新規テストが `'dummy-id-token'` との厳密一致で接頭辞なしを固定している。
+キーに入る値の縛りは `walkId`（UUID v4）に加えて `startedAt` / `endedAt`（UTCのISO 8601の正規表現＋実在する日時）まで広がり、非ISO形式・オフセット付き・制御文字を挟んだ `#` 混じりはいずれも弾かれる。利用者の識別も引き続きハンドラの `claims.sub` 1か所だけで、Validator はボディの `userId` を検証も採用もしない。
 
-ただしコメントが主張する「セッション切れの文言への変換は `toAuthErrorMessage` 側の責務」は現状成り立っていない。`toAuthErrorMessage` の呼び出しは `authStore.js` だけで、ルート作成・検索条件の composable は `error.message` をそのまま表示する。実害は文言の質（「有効なセッションがありません」が出る）に留まるが、追加した辞書エントリは今の経路では死んでいる。
+権限は `grant(fn, 'dynamodb:PutItem', 'dynamodb:UpdateItem')` へ絞られた。一方でテーブル自身の保護は `removalPolicy` だけで、スタック削除以外の経路（テーブルの直接削除、誤った項目更新）には備えがない。履歴取得APIも段階3bに無いため、累計が壊れたときに元の値から作り直す手段もない。
 
-`tools/localApiServer.js` は `Authorization` の中身を一切見ない。`127.0.0.1` 限定・デプロイ対象外という根拠と「検証はしない」旨がコメントにあり、ダミー値も UUID 形式を避けている（`local-dev-user` / `local-dev`）。スコープは `backend/` / `router/index.js` / composables に一切触れておらず、steering も naming-glossary が追加3行・削除0行、前提条件が追加3行・削除2行（API Gateway 行の書き換え1行と「API の認可」行の除去1行）で計画どおり。
+計測の欠落判定は、中断の累積に非表示側と測位側の両方を流す形のまま、`hiddenAt !== null` の間は測位側を数えないガードで二重計上を取り除いた。残る誤差は逆方向で、`useLocationTracking` は精度の悪い測位を原則採用しないため `accuracy` が更新されず、低精度区間は「初回」または「10秒間採用がない救済」で採用されるまで中断として数え始めない。短いバーストは数えないが、その間の移動は復帰時の直線距離で繋がるため、しきい値60秒の根拠（200m以内なら直線で繋がる）とは整合している。
+
+スコープは計画どおり。`routeStore.js` / `authStore.js` / `useRouteProgress.js` / `useLocationTracking.js` / `WalkResultStats.vue` / `global.css` / 既存4 Lambda / CloudFront の `cachePolicy`・`originRequestPolicy` / `docs/` はいずれも未変更で、`walkStore.js` の差分は段階3aの未コミット分（追加72・削除0）のまま。`useWalkRecord.js` は `export` 追加とコメント3行だけで積算のガードは動いていない。コミットもプッシュもされていない（HEAD は develop のマージコミット）。
 
 <details>
-<summary>Issues (6)</summary>
+<summary>Issues (5)</summary>
 
-1. **`NoValidSession` の文言が到達しない** — `ERROR_MESSAGES.NoValidSession` を引く `toAuthErrorMessage` は `authStore.js` からしか呼ばれず、ルート作成・検索条件の composable は `error.message` を直接表示する。文言を活かすなら composable 側で変換を通すか、辞書追加を見送る。
-2. **401 の本文が英語で画面に出る** — API Gateway のオーソライザーは `{"message":"Unauthorized"}` を返し、`routeService.extractErrorMessage` がそれを拾う。計画で対象外と明記済みだが、デプロイ後に目に見える形で残る。
-3. **`VITE_ROUTE_API_URL` 経由で idToken が別オリジンへ出得る** — `fetchRoute` のURLは env で任意のオリジンに差し替えられる設計（既存）で、今回そこに idToken が乗る。`fetchRoute` に本番の呼び出し元は無いため現時点では潜在的。別API Gatewayへ向ける運用を続けるなら、向き先を同一オリジンに限る前提を明文化したい。
-4. **`IdentitySource` を検証していない** — ヘッダー名 `Authorization` は CDK の既定に依存しており、フロントはその名前に固定で依存している。テンプレートの `IdentitySource` をテストで固定しておくと、既定変更や明示指定ミスで全リクエストが落ちる事故を防げる。
-5. **バックエンド無効時にオーソライザーが作られないことの検証が無い** — オーソライザーは `withBackend` ブロック内にあるが、フロントのみのスタックで `AWS::ApiGateway::Authorizer` が0件であることを確かめるテストが無い。
-6. **検証結果の記録がタスクディレクトリに無い** — `.agents/tasks/` には `plan.md` のみで、lint / build / test / cdk synth の実行結果を残したファイルが無い。本レビューはコーダーの最終メッセージに記録があることを前提に、指示どおりスイートの再実行はしていない。
+1. **結果画面の再マウントで2件目の実績が増える** — `walkId` は保存のたびに `crypto.randomUUID()` で作るため、結果画面が2回マウントされると別キーになり `attribute_not_exists(pk)` では弾けない。ブラウザの戻る→進むで案内画面を経由すると `startWalk()` が走って計測状態が `unavailable` になるため累計は守られるが、その間に測位が1回通ると `walkCount` が距離0のまま1増える。`walkId` を散歩ごと（`startWalk` 時）に決めるか、保存済みかどうかを控えて2回目を送らない。
+2. **低精度区間の中断を数え始めるのが最大10秒遅れる** — `isMeasurementInterrupted` は `accuracy` を見るが、`useLocationTracking` は精度の悪い測位を採用しないため `accuracy` が更新されない。`MAX_POSITION_AGE_MS`（10秒）の救済で採用されるまで中断として数えず、10秒未満のバーストは一切数えない。実害は小さい（復帰時の直線距離で繋がる）ため、現状維持でよいならコメントに「採用された測位の精度でしか判定できない」ことを書き残す。
+3. **持ち主が一致しない退避項目が残り続ける** — `flushPendingWalkResults` は `ownerUsername` が現在のユーザーと一致しない項目を `continue` で飛ばすだけなので、`ownerUsername` が null の項目（保存の待ち合わせ中にサインアウトした場合）や旧形式の項目は送られも捨てられもせず、20件の上限に押し出されるまで残る。送れないと確定した項目（持ち主が null・`walkResult` を持たない）は捨てる。
+4. **実績テーブルに deletionProtection と PITR が無い** — `removalPolicy: RETAIN` はスタック削除だけを守る。同じスタックのユーザープールは `deletionProtection: isProd` を持つのに、再生成できない散歩の履歴を持つこのテーブルには無い。履歴取得APIもエクスポートも無いため、消えた場合に戻す手段がない。prod では `deletionProtection: isProd` と `pointInTimeRecoverySpecification` を検討する。
+5. **しきい値が View とテストに二重定義** — `MEASUREMENT_GAP_THRESHOLD_MS`（60000）が `RouteNavigationView.vue` とそのテストの両方に書かれている（段階3aからの繰り越し）。値がずれればテストが落ちるため黙って壊れることはないが、`MAX_MEASURABLE_ACCURACY_M` と同じく `export` して1か所にできる。
 
 </details>
 
 <details>
 <summary>Details</summary>
 
-## 認可の付け忘れを構造で防いでいる
+## 保存の起点が「画面のマウント」であること
 
-3メソッドへの適用は共有の `MethodOptions` 定数を渡す形になっている。
+`walkId` を決めるのは `buildCurrentWalkResult()` で、呼ばれるたびに `crypto.randomUUID()` が走る。したがって冪等性が効くのは「同じペイロードを送り直す」経路（退避キューからの再送）だけで、「同じ散歩をもう一度組み立てて送る」経路には効かない。計画の判断1にある「万一重なっても `walkId` の冪等性で累計は増えない」は、後者には当てはまらない。
+
+実際に起きる経路は次のとおり。
+
+```
+/result（1件目を保存）
+  ├ 戻る ─▶ /navigation が再マウント ─▶ startWalk()（距離0・測位なしに戻る）
+  └ 進む ─▶ /result が再マウント ─▶ 2件目を保存（別の walkId）
+```
+
+再マウント時のストアは `startWalk()` 直後なので `startedAt` は入っており、`saveCurrentWalkResult` の未開始ガードは通り抜ける。多くの場合は `hasLocationFix === false` で `measurementStatus` が `unavailable` となり、`createWalkResultWithoutTotals` を通るため累計は汚れない（`WALK#` の項目だけが1件増える）。ただし再マウントから「進む」までの間に測位が1回でも通ると `partial` になり、`createWalkResultWithTotals` 経由で `walkCount` が1増える。距離とスポット数は0なので平均値だけが狂う。
+
+再読み込みでは `meta.requiresRoute` と `routeStore.hasRoute`（Pinia はメモリのみ）で条件入力画面へ戻されるため、この経路は戻る／進むに限られる。`walkId` を `startWalk()` の時点で決めてストアに持たせれば、2回目は条件エラーで止まり 200 が返る。
+
+## 低精度区間を数え始める時点
+
+`isMeasurementInterrupted` は `trackingError !== null` と `accuracy > MAX_MEASURABLE_ACCURACY_M`（100m）の論理和。後者が効くのは `accuracy` が更新されたときだけで、`useLocationTracking.handlePositionUpdate` は精度が悪い測位を次の3条件以外では採用しない。
+
+| 条件 | 内容 |
+|---|---|
+| `isFirstFix` | `accuracy` がまだ null（初回） |
+| `isReliableAccuracy` | 精度が `MAX_ACCEPTABLE_ACCURACY_M`（100m）以内 |
+| `isPositionStale` | 直前の採用から `MAX_POSITION_AGE_MS`（10秒）以上経過 |
+
+つまり良い測位の直後に精度150mの測位が届き続けても、10秒間は `accuracy` が良い値のまま据え置かれ、中断としては数えない。10秒経って救済で採用された時点から数え始め、以降は（採用のたびに10秒の猶予が入るものの）悪い値が居座るため中断は継続する。結果として1回の低精度区間は最大10秒短く数えられ、10秒未満のバーストは数えられない。
+
+ただし採用が止まっている間 `currentLocation` は動かず、復帰時に `useWalkRecord` が `MIN_SEGMENT_DISTANCE_M`〜`MAX_SEGMENT_DISTANCE_M`（200m）の区間として直線で繋ぐ。しきい値を60秒にした根拠（短い中断は200m以内に収まるので損失が出ない）と同じ理屈で、数え落とす区間はもともと注記を出す必要のない長さに収まっている。判定の口が `accuracy` の採用に依存することをコメントに残しておけば足りる。
+
+## 退避キューに残り続ける項目
+
+`flushPendingWalkResults` の判定は1本。
+
+```js
+if (pendingResult.ownerUsername !== authStore.username) {
+  continue;
+}
+```
+
+他人の分を残すのは意図どおり（その人がサインインしたときに送られる）。一方で、どのユーザーにも一致しない項目は再送の対象にならず、捨てる経路も無い。該当するのは2種類で、どちらも `MAX_PENDING_COUNT`（20件）に押し出されるまで残る。
+
+- `ownerUsername` が null の項目: `saveCurrentWalkResult` は失敗を捕まえた時点の `authStore.username` を控える。通信の待ち合わせ中にサインアウトされた場合は null が入り、`null !== 'alice'` で永久に飛ばされる。
+- 旧形式の項目: イテレーション1の実装は9キーのペイロードを直接積んでいた。既存の端末に残っていれば `ownerUsername` も `walkResult` も無く、やはり飛ばされ続ける（未デプロイのため実機には存在しないが、形が変わったことは記録しておきたい）。
+
+`walkResult` を持たない項目や持ち主が null の項目は、再送できないと確定しているため捨てるのが素直。持ち主を `username` ではなく `sub` にすると、上の null は避けられないままなので、判定を足す方が効く。
+
+## テーブルの保護
 
 ```ts
-const cognitoAuthorized: apigateway.MethodOptions = {
-  authorizer: apiAuthorizer,
-  authorizationType: apigateway.AuthorizationType.COGNITO
-};
+const walkResultTable = new dynamodb.TableV2(this, 'WalkResultTable', {
+  tableName: `WalkResult-${stage}`,
+  billing: dynamodb.Billing.onDemand(),
+  removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY
+});
 ```
 
-`routes` の GET / POST と `conditions` の GET の3箇所がこの定数を受け取り、`password-reset-verifications` の POST だけが第3引数を持たない。付け忘れ・片方だけ付けるといった食い違いが起きにくい形になっている。加えて `cdk synth` は「オーソライザーを作って1つもメソッドへ紐付けない」状態を例外にするため、紐付け漏れは合成段階でも検出される。
+`removalPolicy` は CloudFormation がテーブルを消さないようにするだけで、コンソールや CLI からの削除、誤った項目更新は対象外。同じスタックの `userPool` は `deletionProtection: isProd` を付けており、保護の水準が揃っていない。`routeTable` も同じく未設定だが、あちらはシードで作り直せるデータで、こちらは利用者が歩いた記録そのもので再生成できない。累計（`TOTAL`）は `ADD` の単調増加で、段階3bには履歴取得APIも削除APIも無いため、壊れても元の値から組み直せない。PITR はオンデマンド課金のテーブルでも追加費用がかかるため、prod だけに付ける形（`isProd` で切り替え）が現実的。
 
-## 未認証メソッドの件数を1件に固定するテスト
+## スコープと規約
 
-3本目のテストが今回の要点で、`AWS::ApiGateway::Resource` から `PathPart === 'password-reset-verifications'` の論理IDを引き、`AuthorizationType !== 'COGNITO_USER_POOLS'` のメソッドがちょうど1件かつその `ResourceId.Ref` がそのIDと一致することを確認している。無認可のメソッドを足せば件数で落ち、照合API以外を無認可にすれば参照先の不一致で落ちる。CORS 設定が無く `OPTIONS` が生成されないため現状この「1件」は安定するが、CORS を後から足すとこのテストは見直しが必要になる。
+変更ファイルは計画の一覧と一致し、前回から増えたのはテスト3ファイル（`repository.test.js` / `WalkResultView.test.js` / `App.test.js`）と各ファイルの修正のみ。`git status` にスコープ外のファイルは現れていない。
 
-## 文言経路の不整合
-
-`routeService.js` / `conditionService.js` のコメントは `fetchIdToken` の例外を上位へ流す理由として「セッション切れの文言への変換は `toAuthErrorMessage` 側の責務」と書いている。実際の受け手は以下のとおりで、変換は挟まらない。
-
-```
-fetchIdToken (throw NoValidSession)
-  → routeService / conditionService （そのまま伝播）
-    → useRouteCreation / useRouteConditionOptions / useGenreOptions
-       catch (error) { errorMessage.value = error.message; }   ← 変換なし
-```
-
-結果として画面に出るのは `new Error('有効なセッションがありません')` のメッセージで、辞書に追加した「ログインの有効期限が切れました。もう一度ログインしてください」（再ログインを促す文言）には到達しない。どちらも日本語なので致命的ではないが、コメントの主張と実装が食い違っており、追加した辞書エントリは `authStore` 経由の呼び出し元が現れるまで使われない。
+規約面の確認結果。レイヤー責務は `process.env` を読むのが `constants.js` だけ、Repository に業務判断なし（条件エラーを `{ isStored: false }` という事実で返し、成功と解釈するのは Service）、Validator は純粋関数、Handler は受付と整形のみ。命名は `create-walk-result`（npm 制約の kebab-case）、`WalkResult-<環境>`（PascalCase単数形＋後置の環境識別子）、`CreateWalkResultFunction`、`/api/v1/walk-results`（複数形）、`WalkResultTableName` の出力、いずれも規則どおり。用語辞書は `ownerUsername` を含めて先に追記され、既存行の削除はない（追加16行・削除0行）。テストの配置とファイル名（`__tests__/*.test.js`、`.spec` なし）も揃っている。
 
 </details>
 
 <details>
 <summary>変更ファイル</summary>
 
-| ファイル | 変更内容 |
-|---|---|
-| `iac/lib/michishiru-stack.ts` | `CognitoUserPoolsAuthorizer` を追加し、共有 `MethodOptions` で3メソッドへ適用 |
-| `iac/test/iac.test.ts` | オーソライザーの型・名前、保護3メソッド、未認証は照合API1件のみ、を検証する3テストを追加 |
-| `frontend/src/services/authService.js` | `fetchAuthSession` の import、`fetchIdToken`、`ERROR_MESSAGES.NoValidSession` を追加 |
-| `frontend/src/services/routeService.js` | `fetchRoute` / `createRoute` の2つの fetch に `Authorization` を追加 |
-| `frontend/src/services/conditionService.js` | `fetchConditionOptions` の fetch に `Authorization` を追加 |
-| `frontend/src/services/__tests__/routeService.test.js` | 新規。ヘッダー付与・接頭辞なし・例外伝播を検証 |
-| `frontend/src/services/__tests__/conditionService.test.js` | 新規。ヘッダー付与・整形の成功系・例外伝播を検証 |
-| `tools/localApiServer.js` | `requestContext.authorizer.claims` のダミー値を追加 |
-| `.kiro/steering/naming-glossary.md` | 「認証」節へ `idToken` / `sub`、更新履歴に1行（追加3・削除0） |
-| `.kiro/steering/ミチシル_前提条件.md` | API Gateway 行の追記、「API の認可」を確定事項へ移動、更新履歴に1行 |
+| ファイル | 種別 | 内容 |
+|---|---|---|
+| `.kiro/steering/naming-glossary.md` | 変更 | 用語12件（3a分4件＋3b分8件）と更新履歴4行を追記 |
+| `iac/lib/michishiru-stack.ts` | 変更 | `WalkResultTable` / `CreateWalkResultFunction` / `POST /api/v1/walk-results` / 出力を追加。権限は `PutItem` と `UpdateItem` のみ |
+| `iac/test/iac.test.ts` | 変更 | 認可を4メソッドへ更新し、テーブル・Lambda・経路・権限の4件を追加 |
+| `backend/shared/constants/errorCodes.js` | 変更 | `UNAUTHORIZED` と 401 のマッピングを追加 |
+| `backend/functions/createWalkResult/` | 新規9ファイル | handler / service / repository / validator / constants / package.json / テスト3件 |
+| `tools/localApiServer.js` | 変更 | ローカルハーネスに `POST /api/v1/walk-results` を登録 |
+| `frontend/src/utils/pendingWalkResults.js` | 新規 | `localStorage` への退避（上限20件・`walkId` で置き換え） |
+| `frontend/src/services/walkResultService.js` | 新規 | 保存APIの呼び出しと再試行可否の名前付け |
+| `frontend/src/composables/useWalkResultSave.js` | 新規 | ペイロードの組み立て・退避（持ち主付き）・本人分だけの再送 |
+| `frontend/src/views/WalkResultView.vue` | 変更 | `onMounted` で保存を起動し、失敗をトーストに出す（＋3a の注記） |
+| `frontend/src/App.vue` | 変更 | ログイン時と `online` 復帰時の再送を配線 |
+| `frontend/src/views/RouteNavigationView.vue` | 変更 | 中断時間の累積による欠落判定（非表示との二重計上を除去） |
+| `frontend/src/composables/useWalkRecord.js` | 変更 | `MAX_MEASURABLE_ACCURACY_M` を `export`（ロジックは無変更） |
+| フロント・バックのテスト | 新規6・変更1 | `pendingWalkResults` / `walkResultService` / `useWalkResultSave` / `WalkResultView` / `App` / `repository` / `RouteNavigationView`（6→10件） |
 
-差分の取得: `git diff`（作業ツリー、未コミット）
+検証コマンドの再実行結果: `backend` 91件(12 suites) / `frontend` lint 0・140件(16ファイル) / `iac` build・20件。
 
 </details>

@@ -199,6 +199,22 @@ export class MichishiruStack extends cdk.Stack {
         autoDeleteObjects: !isProd
       });
 
+      // DynamoDB: 散歩の実績を格納するテーブル。
+      // 1つのテーブルに「各散歩の実績（sk = `WALK#<endedAt>#<walkId>`）」と
+      // 「ユーザーの累計（sk = `TOTAL`）」の2種類のアイテムを入れる単一テーブル設計。
+      // 同じ pk（`USER#<sub>`）に揃うため、1回の TransactWriteItems で実績の追加と
+      // 累計の加算をまとめられる。
+      // 履歴取得APIを作らないため GSI は持たない。将来の履歴表示も
+      // pk でユーザーを絞り sk の前方一致（`WALK#`）で引けるため、索引を増やす必要がない。
+      const walkResultTable = new dynamodb.TableV2(this, 'WalkResultTable', {
+        tableName: `WalkResult-${stage}`,
+        partitionKey: { name: 'pk', type: dynamodb.AttributeType.STRING },
+        sortKey: { name: 'sk', type: dynamodb.AttributeType.STRING },
+        billing: dynamodb.Billing.onDemand(),
+        // 本番はデータ保護のため保持、開発は削除時に破棄する
+        removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY
+      });
+
       // backend は素の ESM JavaScript で、依存する AWS SDK v3 は Lambda ランタイムに
       // 同梱されるため、バンドルせず backend ディレクトリをそのままデプロイする。
       // 複数の関数で同じコード資産を共有する。
@@ -405,6 +421,29 @@ export class MichishiruStack extends cdk.Stack {
       // 署名付きURLは発行者（この関数のロール）の権限を引き継ぐため、PutObject を許可する
       photoBucket.grantPut(createPhotoUploadUrlsFn);
 
+      // Lambda: createWalkResult ハンドラ（散歩の実績をユーザー単位で保存する）。
+      // DynamoDB のクライアントは Lambda ランタイムに同梱されるため、
+      // getRoute / getConditions と同じく backendCode をそのまま使いバンドルしない。
+      const createWalkResultFn = new lambda.Function(this, 'CreateWalkResultFunction', {
+        runtime: lambda.Runtime.NODEJS_LATEST,
+        handler: 'functions/createWalkResult/handler.handler',
+        code: backendCode,
+        memorySize: 256,
+        timeout: cdk.Duration.seconds(10),
+        environment: {
+          WALK_RESULT_TABLE_NAME: walkResultTable.tableName
+        }
+      });
+
+      // この関数は実績の追加（Put）と累計の加算（Update）しか行わない。
+      // grantWriteData では DeleteItem / BatchWriteItem まで付くため、
+      // 実際に使う2つだけを明示して与える（実績の削除はこの関数の役割ではない）。
+      walkResultTable.grant(
+        createWalkResultFn,
+        'dynamodb:PutItem',
+        'dynamodb:UpdateItem'
+      );
+
       // Lambda: verifyPasswordResetTarget ハンドラ
       // （パスワード再設定の前に、ユーザー名とメールアドレスの組み合わせを照合する）
       // ブラウザからはユーザーの登録情報を参照できないため、サーバー側で確かめる。
@@ -453,6 +492,7 @@ export class MichishiruStack extends cdk.Stack {
       //   POST /api/v1/reviews                     口コミの投稿・本人編集（要認証）
       //   POST /api/v1/review-photo-uploads        写真アップロード用の署名付きURL発行（要認証）
       //   GET  /api/v1/my-reviews                  自分の口コミ一覧（要認証）
+      //   POST /api/v1/walk-results                散歩の実績を保存（要認証）
       //   POST /api/v1/password-reset-verifications ユーザー名とメールアドレスの照合
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
@@ -548,6 +588,17 @@ export class MichishiruStack extends cdk.Stack {
         cognitoAuthorized
       );
 
+      // POST /api/v1/walk-results
+      // 散歩の実績の保存。案内を終えた後（＝ログイン後）にしか呼ばないため認可を必須にする。
+      // Lambda は event.requestContext.authorizer.claims.sub で利用者を識別し、
+      // リクエストボディの userId は読まない（他人の実績として保存されるのを防ぐ）。
+      const walkResultsResource = v1Resource.addResource('walk-results');
+      walkResultsResource.addMethod(
+        'POST',
+        new apigateway.LambdaIntegration(createWalkResultFn),
+        cognitoAuthorized
+      );
+
       // POST /api/v1/password-reset-verifications
       // ここだけ認可を付けない。パスワードを忘れた利用者がログインする前に呼ぶため、
       // Cognito オーソライザーで守ると機能しなくなる。
@@ -579,6 +630,10 @@ export class MichishiruStack extends cdk.Stack {
       new cdk.CfnOutput(this, 'ReviewTableName', {
         value: reviewTable.tableName,
         description: '口コミ（場所メタ＋口コミ）を格納する DynamoDB テーブル名'
+      });
+      new cdk.CfnOutput(this, 'WalkResultTableName', {
+        value: walkResultTable.tableName,
+        description: '散歩の実績を格納する DynamoDB テーブル名'
       });
     }
 
