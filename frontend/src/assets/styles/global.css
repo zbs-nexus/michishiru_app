@@ -713,15 +713,23 @@ body {
 .location-pin {
   position: relative;
   width: 24px;
-  height: 24px;
+  /* 先端の張り出しぶんを含めた高さ（頭24px + 張り出し5px） */
+  height: 29px;
   cursor: pointer;
 }
 
-/* しずくの頭。先端（左下の角）が下を向くよう回転させる */
+/*
+ * しずくの頭。先端（左下の角）が下を向くよう回転させる。
+ *
+ * 24pxの正方形を45°回すと、角は箱の底辺より 24 × (√2 - 1) ÷ 2 ≒ 5px 外へ出る。
+ * MapLibre の anchor: 'bottom' が座標に合わせるのはレイアウト上の箱の底辺
+ * （transform は offsetHeight に影響しない）ため、頭をこの5px分だけ持ち上げて
+ * 先端と箱の底辺を一致させる。そうしないと先端が座標の5px下を指す。
+ */
 .location-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 0;
+  bottom: 5px;
   width: 24px;
   height: 24px;
   margin-left: -12px;
@@ -753,17 +761,19 @@ body {
 .review-pin {
   position: relative;
   width: 24px;
-  height: 24px;
+  /* 先端の張り出しぶんを含めた高さ（location-pin と同じ理由） */
+  height: 29px;
   padding: 0;
   background: none;
   border: none;
   cursor: pointer;
 }
 
+/* 先端を座標に合わせるため5px持ち上げる（理由は location-pin-head のコメント） */
 .review-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 0;
+  bottom: 5px;
   width: 24px;
   height: 24px;
   margin-left: -12px;
