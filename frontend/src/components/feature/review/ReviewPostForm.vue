@@ -57,10 +57,88 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['submitReview', 'close']);
+const emit = defineEmits(['submitReview', 'close', 'changeExpanded']);
 
 /** ロケーション名の最大文字数 */
 const SPOT_NAME_MAX_LENGTH = 30;
+
+/** 上下スワイプを展開・収納と判定する最小の移動量（ピクセル） */
+const SWIPE_THRESHOLD_PX = 24;
+
+/**
+ * フォームを全体表示しているかどうか。
+ * 既定は半分（地図とピンが見えるように）で、上スワイプまたはハンドルの操作で広げる。
+ */
+const isExpanded = ref(false);
+
+/** スワイプの開始位置（画面のY座標）。触れていないときはnull */
+let swipeStartY = null;
+
+/** 直前の操作がスワイプだったか。touchendに続くclickで二重に切り替えないための目印 */
+let hasSwiped = false;
+
+/**
+ * @description 表示の高さを切り替え、変わった場合だけ親へ知らせる。
+ * 親は可視範囲が変わったぶん、ピンの寄せ位置を測り直す。
+ * @param {boolean} value 全体表示にするかどうか
+ * @returns {void}
+ */
+const setExpanded = (value) => {
+  if (isExpanded.value === value) {
+    return;
+  }
+
+  isExpanded.value = value;
+  emit('changeExpanded', value);
+};
+
+/**
+ * @description スワイプの開始位置を覚える
+ * @param {TouchEvent} event タッチイベント
+ * @returns {void}
+ */
+const handleSwipeStart = (event) => {
+  swipeStartY = event.touches[0].clientY;
+  hasSwiped = false;
+};
+
+/**
+ * @description 指を離した位置から、上スワイプなら展開、下スワイプなら収納する
+ * @param {TouchEvent} event タッチイベント
+ * @returns {void}
+ */
+const handleSwipeEnd = (event) => {
+  if (swipeStartY === null) {
+    return;
+  }
+
+  const movedY = event.changedTouches[0].clientY - swipeStartY;
+  swipeStartY = null;
+
+  if (Math.abs(movedY) < SWIPE_THRESHOLD_PX) {
+    return;
+  }
+
+  // 続いて発火するclickで元に戻らないよう、ここで打ち切る
+  hasSwiped = true;
+  event.preventDefault();
+
+  setExpanded(movedY < 0);
+};
+
+/**
+ * @description ハンドルのタップ・Enterで表示の高さを切り替える。
+ * スワイプで既に切り替えた直後は何もしない。
+ * @returns {void}
+ */
+const handleToggleExpanded = () => {
+  if (hasSwiped) {
+    hasSwiped = false;
+    return;
+  }
+
+  setExpanded(!isExpanded.value);
+};
 
 /** 入力されたロケーション名 */
 const spotName = ref('');
@@ -297,10 +375,27 @@ const handleSubmit = () => {
 <template>
   <div
     class="review-form"
+    :class="{ 'is-expanded': isExpanded }"
     role="dialog"
     aria-modal="false"
     aria-label="口コミを投稿"
   >
+    <!--
+      高さを切り替えるハンドル。上スワイプで全体表示、下スワイプで半分に戻す。
+      タッチ以外でも操作できるようボタンにし、タップとEnterでも切り替える
+    -->
+    <button
+      class="review-form-handle"
+      type="button"
+      :aria-expanded="isExpanded"
+      aria-label="口コミ投稿フォームの表示の高さを切り替える"
+      @touchstart="handleSwipeStart"
+      @touchend="handleSwipeEnd"
+      @click="handleToggleExpanded"
+    >
+      <span class="review-form-handle-bar" />
+    </button>
+
     <div class="review-form-header">
       <h3 class="review-form-title">
         {{ formTitle }}
@@ -509,6 +604,11 @@ const handleSubmit = () => {
  * 全画面地図の上に、画面下部から現れる投稿フォーム。
  * 終了ボタン（global.css の .primary-btn.full-width、z-index: 50）に重ねてよいため、
  * 画面下端に固定し、より手前（z-index: 150）に置く。
+ *
+ * 初期は半分の高さに留め、立てたピンと地図が見える状態から始める。
+ * 上スワイプで全体表示（85vh）に広げる。
+ * max-height にアニメーションを付けないのは、親が開閉直後に offsetHeight を測って
+ * ピンの寄せ位置を決めるため。途中の高さを測ると寄せ位置がずれる。
  */
 .review-form {
   position: fixed;
@@ -518,14 +618,46 @@ const handleSubmit = () => {
   z-index: 150;
   width: 100%;
   max-width: 430px;
-  max-height: 85vh;
+  max-height: 42vh;
   overflow-y: auto;
-  padding: 10px 20px 16px;
+  padding: 0 20px 16px;
   background: var(--surface);
   border-top: 2px solid var(--border-gold);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.2);
   animation: review-form-slide-in 0.2s ease-out;
+}
+
+.review-form.is-expanded {
+  max-height: 85vh;
+}
+
+/*
+ * 高さを切り替えるハンドル。
+ * スクロールしても常に見えるよう上端に貼り付け、指で掴める高さを確保する。
+ */
+.review-form-handle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  background: var(--surface);
+  border: none;
+  cursor: pointer;
+  /* ハンドル上の縦スワイプをブラウザのスクロールに取られないようにする */
+  touch-action: none;
+}
+
+.review-form-handle-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-gold);
 }
 
 .review-form-header {

@@ -76,6 +76,24 @@ const props = defineProps({
     type: Object,
     default: null
   },
+  /**
+   * 見えている地図範囲の中央へ寄せる座標 { lng, lat }。未設定の場合はnull。
+   * ピンを描く座標（pinPosition）とは別に持つ。口コミフォームを開いたとき、
+   * 赤・オレンジ・紫のどのピンでもフォームに隠れない位置へ持ってくるため。
+   */
+  focusPosition: {
+    type: Object,
+    default: null
+  },
+  /**
+   * 寄せるときの、地図中央からの縦のずれ（ピクセル）。
+   * 画面上部のバナーや下部のフォームで地図が隠れる場合に、
+   * 見えている範囲の中央へ来るよう親が指定する。下方向が正。
+   */
+  focusOffsetY: {
+    type: Number,
+    default: 0
+  },
   /** 自分が投稿した口コミの場所（{ spotId, position, spotName } の配列） */
   myReviewSpots: {
     type: Array,
@@ -417,6 +435,24 @@ const renderPinMarker = () => {
   }
 };
 
+/**
+ * @description 対象の座標を、見えている地図範囲の中央へ寄せる。
+ *
+ * offsetは地図中央からのずれで、上部バナーと下部フォームで隠れるぶんを
+ * 親が測って渡す。フォームの開閉で可視範囲が変わるため、offsetの変化にも追従する。
+ * @returns {void}
+ */
+const focusOnPosition = () => {
+  if (props.focusPosition === null) {
+    return;
+  }
+
+  map.easeTo({
+    center: [props.focusPosition.lng, props.focusPosition.lat],
+    offset: [0, props.focusOffsetY]
+  });
+};
+
 /** 自分が投稿した口コミのピン（オレンジ）を表す修飾クラス */
 const MY_REVIEW_PIN_CLASS = 'review-pin-mine';
 
@@ -647,7 +683,7 @@ watch(
   { deep: true }
 );
 
-// 長押しのピンが更新されたら描き直す
+// 赤いピンが更新されたら描き直す
 watch(
   () => props.pinPosition,
   () => {
@@ -656,6 +692,19 @@ watch(
     }
 
     renderPinMarker();
+  },
+  { deep: true }
+);
+
+// 寄せる対象、またはフォームの高さ（offset）が変わったら寄せ直す
+watch(
+  () => [props.focusPosition, props.focusOffsetY],
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    focusOnPosition();
   },
   { deep: true }
 );
