@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ReviewPhotoInput from '@/components/feature/review/ReviewPhotoInput.vue';
+import ReviewPhotoViewer from '@/components/feature/review/ReviewPhotoViewer.vue';
 import ReviewRatingInput from '@/components/feature/review/ReviewRatingInput.vue';
 
 /** 1つの場所に付けられる写真の最大枚数 */
@@ -155,8 +156,11 @@ const photos = ref([]);
 /** 残す既存写真（{ key, url }）。本人編集で削除すると減る */
 const keptPhotos = ref([]);
 
-/** 拡大表示中の写真URL。nullのときは非表示 */
-const viewingPhotoUrl = ref(null);
+/** 拡大表示する写真のURLの一覧。空のときは非表示 */
+const viewerPhotoUrls = ref([]);
+
+/** 拡大表示を開いたときに見せる写真の位置 */
+const viewerStartIndex = ref(0);
 
 /** 投稿ボタン押下時の未入力エラー。満たしていればnull */
 const validationMessage = ref(null);
@@ -172,6 +176,9 @@ const formTitle = computed(() => (isEditing.value ? '口コミを編集' : '口�
 
 /** 追加できる新規写真の残り枠（既存の残しぶんを差し引く） */
 const newPhotoRoom = computed(() => PHOTO_MAX_COUNT - keptPhotos.value.length);
+
+/** 残している既存写真のURLだけを並べたもの。拡大表示の送りに渡す */
+const keptPhotoUrls = computed(() => keptPhotos.value.map((photo) => photo.url));
 
 /** 評価のみモードで固定表示するジャンル（アイコン・名称） */
 const existingGenre = computed(() => {
@@ -308,12 +315,14 @@ const handleRemoveKeptPhoto = (index) => {
 };
 
 /**
- * @description 写真を原寸で拡大表示する
- * @param {string} url 表示する写真のURL
+ * @description 写真を全画面で拡大表示する。
+ * 同じ場所の写真を送れるようにするため、押された1枚だけでなく一覧と位置を受け取る。
+ * @param {{photoUrls: string[], index: number}} params 表示する写真の一覧と位置
  * @returns {void}
  */
-const openPhotoViewer = (url) => {
-  viewingPhotoUrl.value = url;
+const openPhotoViewer = ({ photoUrls, index }) => {
+  viewerPhotoUrls.value = photoUrls;
+  viewerStartIndex.value = index;
 };
 
 /**
@@ -321,7 +330,8 @@ const openPhotoViewer = (url) => {
  * @returns {void}
  */
 const closePhotoViewer = () => {
-  viewingPhotoUrl.value = null;
+  viewerPhotoUrls.value = [];
+  viewerStartIndex.value = 0;
 };
 
 /**
@@ -445,7 +455,7 @@ const handleSubmit = () => {
               class="review-existing-photo-btn"
               type="button"
               aria-label="写真を拡大表示"
-              @click="openPhotoViewer(url)"
+              @click="openPhotoViewer({ photoUrls: existingSpot.photoUrls, index })"
             >
               <img
                 :src="url"
@@ -522,7 +532,7 @@ const handleSubmit = () => {
                 class="kept-photo-btn"
                 type="button"
                 aria-label="写真を拡大表示"
-                @click="openPhotoViewer(photo.url)"
+                @click="openPhotoViewer({ photoUrls: keptPhotoUrls, index })"
               >
                 <img
                   :src="photo.url"
@@ -573,29 +583,13 @@ const handleSubmit = () => {
       </BaseButton>
     </div>
 
-    <!-- 写真の原寸表示（ライトボックス） -->
-    <div
-      v-if="viewingPhotoUrl"
-      class="photo-viewer"
-      role="dialog"
-      aria-modal="true"
-      aria-label="写真の拡大表示"
-      @click="closePhotoViewer"
-    >
-      <img
-        :src="viewingPhotoUrl"
-        alt=""
-        class="photo-viewer-image"
-      >
-      <button
-        class="photo-viewer-close"
-        type="button"
-        aria-label="閉じる"
-        @click="closePhotoViewer"
-      >
-        ×
-      </button>
-    </div>
+    <!-- 写真の全画面表示。複数枚はスワイプ・矢印・キーボードで切り替える -->
+    <ReviewPhotoViewer
+      v-if="viewerPhotoUrls.length > 0"
+      :photo-urls="viewerPhotoUrls"
+      :start-index="viewerStartIndex"
+      @close="closePhotoViewer"
+    />
   </div>
 </template>
 
@@ -901,41 +895,6 @@ const handleSubmit = () => {
   width: auto;
   min-width: 88px;
   padding: 12px 20px;
-}
-
-/* 写真の原寸表示（ライトボックス）。フォームより手前に全画面で出す */
-.photo-viewer {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.85);
-  cursor: zoom-out;
-}
-
-.photo-viewer-image {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-.photo-viewer-close {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  font-size: 24px;
-  line-height: 1;
-  color: var(--white);
-  background: rgba(0, 0, 0, 0.5);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
 }
 
 @keyframes review-form-slide-in {

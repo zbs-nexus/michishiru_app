@@ -382,37 +382,6 @@ const measureVisibleCenterOffsetY = () => {
 };
 
 /**
- * @description 指定座標を対象にして口コミ投稿フォームを開く。
- *
- * フォームを先に描画してから高さを測り、寄せ位置を決めたうえで対象を渡す。
- * 順序を入れ替えると、地図が古い高さを前提に寄ってしまう。
- * 投稿済みの場所なら名前・ジャンルを固定して評価のみにするため、先に場所を解決する。
- * @param {{lng: number, lat: number}} position 対象の座標
- * @param {boolean} isExistingSpot 投稿済みのピンから開いたかどうか
- * @returns {Promise<void>}
- */
-const openReviewForm = async (position, isExistingSpot) => {
-  // 前の場所のメッセージ・解決結果を持ち越さない
-  hideMessage();
-  resetReview();
-
-  isExistingSpotSelected.value = isExistingSpot;
-  isReviewFormVisible.value = true;
-
-  // フォームが描画されてから高さを測る
-  await nextTick();
-  focusOffsetY.value = measureVisibleCenterOffsetY();
-
-  reviewTargetPosition.value = position;
-
-  const isResolved = await resolveReviewSpot(position);
-
-  if (!isResolved) {
-    showMessage(reviewErrorMessage.value ?? '場所の確認に失敗しました');
-  }
-};
-
-/**
  * @description フォームの高さが変わったら、寄せ位置を測り直す。
  * 可視範囲が変わるため、そのままだと対象の場所がフォームに隠れる。
  * @returns {Promise<void>}
@@ -423,23 +392,82 @@ const handleChangeReviewFormExpanded = async () => {
 };
 
 /**
+ * @description フォームを表示し、対象の場所を可視範囲の中央へ寄せる。
+ *
+ * フォームを先に描画してから高さを測り、寄せ位置を決めたうえで対象を渡す。
+ * 順序を入れ替えると、地図が古い高さを前提に寄ってしまう。
+ * @param {{lng: number, lat: number}} position 対象の座標
+ * @returns {Promise<void>}
+ */
+const showReviewFormAt = async (position) => {
+  isReviewFormVisible.value = true;
+
+  // フォームが描画されてから高さを測る
+  await nextTick();
+  focusOffsetY.value = measureVisibleCenterOffsetY();
+
+  reviewTargetPosition.value = position;
+};
+
+/**
  * @description 地図の長押しで、押した場所に赤いピンを立てて投稿フォームを開く。
  *
+ * 新規投稿の操作を待たせないため、解決を待たずに入力欄を出す。
  * ピンは押した座標に描き、地図はその座標が可視範囲の中央へ来るよう寄せる。
- * 解決の結果その場所が投稿済みだった場合は新規投稿ではないため、
- * 赤いピンは newSpotPin の判定で取り下げられる。
+ * 押した位置が既存の場所（半径40m以内）だった場合は解決後に評価のみ／本人編集へ
+ * 切り替わり、赤いピンも newSpotPin の判定で取り下げられる。
  * @param {{lng: number, lat: number}} position 長押しされた座標
  * @returns {Promise<void>}
  */
-const handleLongPressMap = (position) => openReviewForm(position, false);
+const handleLongPressMap = async (position) => {
+  // 前の場所のメッセージ・解決結果を持ち越さない
+  hideMessage();
+  resetReview();
+
+  isExistingSpotSelected.value = false;
+
+  // 解決は裏で進め、入力欄は先に出す
+  const resolving = resolveReviewSpot(position);
+
+  await showReviewFormAt(position);
+
+  const isResolved = await resolving;
+
+  // 既存の場所だと本体の中身が変わって高さが動くため、寄せ位置を測り直す
+  await nextTick();
+  focusOffsetY.value = measureVisibleCenterOffsetY();
+
+  if (!isResolved) {
+    showMessage(reviewErrorMessage.value ?? '場所の確認に失敗しました');
+  }
+};
 
 /**
  * @description 投稿済みのピン（自分=オレンジ / 他の人=紫）をタップしたとき、
  * その場所の口コミを開く。赤いピンは立てない。
+ *
+ * 投稿済みと分かっているため、描く前に解決を終わらせる。
+ * 先にフォームを出すと、解決までの間だけ新規投稿の入力欄が見えてしまう。
  * @param {{lng: number, lat: number}} position タップした場所の座標
  * @returns {Promise<void>}
  */
-const handleSelectReviewSpot = (position) => openReviewForm(position, true);
+const handleSelectReviewSpot = async (position) => {
+  hideMessage();
+  resetReview();
+
+  isExistingSpotSelected.value = true;
+
+  const isResolved = await resolveReviewSpot(position);
+
+  // 取得できないまま開くと新規投稿の画面になってしまうため、開かずに知らせる
+  if (!isResolved) {
+    isExistingSpotSelected.value = false;
+    showMessage(reviewErrorMessage.value ?? '口コミの取得に失敗しました');
+    return;
+  }
+
+  await showReviewFormAt(position);
+};
 
 /**
  * @description 口コミ投稿フォームを閉じ、立てたピンを消す

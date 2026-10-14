@@ -676,8 +676,18 @@ body {
  * 青い円と方向を示す矢印で構成。
  * RouteMap.vue が動的に生成するため、グローバルに定義している。
  */
+/*
+ * マーカーは MapLibre が transform でコンテナ原点から位置決めするため、
+ * 必ず absolute にする（relative だと通常フローに入り、transform の起点が
+ * フロー上の静止位置になって、2個目以降のマーカーがその分ずれる。
+ * ずれ量はピクセル固定なのでピンが地面に貼り付かず、拡大縮小のたびに別の地点を指す）。
+ *
+ * MapLibre の .maplibregl-marker も absolute を指定しているが、
+ * こちらのCSSが後に読み込まれて同じ詳細度で上書きできてしまうため、明示する。
+ * 内側の点や頭は absolute で配置するが、absolute の要素も包含ブロックになるため問題ない。
+ */
 .current-location-marker {
-  position: relative;
+  position: absolute;
   width: 24px;
   height: 24px;
 }
@@ -725,7 +735,8 @@ body {
  * しずく型で、下端が座標を指す。
  */
 .location-pin {
-  position: relative;
+  /* relative にしないこと（理由は current-location-marker のコメント） */
+  position: absolute;
   width: 24px;
   /* 先端の張り出しぶんを含めた高さ（頭24px + 張り出し5px） */
   height: 29px;
@@ -773,7 +784,8 @@ body {
  * 押せることを支援技術へ伝えるためボタン要素で作るため、既定の見た目を打ち消す。
  */
 .review-pin {
-  position: relative;
+  /* relative にしないこと（理由は current-location-marker のコメント） */
+  position: absolute;
   width: 24px;
   /* 先端の張り出しぶんを含めた高さ（location-pin と同じ理由） */
   height: 29px;

@@ -82,11 +82,15 @@ const handleRemove = (index) => {
         :key="url"
         class="photo-item"
       >
+        <!--
+          拡大表示では同じ場所の写真を送れるようにするため、
+          押された1枚だけでなく一覧と位置を渡す
+        -->
         <button
           class="photo-thumb-btn"
           type="button"
           aria-label="写真を拡大表示"
-          @click="$emit('view', url)"
+          @click="$emit('view', { photoUrls: previewUrls, index })"
         >
           <img
             :src="url"
