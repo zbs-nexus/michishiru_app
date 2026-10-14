@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
@@ -53,6 +53,15 @@ const isExistingSpotSelected = ref(false);
 
 /** 口コミ投稿フォームを表示するかどうか */
 const isReviewFormVisible = ref(false);
+
+/** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
+const bannerRef = ref(null);
+
+/** 口コミ投稿フォームの要素。可視範囲の下端を測るために参照する */
+const reviewFormRef = ref(null);
+
+/** 対象の場所を可視範囲の中央へ寄せるための、地図中央からの縦のずれ（ピクセル） */
+const focusOffsetY = ref(0);
 
 const {
   currentLocation,
@@ -356,7 +365,27 @@ const toggleOtherReviews = () => {
 };
 
 /**
+ * @description バナーとフォームに挟まれた可視範囲の中央に対象の場所が来るよう、
+ * 地図中央からの縦のずれ（ピクセル）を求める。
+ * 上端はバナーの下端、下端はフォームの高さで決まる。
+ * @returns {number} 地図中央からの縦のずれ（下方向が正）
+ */
+const measureVisibleCenterOffsetY = () => {
+  const bannerEl = bannerRef.value?.$el ?? null;
+  const formEl = reviewFormRef.value?.$el ?? null;
+
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
+  const topInsetPx = bannerEl ? bannerEl.getBoundingClientRect().bottom : 0;
+  const bottomInsetPx = formEl ? formEl.offsetHeight : 0;
+
+  return (topInsetPx - bottomInsetPx) / 2;
+};
+
+/**
  * @description 指定座標を対象にして口コミ投稿フォームを開く。
+ *
+ * フォームを先に描画してから高さを測り、寄せ位置を決めたうえで対象を渡す。
+ * 順序を入れ替えると、地図が古い高さを前提に寄ってしまう。
  * 投稿済みの場所なら名前・ジャンルを固定して評価のみにするため、先に場所を解決する。
  * @param {{lng: number, lat: number}} position 対象の座標
  * @param {boolean} isExistingSpot 投稿済みのピンから開いたかどうか
@@ -368,8 +397,13 @@ const openReviewForm = async (position, isExistingSpot) => {
   resetReview();
 
   isExistingSpotSelected.value = isExistingSpot;
-  reviewTargetPosition.value = position;
   isReviewFormVisible.value = true;
+
+  // フォームが描画されてから高さを測る
+  await nextTick();
+  focusOffsetY.value = measureVisibleCenterOffsetY();
+
+  reviewTargetPosition.value = position;
 
   const isResolved = await resolveReviewSpot(position);
 
@@ -379,10 +413,21 @@ const openReviewForm = async (position, isExistingSpot) => {
 };
 
 /**
+ * @description フォームの高さが変わったら、寄せ位置を測り直す。
+ * 可視範囲が変わるため、そのままだと対象の場所がフォームに隠れる。
+ * @returns {Promise<void>}
+ */
+const handleChangeReviewFormExpanded = async () => {
+  await nextTick();
+  focusOffsetY.value = measureVisibleCenterOffsetY();
+};
+
+/**
  * @description 地図の長押しで、押した場所に赤いピンを立てて投稿フォームを開く。
  *
- * 地図は動かさない（押した位置にピンが残る）。解決の結果その場所が投稿済みだった場合は
- * 新規投稿ではないため、赤いピンは newSpotPin の判定で取り下げられる。
+ * ピンは押した座標に描き、地図はその座標が可視範囲の中央へ来るよう寄せる。
+ * 解決の結果その場所が投稿済みだった場合は新規投稿ではないため、
+ * 赤いピンは newSpotPin の判定で取り下げられる。
  * @param {{lng: number, lat: number}} position 長押しされた座標
  * @returns {Promise<void>}
  */
@@ -404,6 +449,7 @@ const handleCloseReview = () => {
   isReviewFormVisible.value = false;
   reviewTargetPosition.value = null;
   isExistingSpotSelected.value = false;
+  focusOffsetY.value = 0;
   resetReview();
 };
 
@@ -472,6 +518,7 @@ const handleConfirmEnd = () => {
     />
 
     <RouteNextSpotBanner
+      ref="bannerRef"
       :spot-name="nextSpot?.name ?? null"
       :distance-to-next-m="distanceToNextM"
       :is-completed="isCompleted"
@@ -499,6 +546,8 @@ const handleConfirmEnd = () => {
       :tracking-error="trackingError"
       :is-long-press-enabled="true"
       :pin-position="newSpotPin"
+      :focus-position="reviewTargetPosition"
+      :focus-offset-y="focusOffsetY"
       :my-review-spots="myReviews"
       :show-my-reviews="showMyReviews"
       :other-review-spots="otherReviewSpots"
@@ -534,6 +583,7 @@ const handleConfirmEnd = () => {
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
+      ref="reviewFormRef"
       :genre-options="genreOptions"
       :pin-position="reviewTargetPosition"
       :existing-spot="existingSpot"
@@ -544,6 +594,7 @@ const handleConfirmEnd = () => {
       :is-posting="isPosting"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
+      @change-expanded="handleChangeReviewFormExpanded"
     />
 
     <template #footer>

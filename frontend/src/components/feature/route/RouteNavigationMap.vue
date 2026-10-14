@@ -48,6 +48,16 @@ defineProps({
     type: Object,
     default: null
   },
+  /** 見えている地図範囲の中央へ寄せる座標 { lng, lat }。未設定の場合はnull */
+  focusPosition: {
+    type: Object,
+    default: null
+  },
+  /** 寄せるときの、地図中央からの縦のずれ（ピクセル）。下方向が正 */
+  focusOffsetY: {
+    type: Number,
+    default: 0
+  },
   /** 自分が投稿した口コミの場所の一覧 */
   myReviewSpots: {
     type: Array,
@@ -89,6 +99,8 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :current-accuracy="currentAccuracy"
         :is-long-press-enabled="isLongPressEnabled"
         :pin-position="pinPosition"
+        :focus-position="focusPosition"
+        :focus-offset-y="focusOffsetY"
         :my-review-spots="myReviewSpots"
         :show-my-reviews="showMyReviews"
         :other-review-spots="otherReviewSpots"
