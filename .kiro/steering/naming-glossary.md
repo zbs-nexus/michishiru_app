@@ -71,9 +71,7 @@ inclusion: always
 | 次の目的地までの距離 | distanceToNextM | 現在地から次の目的地までの直線距離（メートル） |
 | 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
 | 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
-| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。`useRouteProgress.js` の関数 |
-| 到達済みのスタンプの文字 | VISITED_STAMP_LABEL | 到達済みのスポットのマーカーに番号の代わりに出す文字（`済`）。`RouteMap.vue` の定数 |
-| 到達判定の距離 | ARRIVAL_THRESHOLD_M | 到達とみなす距離（メートル）。`useRouteProgress.js` の定数 |
+| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。`useRouteProgress.js` の関数 |
 | 距離表示の丸め単位 | DISTANCE_ROUNDING_UNIT_M | 距離表示を丸める単位（メートル）。`RouteNextSpotBanner.vue` の定数 |
 | 採用する測位精度の上限 | MAX_ACCEPTABLE_ACCURACY_M | この値より精度が悪い測位は現在地に採用しない（メートル）。`useLocationTracking.js` の定数 |
 | 経路に沿った距離 | alongRouteDistanceM | 直線距離ではなく、経路の折れ線をたどった距離（メートル） |
@@ -376,3 +374,5 @@ inclusion: always
 | 2026/10/14 | 他の人の口コミの紫ピン表示に伴い「口コミ」へ reviewSpots / otherReviewSpots / showMyReviews / showOtherReviews / reviewTargetPosition / newSpotPin / isExistingSpotSelected を追加。ピンの色と意味の対応表（赤＝新規 / オレンジ＝自分 / 紫＝他の人）を明記 |
 | 2026/10/14 | 投稿フォームのボトムシート化とピンの寄せ位置の分離に伴い focusPosition / focusOffsetY / isExpanded / SWIPE_THRESHOLD_PX を追加。ピンを描く座標（pinPosition）と可視範囲の中央へ寄せる座標（focusPosition）を別概念として区別する |
 | 2026/10/14 | 案内中に手動で次の目的地へ進めるボタンの追加に伴い「ルートとスポット」へ advanceToNextSpot / VISITED_STAMP_LABEL を追加 |
+| 2026/10/14 | 次の目的地の切り替えをボタン操作のみにし、現在地からの到達判定を廃止したことに伴い ARRIVAL_THRESHOLD_M を削除 |
+| 2026/10/14 | 到達済みのスタンプを「済」の文字から足跡の画像（`assets/images/spot-visited-stamp.png`）に変更したことに伴い VISITED_STAMP_LABEL を削除 |
