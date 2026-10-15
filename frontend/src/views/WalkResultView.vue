@@ -101,51 +101,65 @@ const handleReturnHome = () => {
         aria-hidden="true"
       />
 
-      <MascotSpeechBubble
-        class="result-mascot"
-        placement="stacked"
-        size="large"
-        has-level-label
-      >
-        <h2 class="result-title">
-          お疲れさまでした
-        </h2>
-        <p class="result-note">
-          {{ mascotSubMessage }}
+      <div class="result-body">
+        <MascotSpeechBubble
+          class="result-mascot"
+          placement="stacked"
+          size="large"
+          has-level-label
+        >
+          <h2 class="result-title">
+            お疲れさまでした
+          </h2>
+          <p class="result-note">
+            {{ mascotSubMessage }}
+          </p>
+        </MascotSpeechBubble>
+
+        <WalkResultStats
+          :distance-km="walkStore.totalDistanceKm"
+          :spot-count="walkStore.spotCount"
+          :duration-minutes="walkStore.elapsedMinutes"
+        />
+
+        <p
+          v-if="measurementNote"
+          class="hint"
+          role="status"
+        >
+          {{ measurementNote }}
         </p>
-      </MascotSpeechBubble>
-
-      <WalkResultStats
-        :distance-km="walkStore.totalDistanceKm"
-        :spot-count="walkStore.spotCount"
-        :duration-minutes="walkStore.elapsedMinutes"
-      />
-
-      <p
-        v-if="measurementNote"
-        class="hint"
-        role="status"
-      >
-        {{ measurementNote }}
-      </p>
+      </div>
     </div>
 
+    <!--
+      ボタンは画面に固定せず、本文の下に置く。
+      固定すると本文がボタンの裏へ回り込むため、その分の余白を本文に足す必要があり、
+      低い端末では余白のせいで画面がスクロールしていた。
+    -->
     <template #footer>
-      <BaseButton
-        is-full-width
-        @click="handleReturnHome"
-      >
-        ホームに戻る
-      </BaseButton>
+      <div class="result-footer">
+        <BaseButton @click="handleReturnHome">
+          ホームに戻る
+        </BaseButton>
+      </div>
     </template>
   </DefaultLayout>
 </template>
 
 <style scoped>
-/* 実績の一覧との間を空ける。下部の固定ボタンとも重ならないようにする */
+/*
+ * 上下の余りを均等に分けて、本文を画面の中央へ寄せる。
+ * 収まりきらない場合は余りが0になり、上端から並ぶ（中央寄せで上端が切れるのを防ぐ）。
+ */
+.result-body {
+  margin: auto 0;
+}
+
+/* 実績の一覧との間を空ける */
 .result-mascot {
   position: relative;
-  margin-bottom: 32px;
+  margin-bottom: calc(10px + var(--fit) * 22);
 }
 
 /*
@@ -154,11 +168,11 @@ const handleReturnHome = () => {
  */
 .result-title {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: calc(18px + var(--fit) * 3);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--primary-color);
-  margin-bottom: 6px;
+  margin-bottom: calc(2px + var(--fit) * 4);
 }
 
 .result-note {
@@ -168,8 +182,9 @@ const handleReturnHome = () => {
   color: var(--text-gray);
 }
 
-/* 固定ボタンに最後の行が隠れないように空ける */
-.result-content {
-  padding-bottom: 110px;
+/* 紙吹雪（.confetti）より手前に出すため、位置指定を持たせる */
+.result-footer {
+  position: relative;
+  padding: calc(4px + var(--fit) * 8) 20px calc(14px + var(--fit) * 14);
 }
 </style>

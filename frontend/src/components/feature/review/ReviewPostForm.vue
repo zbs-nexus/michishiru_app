@@ -518,7 +518,9 @@ const handleSubmit = () => {
   z-index: 150;
   width: 100%;
   max-width: 430px;
+  /* 85vh はスマホではツールバーの分だけ大きくなるため、表示中の高さ（dvh）で測る */
   max-height: 85vh;
+  max-height: 85dvh;
   overflow-y: auto;
   padding: 10px 20px 16px;
   background: var(--surface);
