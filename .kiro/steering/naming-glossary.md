@@ -160,16 +160,26 @@ inclusion: always
 | 写真 | photo | 口コミに添える画像。場所あたり最大4枚、初回投稿時のみ設定する |
 | 写真キー | photoKeys | S3に保存した写真のオブジェクトキーの配列 |
 | 写真表示URL | photoUrls | 写真表示用の署名付きGET URLの配列（getSpotが返す） |
+| 写真の全画面表示 | ReviewPhotoViewer | 写真を全画面で拡大表示する部品。複数枚はスワイプ・矢印・キーボードで送る |
+| 拡大表示する写真の一覧 | viewerPhotoUrls | 全画面表示に渡す写真のURLの一覧。空のときは非表示 |
+| 拡大表示を開く位置 | viewerStartIndex | 全画面表示を開いたときに最初に見せる写真の位置 |
+| 拡大表示中の写真の位置 | viewerIndex | 全画面表示で今見ている写真の位置 |
+| 送りと判定する最小の横移動量 | SWIPE_THRESHOLD_PX | 横スワイプを写真の送りとみなす移動量（ピクセル）。`ReviewPhotoViewer.vue` の定数 |
 | 作成者本人か | isOwner | 呼び出し元がその場所の作成者か。本人は名前・ジャンル・写真も編集できる |
 | 自分の口コミ一覧 | myReviews | 自分が投稿した口コミ（場所つき）。地図のオレンジピン表示に使う |
 | 口コミが付いた場所の一覧 | reviewSpots | 誰かが口コミを投稿した場所の全件。自分のぶんも含む |
 | 他の人の口コミの場所 | otherReviewSpots | `reviewSpots` から自分が投稿済みの場所を除いたもの。地図の紫ピン表示に使う |
 | 自分の口コミを表示するか | showMyReviews | オレンジピンの表示切り替え |
 | 他の人の口コミを表示するか | showOtherReviews | 紫ピンの表示切り替え |
+| 選択中の口コミの場所のID | selectedReviewSpotId | 選択中のピンを大きく前面に出すための目印。未選択はnull |
 | ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
 | 口コミフォームの対象座標 | reviewTargetPosition | 投稿フォームが対象にしている座標。長押しした位置、または選んだピンの位置 |
 | 新規投稿の場所のピン | newSpotPin | 赤いピンの座標。まだ口コミが無い場所にだけ立てる |
 | 投稿済みのピンから開いたか | isExistingSpotSelected | 真のとき赤いピンを立てない（長押しと区別する） |
+| 寄せる対象の座標 | focusPosition | 見えている地図範囲の中央へ持ってくる座標。ピンを描く `pinPosition` とは別概念 |
+| 寄せ位置の縦のずれ | focusOffsetY | 地図中央からの縦のずれ（ピクセル）。バナーとフォームで隠れるぶんを親が測って渡す。下方向が正 |
+| フォームを全体表示しているか | isExpanded | 投稿フォームの高さの状態。偽は半分（42vh）、真は全体（85vh） |
+| スワイプと判定する最小の移動量 | SWIPE_THRESHOLD_PX | 上下スワイプを展開・収納とみなす移動量（ピクセル）。`ReviewPostForm.vue` の定数 |
 | 丸めセル | geoCell | 近接する場所を同一視するためのグリッドのセルキー。半径40mの候補絞り込みに使う |
 
 `location`（単独）は使わない。口コミ対象の場所の名称は `spotName` に統一する（辞書の「使ってはいけない表記揺れ」で `place` / `location` を `spot` に寄せているため）。
@@ -183,6 +193,9 @@ inclusion: always
 | 赤 | 新規で口コミ投稿をする場所 | `location-pin` |
 | オレンジ | 自分が口コミ投稿済みの場所 | `review-pin-mine` |
 | 紫 | 他の人の口コミ投稿の場所 | `review-pin-other` |
+
+選択中のピンは色を変えず、大きくして（`--pin-size`）縁・影を強め前面へ出す（`is-selected`）。
+色は意味に固定しているため、選択という別の意味に色を使わない。
 
 ### マスコット
 
@@ -374,6 +387,9 @@ inclusion: always
 | 2026/10/07 | 実績のDB保存に伴い walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults を追加 |
 | 2026/10/07 | 退避した実績を持ち主ごとに送り直すようにしたことに伴い ownerUsername を追加 |
 | 2026/10/14 | 他の人の口コミの紫ピン表示に伴い「口コミ」へ reviewSpots / otherReviewSpots / showMyReviews / showOtherReviews / reviewTargetPosition / newSpotPin / isExistingSpotSelected を追加。ピンの色と意味の対応表（赤＝新規 / オレンジ＝自分 / 紫＝他の人）を明記 |
+| 2026/10/14 | 投稿フォームのボトムシート化とピンの寄せ位置の分離に伴い focusPosition / focusOffsetY / isExpanded / SWIPE_THRESHOLD_PX を追加。ピンを描く座標（pinPosition）と可視範囲の中央へ寄せる座標（focusPosition）を別概念として区別する |
+| 2026/10/14 | 写真の全画面表示（複数枚の送り）に伴い ReviewPhotoViewer / viewerPhotoUrls / viewerStartIndex / viewerIndex を追加。`SWIPE_THRESHOLD_PX` はフォームの高さ切り替えと写真の送りの2か所で使う（どちらもスワイプの判定量） |
+| 2026/10/14 | 口コミフォームを開く経路を長押しとピン選択で分けたことに伴い showReviewFormAt を追加。長押しは解決を待たず入力欄を出し、ピン選択は解決後に描く |
 | 2026/10/14 | 案内中に手動で次の目的地へ進めるボタンの追加に伴い「ルートとスポット」へ advanceToNextSpot / VISITED_STAMP_LABEL を追加 |
 | 2026/10/14 | 次の目的地の切り替えをボタン操作のみにし、現在地からの到達判定を廃止したことに伴い ARRIVAL_THRESHOLD_M を削除 |
 | 2026/10/14 | 到達済みのスタンプを「済」の文字から足跡の画像（`assets/images/spot-visited-stamp.png`）に変更したことに伴い VISITED_STAMP_LABEL を削除 |

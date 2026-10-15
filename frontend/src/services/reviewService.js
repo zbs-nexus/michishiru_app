@@ -83,7 +83,8 @@ export const fetchMyReviews = async () => {
 
   const { reviews } = await response.json();
 
-  return reviews;
+  // 形が変わって reviews が無い応答が来ても、呼び出し側で配列として扱えるようにする
+  return reviews ?? [];
 };
 
 /**
@@ -104,7 +105,8 @@ export const fetchReviewSpots = async () => {
 
   const { spots } = await response.json();
 
-  return spots;
+  // 形が変わって spots が無い応答が来ても、呼び出し側で配列として扱えるようにする
+  return spots ?? [];
 };
 
 /**

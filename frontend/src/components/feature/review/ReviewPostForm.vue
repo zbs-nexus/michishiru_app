@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import BaseButton from '@/components/base/BaseButton.vue';
 import ReviewPhotoInput from '@/components/feature/review/ReviewPhotoInput.vue';
+import ReviewPhotoViewer from '@/components/feature/review/ReviewPhotoViewer.vue';
 import ReviewRatingInput from '@/components/feature/review/ReviewRatingInput.vue';
 
 /** 1つの場所に付けられる写真の最大枚数 */
@@ -57,10 +58,88 @@ const props = defineProps({
   }
 });
 
-const emit = defineEmits(['submitReview', 'close']);
+const emit = defineEmits(['submitReview', 'close', 'changeExpanded']);
 
 /** ロケーション名の最大文字数 */
 const SPOT_NAME_MAX_LENGTH = 30;
+
+/** 上下スワイプを展開・収納と判定する最小の移動量（ピクセル） */
+const SWIPE_THRESHOLD_PX = 24;
+
+/**
+ * フォームを全体表示しているかどうか。
+ * 既定は半分（地図とピンが見えるように）で、上スワイプまたはハンドルの操作で広げる。
+ */
+const isExpanded = ref(false);
+
+/** スワイプの開始位置（画面のY座標）。触れていないときはnull */
+let swipeStartY = null;
+
+/** 直前の操作がスワイプだったか。touchendに続くclickで二重に切り替えないための目印 */
+let hasSwiped = false;
+
+/**
+ * @description 表示の高さを切り替え、変わった場合だけ親へ知らせる。
+ * 親は可視範囲が変わったぶん、ピンの寄せ位置を測り直す。
+ * @param {boolean} value 全体表示にするかどうか
+ * @returns {void}
+ */
+const setExpanded = (value) => {
+  if (isExpanded.value === value) {
+    return;
+  }
+
+  isExpanded.value = value;
+  emit('changeExpanded', value);
+};
+
+/**
+ * @description スワイプの開始位置を覚える
+ * @param {TouchEvent} event タッチイベント
+ * @returns {void}
+ */
+const handleSwipeStart = (event) => {
+  swipeStartY = event.touches[0].clientY;
+  hasSwiped = false;
+};
+
+/**
+ * @description 指を離した位置から、上スワイプなら展開、下スワイプなら収納する
+ * @param {TouchEvent} event タッチイベント
+ * @returns {void}
+ */
+const handleSwipeEnd = (event) => {
+  if (swipeStartY === null) {
+    return;
+  }
+
+  const movedY = event.changedTouches[0].clientY - swipeStartY;
+  swipeStartY = null;
+
+  if (Math.abs(movedY) < SWIPE_THRESHOLD_PX) {
+    return;
+  }
+
+  // 続いて発火するclickで元に戻らないよう、ここで打ち切る
+  hasSwiped = true;
+  event.preventDefault();
+
+  setExpanded(movedY < 0);
+};
+
+/**
+ * @description ハンドルのタップ・Enterで表示の高さを切り替える。
+ * スワイプで既に切り替えた直後は何もしない。
+ * @returns {void}
+ */
+const handleToggleExpanded = () => {
+  if (hasSwiped) {
+    hasSwiped = false;
+    return;
+  }
+
+  setExpanded(!isExpanded.value);
+};
 
 /** 入力されたロケーション名 */
 const spotName = ref('');
@@ -77,8 +156,11 @@ const photos = ref([]);
 /** 残す既存写真（{ key, url }）。本人編集で削除すると減る */
 const keptPhotos = ref([]);
 
-/** 拡大表示中の写真URL。nullのときは非表示 */
-const viewingPhotoUrl = ref(null);
+/** 拡大表示する写真のURLの一覧。空のときは非表示 */
+const viewerPhotoUrls = ref([]);
+
+/** 拡大表示を開いたときに見せる写真の位置 */
+const viewerStartIndex = ref(0);
 
 /** 投稿ボタン押下時の未入力エラー。満たしていればnull */
 const validationMessage = ref(null);
@@ -94,6 +176,9 @@ const formTitle = computed(() => (isEditing.value ? '口コミを編集' : '口�
 
 /** 追加できる新規写真の残り枠（既存の残しぶんを差し引く） */
 const newPhotoRoom = computed(() => PHOTO_MAX_COUNT - keptPhotos.value.length);
+
+/** 残している既存写真のURLだけを並べたもの。拡大表示の送りに渡す */
+const keptPhotoUrls = computed(() => keptPhotos.value.map((photo) => photo.url));
 
 /** 評価のみモードで固定表示するジャンル（アイコン・名称） */
 const existingGenre = computed(() => {
@@ -154,21 +239,24 @@ const prefillForEditing = () => {
   keptPhotos.value = [...props.existingPhotos];
 };
 
-// ピンが別の場所に立て直されたら、前の場所の入力を持ち越さない
+/*
+ * 対象の場所、または解決結果が変わったら入力を作り直す。
+ *
+ * 2つを別のwatchで扱うと、発火の順番によって片方の処理がもう片方を打ち消す。
+ * （場所の入れ替えでプリフィルが消える / プリフィル後にリセットが走る）。
+ * どちらが変わっても「初期化してからプリフィル」を通すことで、順番に依存しなくなる。
+ *
+ * immediate を付けるのは、投稿済みのピンを選んだ場合に
+ * 解決を終えてからフォームを描くため。このときpropsは最初から確定しており、
+ * 変化を待っているとプリフィルが走らず、自分の投稿内容が空のまま表示される。
+ */
 watch(
-  () => props.pinPosition,
-  () => {
-    resetInputs();
-  }
-);
-
-// 場所の解決後に既存情報が分かったら、本人編集ならプリフィルする
-watch(
-  () => props.existingSpot,
+  () => [props.pinPosition, props.existingSpot],
   () => {
     resetInputs();
     prefillForEditing();
-  }
+  },
+  { immediate: true }
 );
 
 // 解決後に既存評価が分かったら、評価の初期値へ反映する
@@ -230,12 +318,14 @@ const handleRemoveKeptPhoto = (index) => {
 };
 
 /**
- * @description 写真を原寸で拡大表示する
- * @param {string} url 表示する写真のURL
+ * @description 写真を全画面で拡大表示する。
+ * 同じ場所の写真を送れるようにするため、押された1枚だけでなく一覧と位置を受け取る。
+ * @param {{photoUrls: string[], index: number}} params 表示する写真の一覧と位置
  * @returns {void}
  */
-const openPhotoViewer = (url) => {
-  viewingPhotoUrl.value = url;
+const openPhotoViewer = ({ photoUrls, index }) => {
+  viewerPhotoUrls.value = photoUrls;
+  viewerStartIndex.value = index;
 };
 
 /**
@@ -243,7 +333,8 @@ const openPhotoViewer = (url) => {
  * @returns {void}
  */
 const closePhotoViewer = () => {
-  viewingPhotoUrl.value = null;
+  viewerPhotoUrls.value = [];
+  viewerStartIndex.value = 0;
 };
 
 /**
@@ -297,10 +388,27 @@ const handleSubmit = () => {
 <template>
   <div
     class="review-form"
+    :class="{ 'is-expanded': isExpanded }"
     role="dialog"
     aria-modal="false"
     aria-label="口コミを投稿"
   >
+    <!--
+      高さを切り替えるハンドル。上スワイプで全体表示、下スワイプで半分に戻す。
+      タッチ以外でも操作できるようボタンにし、タップとEnterでも切り替える
+    -->
+    <button
+      class="review-form-handle"
+      type="button"
+      :aria-expanded="isExpanded"
+      aria-label="口コミ投稿フォームの表示の高さを切り替える"
+      @touchstart="handleSwipeStart"
+      @touchend="handleSwipeEnd"
+      @click="handleToggleExpanded"
+    >
+      <span class="review-form-handle-bar" />
+    </button>
+
     <div class="review-form-header">
       <h3 class="review-form-title">
         {{ formTitle }}
@@ -350,7 +458,7 @@ const handleSubmit = () => {
               class="review-existing-photo-btn"
               type="button"
               aria-label="写真を拡大表示"
-              @click="openPhotoViewer(url)"
+              @click="openPhotoViewer({ photoUrls: existingSpot.photoUrls, index })"
             >
               <img
                 :src="url"
@@ -427,7 +535,7 @@ const handleSubmit = () => {
                 class="kept-photo-btn"
                 type="button"
                 aria-label="写真を拡大表示"
-                @click="openPhotoViewer(photo.url)"
+                @click="openPhotoViewer({ photoUrls: keptPhotoUrls, index })"
               >
                 <img
                   :src="photo.url"
@@ -478,29 +586,13 @@ const handleSubmit = () => {
       </BaseButton>
     </div>
 
-    <!-- 写真の原寸表示（ライトボックス） -->
-    <div
-      v-if="viewingPhotoUrl"
-      class="photo-viewer"
-      role="dialog"
-      aria-modal="true"
-      aria-label="写真の拡大表示"
-      @click="closePhotoViewer"
-    >
-      <img
-        :src="viewingPhotoUrl"
-        alt=""
-        class="photo-viewer-image"
-      >
-      <button
-        class="photo-viewer-close"
-        type="button"
-        aria-label="閉じる"
-        @click="closePhotoViewer"
-      >
-        ×
-      </button>
-    </div>
+    <!-- 写真の全画面表示。複数枚はスワイプ・矢印・キーボードで切り替える -->
+    <ReviewPhotoViewer
+      v-if="viewerPhotoUrls.length > 0"
+      :photo-urls="viewerPhotoUrls"
+      :start-index="viewerStartIndex"
+      @close="closePhotoViewer"
+    />
   </div>
 </template>
 
@@ -509,6 +601,11 @@ const handleSubmit = () => {
  * 全画面地図の上に、画面下部から現れる投稿フォーム。
  * 終了ボタン（global.css の .primary-btn.full-width、z-index: 50）に重ねてよいため、
  * 画面下端に固定し、より手前（z-index: 150）に置く。
+ *
+ * 初期は半分の高さに留め、立てたピンと地図が見える状態から始める。
+ * 上スワイプで全体表示（85vh）に広げる。
+ * max-height にアニメーションを付けないのは、親が開閉直後に offsetHeight を測って
+ * ピンの寄せ位置を決めるため。途中の高さを測ると寄せ位置がずれる。
  */
 .review-form {
   position: fixed;
@@ -518,16 +615,52 @@ const handleSubmit = () => {
   z-index: 150;
   width: 100%;
   max-width: 430px;
-  /* 85vh はスマホではツールバーの分だけ大きくなるため、表示中の高さ（dvh）で測る */
-  max-height: 85vh;
-  max-height: 85dvh;
+  /*
+   * vh はスマホではツールバーの分だけ大きくなるため、表示中の高さ（dvh）で測る
+   * （dvh に対応していないブラウザ向けに vh を先に書いている）。全体表示も同じ。
+   */
+  max-height: 42vh;
+  max-height: 42dvh;
   overflow-y: auto;
-  padding: 10px 20px 16px;
+  padding: 0 20px 16px;
   background: var(--surface);
   border-top: 2px solid var(--border-gold);
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.2);
   animation: review-form-slide-in 0.2s ease-out;
+}
+
+.review-form.is-expanded {
+  max-height: 85vh;
+  max-height: 85dvh;
+}
+
+/*
+ * 高さを切り替えるハンドル。
+ * スクロールしても常に見えるよう上端に貼り付け、指で掴める高さを確保する。
+ */
+.review-form-handle {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  background: var(--surface);
+  border: none;
+  cursor: pointer;
+  /* ハンドル上の縦スワイプをブラウザのスクロールに取られないようにする */
+  touch-action: none;
+}
+
+.review-form-handle-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-gold);
 }
 
 .review-form-header {
@@ -771,41 +904,6 @@ const handleSubmit = () => {
   width: auto;
   min-width: 88px;
   padding: 12px 20px;
-}
-
-/* 写真の原寸表示（ライトボックス）。フォームより手前に全画面で出す */
-.photo-viewer {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.85);
-  cursor: zoom-out;
-}
-
-.photo-viewer-image {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-.photo-viewer-close {
-  position: fixed;
-  top: 16px;
-  right: 16px;
-  width: 40px;
-  height: 40px;
-  padding: 0;
-  font-size: 24px;
-  line-height: 1;
-  color: var(--white);
-  background: rgba(0, 0, 0, 0.5);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
 }
 
 @keyframes review-form-slide-in {

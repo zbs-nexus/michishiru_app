@@ -19,8 +19,10 @@ export const useReviewSpots = () => {
   const loadReviewSpots = async () => {
     try {
       reviewSpots.value = await fetchReviewSpots();
-    } catch {
-      // ピン表示は副次的なため、失敗時は空にして続行する
+    } catch (error) {
+      // ピン表示は副次的なため、失敗時は空にして続行する。
+      // ただし黙って消すとピンが出ない理由が追えないため、原因は残す
+      console.warn('他の人の口コミの取得に失敗しました', error);
       reviewSpots.value = [];
     }
   };

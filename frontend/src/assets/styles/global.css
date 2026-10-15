@@ -36,14 +36,24 @@
   --shadow: 0 2px 10px rgba(74,58,36,0.14);
   --shadow-raised: 0 10px 28px rgba(74,58,36,0.2);
   /*
-   * 見出し用の書体。解星特ミン（Kaisei Tokumin）の太字で、
-   * 石碑に彫られた文字のような重さを出す。
+   * アプリ全体の書体。DotGothic16 のドット文字で、古いゲーム機の画面のような
+   * 粗い輪郭を出す。見出しも本文も同じものを使う。
    * 配信は自前（main.js が @fontsource から読み込む）。外部CDNへは取りに行かない。
-   * 読み込めなかった場合は端末の明朝へ落ちるよう候補を並べている。
+   * 読み込めなかった場合はドット文字の代わりとして違和感の小さい
+   * 端末のゴシックへ落ちるよう候補を並べている。明朝は字の雰囲気が離れすぎるため
+   * 候補に入れない。等幅の monospace も、手前の sans-serif が必ず当たって
+   * 出番が来ないため置かない。
    * 別の書体へ変えたいときは、ここと main.js の2か所だけ直せばよい。
+   *
+   * DotGothic16 はウェイト400しか持たない。既にある font-weight: 700 の指定は
+   * ブラウザの合成太字で描かれる。これから強調を増やすときは太字に頼らず、
+   * 文字サイズか色で差をつけること（ドット文字は太らせると輪郭が潰れる）。
+   *
+   * 見出しと本文で同じ値になるが、変数は2つのまま残す。
+   * 将来「見出しだけ別の書体に戻す」余地を残しておくため。
    */
-  --font-display: 'Kaisei Tokumin', 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'Noto Serif JP', 'Georgia', serif;
-  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+  --font-display: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
+  --font-body: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
   /*
    * 画面の高さに合わせて寸法を伸び縮みさせる係数（0px〜1px）。
    * どの端末でも全画面をスクロールせずに収めるために使う。
@@ -95,6 +105,35 @@ body {
   max-width: 430px;
   margin: 0 auto;
   position: relative;
+}
+
+/*
+ * ボタンや入力欄は、ブラウザの既定では親から書体を受け継がない。
+ * UAスタイルシートが独自の書体（Arial 等）を当てるため、
+ * font-family を書いていない部品だけ別の書体で表示されてしまう。
+ * ジャンルの選択ボタンや認証画面の入力欄がこれに当たっていたので、
+ * まとめて body からの継承へ戻す。
+ * 個別に font-family を指定している部品（.primary-btn 等）はそちらが優先される。
+ */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/*
+ * MapLibre GL は自分のスタイルシートで地図コンテナへ
+ * `font: 12px/20px Helvetica Neue, Arial, ...` を当てる。
+ * 地図の中へ挿入する要素（スポットの番号・開始地点の目印・帰属表示）は
+ * これを受け継いでしまい、アプリの書体から外れる。そのため継承へ戻す。
+ *
+ * ここで直せるのはHTMLとして描かれる文字だけ。
+ * 地図そのものに写っている地名は、タイル画像に焼き込まれた絵なので
+ * CSSでは変えられない（ベクタタイルへ移行しない限り触れない）。
+ */
+.maplibregl-map {
+  font-family: inherit;
 }
 
 #app {
@@ -458,11 +497,15 @@ body {
 
 /*
  * 16px未満にするとiOSで入力時に画面が拡大されるため、文字の大きさは下げない。
- * 低い画面では上下の余白だけを詰める（高さ 40px 前後を下限にして押しやすさを保つ）。
+ * 低い画面では上下の余白だけを詰める（高さ 38px を下限にして押しやすさを保つ）。
+ * 行間を固定するのは、入力欄の高さを書体に左右させないため。
+ * DotGothic16 の既定の行間は 1.5 倍で、固定しないと入力欄1つにつき約4px高くなり、
+ * 入力欄の多い画面（パスワード再設定など）が低い端末に収まらなくなる。
  */
 .auth-field input {
-  padding: calc(9px + var(--fit) * 5) 14px;
+  padding: calc(8px + var(--fit) * 6) 14px;
   font-size: 16px;
+  line-height: 1.25;
   border: 1px solid var(--border-gold);
   border-radius: 10px;
   background: var(--surface);
@@ -749,8 +792,18 @@ body {
  * 青い円と方向を示す矢印で構成。
  * RouteMap.vue が動的に生成するため、グローバルに定義している。
  */
+/*
+ * マーカーは MapLibre が transform でコンテナ原点から位置決めするため、
+ * 必ず absolute にする（relative だと通常フローに入り、transform の起点が
+ * フロー上の静止位置になって、2個目以降のマーカーがその分ずれる。
+ * ずれ量はピクセル固定なのでピンが地面に貼り付かず、拡大縮小のたびに別の地点を指す）。
+ *
+ * MapLibre の .maplibregl-marker も absolute を指定しているが、
+ * こちらのCSSが後に読み込まれて同じ詳細度で上書きできてしまうため、明示する。
+ * 内側の点や頭は absolute で配置するが、absolute の要素も包含ブロックになるため問題ない。
+ */
 .current-location-marker {
-  position: relative;
+  position: absolute;
   width: 24px;
   height: 24px;
 }
@@ -798,17 +851,26 @@ body {
  * しずく型で、下端が座標を指す。
  */
 .location-pin {
-  position: relative;
+  /* relative にしないこと（理由は current-location-marker のコメント） */
+  position: absolute;
   width: 24px;
-  height: 24px;
+  /* 先端の張り出しぶんを含めた高さ（頭24px + 張り出し5px） */
+  height: 29px;
   cursor: pointer;
 }
 
-/* しずくの頭。先端（左下の角）が下を向くよう回転させる */
+/*
+ * しずくの頭。先端（左下の角）が下を向くよう回転させる。
+ *
+ * 24pxの正方形を45°回すと、角は箱の底辺より 24 × (√2 - 1) ÷ 2 ≒ 5px 外へ出る。
+ * MapLibre の anchor: 'bottom' が座標に合わせるのはレイアウト上の箱の底辺
+ * （transform は offsetHeight に影響しない）ため、頭をこの5px分だけ持ち上げて
+ * 先端と箱の底辺を一致させる。そうしないと先端が座標の5px下を指す。
+ */
 .location-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 0;
+  bottom: 5px;
   width: 24px;
   height: 24px;
   margin-left: -12px;
@@ -836,29 +898,45 @@ body {
 /*
  * 投稿済みの口コミのピン。形は location-pin と同じしずく型で、色だけを変える。
  * 押せることを支援技術へ伝えるためボタン要素で作るため、既定の見た目を打ち消す。
+ *
+ * サイズは --pin-size にまとめ、高さ・頭・持ち上げ量をそこから比率で出す。
+ * しずくは正方形を45°回しているため、角が箱の底辺より size × (√2−1)/2 外へ出る。
+ * MapLibre の anchor: 'bottom' が合わせる箱の底辺と先端を一致させるには、
+ * 高さに 1 + (√2−1)/2 ≒ 1.2071、持ち上げ量に (√2−1)/2 ≒ 0.2071 を掛ける。
+ * 定数で持つと選択時に拡大しても先端が座標からずれない。
  */
 .review-pin {
-  position: relative;
-  width: 24px;
-  height: 24px;
+  /* relative にしないこと（理由は current-location-marker のコメント） */
+  position: absolute;
+  --pin-size: 24px;
+  width: var(--pin-size);
+  /* 先端の張り出しぶんを含めた高さ */
+  height: calc(var(--pin-size) * 1.2071);
   padding: 0;
   background: none;
   border: none;
   cursor: pointer;
+  /* 選択時の拡大をなめらかに見せる */
+  transition: width 0.12s ease-out, height 0.12s ease-out;
 }
 
 .review-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 0;
-  width: 24px;
-  height: 24px;
-  margin-left: -12px;
+  /* 先端を座標に合わせるため張り出しぶんだけ持ち上げる */
+  bottom: calc(var(--pin-size) * 0.2071);
+  width: var(--pin-size);
+  height: var(--pin-size);
+  margin-left: calc(var(--pin-size) / -2);
   border: 3px solid var(--white);
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   transform-origin: center;
   box-shadow: var(--shadow);
+  transition:
+    width 0.12s ease-out,
+    height 0.12s ease-out,
+    border-width 0.12s ease-out;
 }
 
 .review-pin-head::after {
@@ -871,6 +949,21 @@ body {
   height: 7px;
   background: var(--white);
   border-radius: 50%;
+}
+
+/*
+ * 選択中のピン。
+ * 大きくし（A）、縁を太く・影を濃くして浮かせ（E）、重なっても隠れないよう前面へ出す。
+ * z-index はマーカー同士の兄弟要素に効く（MapLibre は重なり順を管理しないため）。
+ */
+.review-pin.is-selected {
+  --pin-size: 34px;
+  z-index: 1;
+}
+
+.review-pin.is-selected .review-pin-head {
+  border-width: 4px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 /* 自分が口コミ投稿済みの場所はオレンジ */

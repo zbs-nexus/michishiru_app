@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現在地へ戻るボタン - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .prereq {
+            background-color: #f0f7ec;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        a {
+            color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>現在地へ戻るボタン - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
+            <strong>📅 マージ日:</strong> 2026-10-07（10:55 / 12:20 の2回）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-233（2回に分けてマージ）<br>
+            <strong>🔖 対象マージ:</strong> <code>cad1042</code>, <code>cc02d5c</code>
+        </div>
+
+        <p>
+            案内画面の地図に「現在地へ戻る」ボタンを追加しました。地図を指で動かして現在地が画面外へ出てしまっても、
+            ボタンを1回押すだけで現在地が中央に戻り、拡大率（ズーム）も最初に表示していた状態に戻ります。
+            変更したのはフロントエンドの2ファイルだけで、バックエンドやAWSの構成には手を入れていません。
+        </p>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>MapLibre GL とは</strong><br>
+            ミチシルで地図を描いている JavaScript のライブラリです。地図の中心座標や拡大率を指示すると、
+            タイル（地図の画像データ）を並べて描画してくれます。ミチシルでは
+            <code>frontend/src/components/feature/route/RouteMap.vue</code> がこのライブラリを扱う唯一の場所です。
+        </div>
+        <div class="prereq">
+            <strong>「コントロール」とは</strong><br>
+            MapLibre GL が地図の隅に置く小さな操作パネルのことです。ミチシルでは右上に「＋」「−」のズームボタンが出ていますが、
+            これも <code>NavigationControl</code> というコントロールです。ライブラリが決めた形（<code>onAdd</code> / <code>onRemove</code> を持つオブジェクト）に合わせて自作すると、
+            既存のボタンと同じ枠・同じ見た目で並べられます。今回の現在地へ戻るボタンはこの仕組みで追加しています。
+        </div>
+        <div class="prereq">
+            <strong>現在地はどこから来るか</strong><br>
+            現在地の測位（GPSなどで位置を取ること）はこの機能では行っていません。案内画面が
+            <code>useLocationTracking</code> という composable で測位を続け、その結果を地図コンポーネントへ渡しています。
+            詳しくは <a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能の実装解説</a> を参照してください。
+        </div>
+        <div class="prereq">
+            <strong><code>&lt;style scoped&gt;</code> が届かない場所がある</strong><br>
+            Vue の <code>&lt;style scoped&gt;</code> は、そのコンポーネントが描いた要素だけにスタイルを当てる仕組みです。
+            MapLibre GL はコントロールやマーカーをコンポーネントの外側のDOMへ挿入するため、scoped のスタイルが当たりません。
+            そのため、地図に挿入される部品のスタイルは <code>frontend/src/assets/styles/global.css</code> に置いています。
+        </div>
+        <div class="prereq">
+            <strong>props（プロパティ）の受け渡し</strong><br>
+            親コンポーネントから子へ値を渡す仕組みです。今回の実装では
+            <code>showCurrentLocation</code>（現在地を表示するか）と <code>isInteractive</code>（地図の操作を許可するか）という
+            2つの props を見て、ボタンを出すかどうかを決めています。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            案内画面（<code>RouteNavigationView.vue</code>）の地図の右上、ズームボタンのすぐ下に、丸いアイコンのボタンが1つ増えます。
+            押すと次の2つが同時に起こります。
+        </p>
+        <ul>
+            <li>地図の中心が現在地へ移動する</li>
+            <li>拡大率が「画面を開いた直後の見え方」に戻る</li>
+        </ul>
+        <p>
+            このボタンは案内画面にだけ出ます。ルート提案画面の地図は
+            <code>RouteMapPreview.vue</code> 経由で <code>isInteractive</code> を <code>false</code>（操作不可）にしているため、
+            ズームボタンも現在地へ戻るボタンも表示されません。
+        </p>
+        <p>
+            機能は2回のマージに分かれています。1回目（<code>cad1042</code>）でボタンそのものを追加し、
+            2回目（<code>cc02d5c</code>）で「拡大率も戻す」挙動を足しました。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            案内中（US-6「案内画面表示」）は、歩きながら地図を指でずらしたり、先のスポットを確かめるために縮小したりします。
+            その結果、自分の現在地が画面の外へ出てしまうことがあります。ミチシルの地図は現在地を自動で追いかけ続ける作りではないため、
+            一度ずらすと、自分で地図をドラッグして現在地を探し直すしかありませんでした。歩きながらの操作としては手間が大きく、
+            「今どこにいるか」が分からない時間ができてしまいます。
+        </p>
+        <p>
+            そこで、1回押せば現在地に戻れる手段を用意しました。地図アプリで一般的な操作なので、使い方の説明も要りません。
+        </p>
+        <p>
+            <strong>拡大率も戻すようにした理由:</strong>
+            1回目のマージ（<code>cad1042</code>）の時点では、コードのコメントに
+            「ズーム倍率は変えず、位置だけを移動させる」と書かれているとおり、中心座標だけを動かしていました。
+            しかし拡大率が変わったままだと、たとえばルート全体を見るために大きく縮小した状態でボタンを押しても、
+            現在地が中央に来るだけで縮小されたままです。周りの道が見える元の縮尺に戻すには、さらにズーム操作が必要でした。
+            2回目のマージ（<code>cc02d5c</code>）で拡大率の復元を足し、ボタン1回で最初の見え方に戻るようにしています。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 地図を作り、ルート全体を収める</strong>（<code>cad1042</code> 以前からある処理）<br>
+            画面を開くと <code>onMounted</code> で地図が生成され、スタイルの読み込みが終わった時点（<code>map.on('load')</code>）で
+            線やマーカーを描き、最後に <code>fitToRoute()</code> でルート全体が収まる位置・倍率まで地図を寄せます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 初期表示の拡大率を覚える</strong>（<code>cc02d5c</code> で追加）<br>
+            <code>fitToRoute()</code> の最後に <code>map.getZoom()</code> で寄せ終わった倍率を読み取り、
+            <code>initialZoomLevel</code> という変数に保存します。これが「最初の見え方」の基準になります。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 測位が始まったらボタンを追加する</strong>（<code>cad1042</code>）<br>
+            現在地マーカーを描く <code>renderCurrentLocationMarker()</code> の先頭で <code>ensureRecenterControl()</code> を呼びます。
+            この関数は、まだボタンが無く・地図が操作可能で・現在地の表示が有効なときだけ、コントロールを地図の右上へ追加します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: ボタンが押されたら現在地へ寄せる</strong>（<code>cad1042</code> + <code>cc02d5c</code>）<br>
+            クリックで <code>centerOnCurrentLocation()</code> が動き、<code>map.easeTo()</code> に現在地の座標と
+            <code>initialZoomLevel</code> を渡します。<code>easeTo</code> は瞬間移動ではなく、なめらかに動かす指示です。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: 画面を離れるときの片付け</strong>（<code>cad1042</code>）<br>
+            <code>onBeforeUnmount</code> で <code>recenterControl</code> の参照を <code>null</code> に戻します。
+            コントロール自体は <code>map.remove()</code> が破棄するため、個別に外す処理は書いていません。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/components/feature/route/RouteMap.vue — 現在地へ寄せる関数</h3>
+        <p>ボタンを押したときに実行される処理です。<code>zoom</code> の行が2回目のマージで足された部分です。</p>
+        <div class="code-block"><pre>/**
+ * @description 地図の中心を現在地へ寄せ、拡大率を初期表示と同じに戻す。
+ * @returns {void}
+ */
+const centerOnCurrentLocation = () => {
+  if (map === null || props.currentLocation === null) {
+    return;
+  }
+
+  map.easeTo({
+    center: [props.currentLocation.lng, props.currentLocation.lat],
+    zoom: initialZoomLevel
+  });
+};</pre></div>
+        <ul>
+            <li>入力: なし（<code>props.currentLocation</code> とモジュール内の <code>initialZoomLevel</code> を参照します）。出力: なし。</li>
+            <li>地図がまだ無いとき、現在地が取れていないときは何もせずに抜けます。押しても落ちないようにするためのガードです。</li>
+            <li><code>center</code> に渡す座標は <code>[経度, 緯度]</code> の順です。地図ライブラリの決まりで、緯度が先ではありません。</li>
+        </ul>
+
+        <h3>RouteMap.vue — 初期表示の拡大率を覚える</h3>
+        <p>
+            拡大率を戻すには「戻す先の値」が必要です。その値は、ルート全体を収めた結果として決まるので、
+            収め終わった直後に読み取って保存しています。
+        </p>
+        <div class="code-block"><pre>/**
+ * 初期表示の拡大率。
+ * ルート全体を収めた直後の値を覚えておき、現在地へ戻るときに復元する。
+ * 地図の生成時の値を初期値とし、ルートを収められない場合もこの値を使う。
+ */
+let initialZoomLevel = DEFAULT_ZOOM_LEVEL;</pre></div>
+        <div class="code-block"><pre>  map.fitBounds(bounds, {
+    padding: MAP_FIT_PADDING_PX,
+    maxZoom: MAX_FIT_ZOOM_LEVEL,
+    animate: false
+  });
+
+  // 現在地へ戻るときに初期表示と同じ倍率へ復元できるよう、この時点の倍率を覚えておく。
+  // animate: false のため、ここでは寄せ終わった後の値が取れる
+  initialZoomLevel = map.getZoom();</pre></div>
+        <ul>
+            <li>
+                初期値は <code>frontend/src/constants/mapDefaults.js</code> の <code>DEFAULT_ZOOM_LEVEL</code>（<code>14</code>）です。
+                経路の座標が無くて <code>fitToRoute()</code> が途中で抜ける場合は、この値が使われます。
+            </li>
+            <li>
+                <code>animate: false</code> は「アニメーションせずに即座に寄せる」指定です。これがあるので、
+                直後の <code>map.getZoom()</code> で寄せ終わった後の倍率が取れます。アニメーションする設定だと、
+                移動中の途中の値を拾ってしまいます。
+            </li>
+            <li>
+                <code>initialZoomLevel</code> は <code>ref</code> ではなく素の変数です。画面に表示する値ではなく、
+                地図ライブラリへ渡すだけの内部的な値なので、Vue の監視対象にする必要がありません
+                （同じ理由で <code>map</code> や各マーカーも素の変数で持っています）。
+            </li>
+        </ul>
+
+        <h3>RouteMap.vue — ボタンを組み立てる</h3>
+        <p>MapLibre GL のコントロールとして渡せる形（<code>onAdd</code> / <code>onRemove</code> を持つオブジェクト）を自作しています。</p>
+        <div class="code-block"><pre>const createRecenterControl = () => {
+  const container = document.createElement('div');
+  container.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'recenter-btn';
+  // アイコンのみのボタンなので、読み上げ用の名前を付ける
+  button.setAttribute('aria-label', RECENTER_BUTTON_LABEL);
+  button.title = RECENTER_BUTTON_LABEL;
+  button.addEventListener('click', centerOnCurrentLocation);
+
+  container.appendChild(button);
+
+  return {
+    onAdd: () => container,
+    onRemove: () => {
+      button.removeEventListener('click', centerOnCurrentLocation);
+      container.remove();
+    }
+  };
+};</pre></div>
+        <ul>
+            <li>
+                <code>maplibregl-ctrl maplibregl-ctrl-group</code> はライブラリが用意しているクラス名です。
+                これを付けるだけで、ズームボタンと同じ白い角丸の枠・同じ大きさになります。
+            </li>
+            <li>
+                アイコンだけのボタンなので、<code>aria-label</code> に「現在地へ戻る」という名前を付けています
+                （画面読み上げソフトのための名前です。定数 <code>RECENTER_BUTTON_LABEL</code> にまとめ、<code>title</code> にも同じ文字列を使っています）。
+            </li>
+            <li>
+                <code>onRemove</code> でクリックの登録を外しています。登録したまま要素を捨てると、
+                参照が残り続けてメモリを解放できなくなる場合があるためです。
+            </li>
+        </ul>
+
+        <h3>RouteMap.vue — 追加するタイミングの判定</h3>
+        <p>ボタンの追加は地図の生成時ではなく、現在地マーカーを描くときに行っています。</p>
+        <div class="code-block"><pre>/**
+ * @description 現在地へ戻るコントロールを必要になった時点で追加する。
+ *
+ * 追跡の開始は親（View）のonMountedで行われ、子のonMountedより後になる。
+ * 地図の生成時には現在地の表示が無効のままなので、ここで追加する。
+ * @returns {void}
+ */
+const ensureRecenterControl = () => {
+  if (
+    recenterControl !== null ||
+    map === null ||
+    !props.isInteractive ||
+    !props.showCurrentLocation
+  ) {
+    return;
+  }
+
+  recenterControl = createRecenterControl();
+  map.addControl(recenterControl, 'top-right');
+};</pre></div>
+        <table>
+            <tr><th>条件</th><th>追加しない理由</th></tr>
+            <tr><td><code>recenterControl !== null</code></td><td>すでに追加済み。現在地は何度も更新されるので、毎回作るとボタンが増えてしまう</td></tr>
+            <tr><td><code>map === null</code></td><td>地図がまだ無い、または破棄済み</td></tr>
+            <tr><td><code>!props.isInteractive</code></td><td>操作できない地図（ルート提案画面のプレビュー）にはズームボタンも出していない</td></tr>
+            <tr><td><code>!props.showCurrentLocation</code></td><td>現在地を表示していない画面では、戻る先が無いのでボタンに意味がない</td></tr>
+        </table>
+        <p>
+            Vue では子コンポーネントの <code>onMounted</code> が親より先に動きます。測位を始めるのは親の案内画面なので、
+            地図を作る時点では <code>showCurrentLocation</code> がまだ <code>false</code> です。
+            そのため「地図を作るときに1回だけ追加する」書き方では、ボタンが永遠に出ません。
+            現在地が届いて <code>renderCurrentLocationMarker()</code> が呼ばれた時点で追加するのが、この関数の役割です。
+        </p>
+
+        <h3>frontend/src/assets/styles/global.css — アイコンの見た目</h3>
+        <p>
+            ボタンの枠と大きさはライブラリの <code>.maplibregl-ctrl-group</code> が与えるので、ここでは中のアイコンだけを描いています。
+            画像ファイルは使わず、CSSで二重丸（紫の円の内側に白い輪、中心に紫の点）を作っています。
+        </p>
+        <div class="code-block"><pre>.recenter-btn::after {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  margin: 0 auto;
+  border: 2px solid var(--primary-color);
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 3px var(--white);
+  background: var(--primary-color);
+  background-clip: content-box;
+  padding: 3px;
+  box-sizing: border-box;
+}</pre></div>
+        <ul>
+            <li>
+                色は直書きせず <code>var(--primary-color)</code>（紫のインク）と <code>var(--white)</code> を参照しています。
+                配色は <code>global.css</code> の <code>:root</code> に集約する、という前提条件書の決まりに従っています。
+            </li>
+            <li>
+                <code>::after</code> は要素の中に装飾用の箱を1つ作る書き方です。中心の点は
+                <code>background-clip: content-box</code> と <code>padding</code> の組み合わせで、背景を内側だけに描いて表現しています。
+            </li>
+        </ul>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>ボタンは「現在地を追い続ける」機能ではない</strong><br>
+            押した瞬間に1回だけ寄せるだけで、その後に歩いても地図は追従しません。常に追従させる挙動が必要なら、
+            別途そのための仕組み（追従のオン・オフ）を設計する必要があります。
+        </div>
+        <div class="important">
+            <strong>現在地が取れていないと何も起きない</strong><br>
+            位置情報の許可が出ていない、測位に失敗しているといった場合、<code>currentLocation</code> が <code>null</code> のため
+            押しても地図は動きません。ボタン自体は <code>showCurrentLocation</code>（案内画面では測位中かどうか）が真なら表示されるので、
+            「押せるのに反応しない」状態が起こり得ます。
+        </div>
+        <div class="important">
+            <strong>戻る先の拡大率はルートごとに変わる</strong><br>
+            <code>initialZoomLevel</code> は <code>fitToRoute()</code> が走ったときの倍率です。
+            ルートを再作成（<code>regenerate</code>）すると <code>fitToRoute()</code> が再び呼ばれるため、
+            新しいルートに合わせた倍率へ更新されます。固定値ではない点に注意してください。
+        </div>
+        <div class="important">
+            <strong>スタイルを <code>&lt;style scoped&gt;</code> に移さない</strong><br>
+            <code>.recenter-btn</code> のスタイルは、地図ライブラリがコンポーネントの外へ挿入する要素に当てるものです。
+            <code>RouteMap.vue</code> の <code>&lt;style scoped&gt;</code> へ移すと当たらなくなり、アイコンが消えます。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行します（フロントとローカルAPIが同時に起動します）。</li>
+            <li>ホーム画面で条件を選んでルートを作成し、提案モーダルで「決定」を押して案内画面へ進みます。</li>
+            <li>位置情報の利用を許可し、現在地の青い丸が表示されることを確認します。</li>
+            <li>地図の右上、ズームボタンの下に二重丸のボタンが出ていることを確認します。</li>
+            <li>地図を指（マウス）でドラッグして現在地を画面の外へ出し、さらに縮小します。</li>
+            <li>ボタンを押し、現在地が中央に戻り、かつ拡大率が案内画面を開いた直後の状態に戻ることを確認します。</li>
+            <li>ルート提案画面の地図（プレビュー）には、ズームボタンもこのボタンも出ないことを確認します。</li>
+            <li><code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code> を実行し、エラーが出ないことを確認します。</li>
+        </ol>
+        <p>
+            この機能には自動テストを追加していません。地図ライブラリのDOM操作が中心のため、確認は上記の手動操作で行います。
+        </p>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                    <th>由来のブランチ</th>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteMap.vue</code></td>
+                    <td>現在地へ戻るコントロールの組み立て・追加・クリック時の処理。2回目のマージで初期拡大率の記憶と復元を追加</td>
+                    <td>feature/NZ-233（<code>cad1042</code> / <code>cc02d5c</code>）</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/assets/styles/global.css</code></td>
+                    <td><code>.recenter-btn::after</code> を追加（ボタン内のアイコンをCSSで描画）</td>
+                    <td>feature/NZ-233（<code>cad1042</code>）</td>
+                </tr>
+            </table>
+        </div>
+        <p>
+            次のファイルは今回変更していませんが、この機能を読むときに合わせて見ると流れが分かります。
+        </p>
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>この機能との関わり</th>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/constants/mapDefaults.js</code></td>
+                    <td><code>DEFAULT_ZOOM_LEVEL</code>（<code>14</code>）など地図の既定値。<code>initialZoomLevel</code> の初期値として使う</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteNavigationMap.vue</code></td>
+                    <td><code>RouteMap</code> へ <code>show-current-location="isTracking"</code> を渡す。ボタンが出るかどうかはここで決まる</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteNavigationView.vue</code></td>
+                    <td>測位を開始し、現在地と追跡状態を地図へ渡す親の画面</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteMapPreview.vue</code></td>
+                    <td><code>is-interactive="false"</code> を渡すため、提案画面ではボタンが出ない</td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr>
+                <th>ドキュメント</th>
+                <th>何が書いてあるか</th>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td>
+                <td>US-6「案内画面表示」の受け入れ条件と、地図描画に MapLibre GL / Location Service を使う構成の決定</td>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td>
+                <td>本文に出てくる <code>currentLocation</code> / <code>zoom</code> / <code>position</code> / <code>navigation</code> などの定義</td>
+            </tr>
+            <tr>
+                <td><a href="../仕様書.md">仕様書</a></td>
+                <td>案内画面に何を表示するかの画面仕様</td>
+            </tr>
+            <tr>
+                <td><a href="../設計書.md">設計書</a></td>
+                <td>ルートのデータ構造（<code>geometry</code> の座標列など）とAPIの仕様</td>
+            </tr>
+            <tr>
+                <td><a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能の実装解説</a></td>
+                <td>前提になる機能。現在地をどう測位し、精度をどう扱っているか</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-197_開始地点の目印_実装解説.html">開始地点の目印の実装解説</a></td>
+                <td>同じ <code>RouteMap.vue</code> と <code>global.css</code> に手を入れた先行実装。地図に部品を足すときの進め方の参考</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示の実装解説</a></td>
+                <td>案内画面のもう1つの表示。現在地から次のスポットまでの距離の出し方</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>
