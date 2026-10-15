@@ -78,7 +78,7 @@ const isAlert = computed(() => props.variant === 'alert');
 /* 横並び。マスコットを左、吹き出しを右に置く */
 .mascot-speech.is-side {
   align-items: flex-start;
-  gap: 14px;
+  gap: calc(10px + var(--fit) * 4);
 }
 
 /*
@@ -88,21 +88,22 @@ const isAlert = computed(() => props.variant === 'alert');
 .mascot-speech.is-stacked {
   flex-direction: column-reverse;
   align-items: center;
-  gap: 18px;
+  gap: calc(12px + var(--fit) * 6);
 }
 
 /*
  * 吹き出し。羊皮紙の色に金の縁取りで、巻物に書かれた言葉のように見せる。
  * 三角のしっぽは縁取りの色と内側の色を2枚重ねて描く。
+ * 余白と文字は画面の高さ（global.css の --fit）に合わせて詰める。
  */
 .speech-bubble {
   position: relative;
-  padding: 14px 16px;
+  padding: calc(9px + var(--fit) * 5) 16px;
   border: 2px solid var(--border-gold);
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--shadow);
-  font-size: 14px;
+  font-size: calc(13px + var(--fit) * 1);
   font-weight: 600;
   line-height: 1.7;
   color: var(--text-dark);

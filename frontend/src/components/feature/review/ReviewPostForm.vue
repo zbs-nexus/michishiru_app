@@ -615,7 +615,12 @@ const handleSubmit = () => {
   z-index: 150;
   width: 100%;
   max-width: 430px;
+  /*
+   * vh はスマホではツールバーの分だけ大きくなるため、表示中の高さ（dvh）で測る
+   * （dvh に対応していないブラウザ向けに vh を先に書いている）。全体表示も同じ。
+   */
   max-height: 42vh;
+  max-height: 42dvh;
   overflow-y: auto;
   padding: 0 20px 16px;
   background: var(--surface);
@@ -627,6 +632,7 @@ const handleSubmit = () => {
 
 .review-form.is-expanded {
   max-height: 85vh;
+  max-height: 85dvh;
 }
 
 /*
