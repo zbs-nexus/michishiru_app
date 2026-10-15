@@ -1,0 +1,14 @@
+{
+  "name": "get-spot",
+  "version": "1.0.0",
+  "description": "指定座標に対応する既存の口コミ場所を返すLambda関数",
+  "private": true,
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1118.0",
+    "@aws-sdk/client-s3": "3.1128.0",
+    "@aws-sdk/lib-dynamodb": "3.1118.0",
+    "@aws-sdk/s3-request-presigner": "3.1128.0"
+  }
+}

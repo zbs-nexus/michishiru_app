@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-185 おまかせ条件 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NZ-185 おまかせ条件（ジャンル・距離） - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026-09-30<br>
+            <strong>🌿 ブランチ:</strong><br>
+            &nbsp;&nbsp;・<code>feature/NZ-185</code>（PR #60 / <code>c4d66d3</code> / 15:22）おまかせ機能の本体<br>
+            &nbsp;&nbsp;・<code>feature/NZ-185-omakase-design</code>（PR #63 / <code>9103fce</code> / 15:51）ボタン配置とトーストのデザイン調整<br>
+            <strong>📝 課題番号:</strong> NZ-185
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>ホーム画面の「ジャンル」と「距離」の見出しの横に <code>？</code> ボタンが付きました。押すと「おまかせ」になり、ルートを作るときにアプリがジャンルや距離を自動で選びます。選ばれた内容は、ルート提案画面の上部に「おまかせ」ラベル付きのお知らせ（トースト）で表示されます。</p>
+        <p>トースト: 画面の端に数秒だけ出て自動で消える小さな通知のことです。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li>「どこでもいいから歩きたい」という人は、ジャンルや距離を選ぶこと自体が面倒です。</li>
+            <li>毎回同じジャンルを選びがちな人に、普段選ばない散歩を提案できます。</li>
+            <li>おまかせ中に「再作成」を押すと毎回選び直すので、押すたびに違う散歩が出てきます。</li>
+        </ul>
+
+        <h2>🔄 処理の流れ</h2>
+        <pre class="code-block">[ホーム画面]  ？ボタンを押す
+      │  routeStore.isGenreRandom / isDistanceRandom が true に
+      ▼
+[ルート作成ボタン]
+      │  POST /api/v1/routes  { isGenreRandom: true, isDistanceRandom: true, ... }
+      ▼
+[Lambda createRoute]
+      │  validator … おまかせの項目は未指定でもOK
+      │  service   … 検索条件マスタを全件読み、ランダムに選ぶ
+      │              → いつもどおりスポット検索・AI・経路計算
+      │  handler   … 選んだ値を selected_genres / selected_distance_km で返す
+      ▼
+[ルート提案画面]  「おまかせ」トーストで選ばれた内容を表示</pre>
+
+        <div class="flow-step">
+            <strong>Step 1: おまかせを切り替える（フロント）</strong><br>
+            <code>RouteConditionForm.vue</code> の <code>？</code> ボタンが <code>toggleGenreRandom</code> / <code>toggleDistanceRandom</code> を emit し、<code>routeStore</code> が状態を切り替えます。おまかせ中はジャンルのボタン群や距離スライダーを隠し、「おまかせでジャンルを選択します」と表示します。ジャンルをおまかせにすると、手動で選んでいたジャンルは消えます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: リクエストを送る（フロント）</strong><br>
+            <code>useRouteCreation.js</code> が、おまかせの項目は値を <code>undefined</code>（送らない）にし、代わりに <code>isGenreRandom</code> / <code>isDistanceRandom</code> を送ります。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 入力チェック（バックエンド validator）</strong><br>
+            おまかせの項目は「未指定でもエラーにしない」ようにしました。おまかせでない項目は従来どおりチェックします。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: ランダムに選ぶ（バックエンド service）</strong><br>
+            <code>conditionRepository.listConditions()</code> で検索条件マスタを読み、<code>pickRandomGenres</code>（ジャンルを1件〜全件）と <code>pickRandomDistanceKm</code>（1km 単位の距離）で選びます。そのあとはこれまでと同じルート作成処理に、選んだ値を渡します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: 選んだ値を知らせる</strong><br>
+            レスポンスに選んだ値を含め、<code>RouteSuggestionView.vue</code> が「ジャンル: 自然・歴史 / 距離: 3km で選びました」のようなトーストを出します。再作成したときも新しい値で出し直します。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>backend/functions/createRoute/service.js — ジャンルを選ぶ</h3>
+        <div class="code-block"><pre>const pickRandomGenres = (conditionItems) =&gt; {
+  const genreItems = conditionItems.filter(
+    (item) =&gt; item.pk === GENRE_CONDITION_PK &amp;&amp; item.isActive &amp;&amp; item.genreId
+  );
+  // ...0件ならエラー
+  const selectCount = Math.floor(Math.random() * genreItems.length) + 1;
+
+  return shuffleItems(genreItems)
+    .slice(0, selectCount)
+    .map((item) =&gt; ({ genreId: item.genreId, genreName: item.genreName ?? item.genreId }));
+};</pre></div>
+        <ul>
+            <li>入力: 検索条件マスタの全項目。出力: <code>{ genreId, genreName }</code> の配列。</li>
+            <li>マスタのうち <code>pk</code> が <code>GENRE#ALL</code> で、有効（<code>isActive</code>）なものだけが候補です。</li>
+            <li>選ぶ件数も1〜全件の中でランダムです。複数選ばれると、各ジャンルのカテゴリをまとめてスポット検索します。</li>
+            <li><code>shuffleItems</code> は Fisher-Yates 法（配列を偏りなく並べ替える定番の方法）です。以前 <code>limitSearchCategories</code> の中にあった処理を関数に切り出して使い回しています。</li>
+        </ul>
+
+        <h3>backend/functions/createRoute/service.js — 距離を選ぶ</h3>
+        <div class="code-block"><pre>const minKm = Math.ceil(Math.max(Math.min(...distancesKm), TARGET_DISTANCE_RANGE_KM.min));
+const maxKm = Math.floor(Math.min(Math.max(...distancesKm), TARGET_DISTANCE_RANGE_KM.max));
+// ...
+return minKm + Math.floor(Math.random() * (maxKm - minKm + 1));</pre></div>
+        <ul>
+            <li>マスタの距離項目（<code>pk</code> が <code>DISTANCE#ALL</code>）の最小〜最大の間から、整数の km を選びます。</li>
+            <li>API が受け付ける範囲（<code>TARGET_DISTANCE_RANGE_KM</code>）からはみ出さないように、両端を切り詰めています。</li>
+        </ul>
+
+        <h3>resolveSpotCategoryIdsForGenres — 複数ジャンルのカテゴリをまとめる</h3>
+        <p>ジャンルが1つなら従来どおり。複数のときは <code>Promise.allSettled</code>（一部が失敗しても全部の結果を待つ仕組み）で並列に引き、引けなかったジャンルは警告ログを出して飛ばします。1件も引けなければエラーです。</p>
+
+        <h3>backend/functions/createRoute/repositories/conditionRepository.js（新規）</h3>
+        <p>検索条件マスタを <code>Scan</code>（テーブルの全件読み）で取得するだけの Repository です。どれを選ぶかの判断は Service 層が行い、レイヤーの責務を分けています。スロットリング（アクセス集中による一時的な拒否）のときは待ち時間を倍にしながら最大3回やり直します。</p>
+
+        <h3>frontend/src/stores/routeStore.js</h3>
+        <div class="code-block"><pre>const isGenreRandom = ref(false);
+const isDistanceRandom = ref(false);
+
+/** ジャンルが選択済みかどうか（おまかせを含む） */
+const hasRequiredConditions = computed(() =&gt; Boolean(genre.value) || isGenreRandom.value);</pre></div>
+        <p>おまかせの状態を画面をまたいで保持します。ジャンルを選ばなくても、おまかせならルート作成ボタンを押せるようになりました。</p>
+
+        <h3>frontend/src/components/base/BaseToast.vue</h3>
+        <p><code>variant</code> プロパティで見た目を切り替えます。</p>
+        <table>
+            <tr><th>variant</th><th>用途</th><th>読み上げ</th></tr>
+            <tr><td><code>error</code>（既定）</td><td>エラーや入力不足</td><td><code>role="alert"</code> / <code>aria-live="assertive"</code>（すぐ割り込んで読む）</td></tr>
+            <tr><td><code>omakase</code></td><td>おまかせで選んだ内容のお知らせ。ロゴと「おまかせ」ラベル付き</td><td><code>role="status"</code> / <code>aria-live="polite"</code>（区切りのよいところで読む）</td></tr>
+        </table>
+        <p>表示の仕方は <code>useToastMessage.js</code> の <code>showMessage(text, 'omakase')</code> で指定します。第2引数を省略するとエラー扱いです。</p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>選んだ値は入力条件に書き戻さない</strong><br>
+            おまかせで選ばれたジャンル・距離は <code>currentRoute</code>（ルート側）が持ち、ストアの <code>genre</code> / <code>distanceKm</code> は変えません。書き戻すと、再作成のときに「おまかせ」ではなく前回の値で作ってしまうためです。
+        </div>
+        <div class="important">
+            <strong>レスポンスのキーが snake_case</strong><br>
+            <code>selected_genres</code> / <code>selected_distance_km</code> は、既存レスポンス（<code>route_title</code> など）の外部仕様に合わせて snake_case です。規約上は camelCase が正しく、<code>handler.js</code> に TODO があります。直すときはフロントの <code>utils/routeResponse.js</code> と同時に変えてください。
+        </div>
+        <div class="important">
+            <strong>検索条件マスタに距離・ジャンルが登録されている必要がある</strong><br>
+            マスタに有効なジャンル（または距離）が1件もないと、おまかせは「マスタに登録されていません」というエラーになります。ローカルで試すときはマスタのデータを確認してください。
+        </div>
+        <div class="important">
+            <strong>CSS の状態クラス名</strong><br>
+            <code>RouteConditionForm.vue</code> の選択状態は <code>selected</code> クラスで表しています。規約（<code>component-design.md</code>）では <code>is-selected</code> の形なので、次に触るときに揃えるとよいです。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行し、フロントとローカルAPIを同時に起動します。</li>
+            <li>ホーム画面で「ジャンル」横の <code>？</code> を押し、ジャンルのボタンが「おまかせでジャンルを選択します」に変わることを確認します。距離も同様です。</li>
+            <li>ルート作成ボタンを押し、提案画面に「おまかせ」ラベル付きのトーストが出て、選ばれたジャンル・距離が書かれていることを確認します。</li>
+            <li>「再作成」を押し、トーストの内容が変わる（選び直される）ことを確認します。</li>
+            <li>もう一度 <code>？</code> を押しておまかせを解除すると、通常の選択に戻ることを確認します。</li>
+            <li>自動テスト: <code>backend/</code> で <code>npm test</code>。<code>service.test.js</code> / <code>validator.test.js</code> におまかせのテストが追加されています。</li>
+            <li>フロントのチェック: <code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code>（フロントの自動テストは未導入です）。</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th></tr>
+                <tr><td><code>backend/functions/createRoute/validator.js</code></td><td>おまかせの項目は未指定を許容する</td></tr>
+                <tr><td><code>backend/functions/createRoute/service.js</code></td><td>ジャンル・距離のランダム選択、複数ジャンルのカテゴリ統合</td></tr>
+                <tr><td><code>backend/functions/createRoute/handler.js</code></td><td>選んだ値をレスポンスに含める</td></tr>
+                <tr><td><code>backend/functions/createRoute/constants.js</code></td><td><code>DISTANCE_CONDITION_PK</code> を追加</td></tr>
+                <tr><td><code>backend/functions/createRoute/repositories/conditionRepository.js</code></td><td>（新規）検索条件マスタの全件取得</td></tr>
+                <tr><td><code>backend/functions/createRoute/__tests__/*.test.js</code></td><td>おまかせのテスト</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteConditionForm.vue</code></td><td><code>？</code> ボタンとおまかせ中の表示</td></tr>
+                <tr><td><code>frontend/src/stores/routeStore.js</code></td><td>おまかせ状態の保持と切り替え</td></tr>
+                <tr><td><code>frontend/src/composables/useRouteCreation.js</code></td><td>おまかせフラグを付けて作成を依頼</td></tr>
+                <tr><td><code>frontend/src/services/routeService.js</code></td><td>リクエストボディに <code>isGenreRandom</code> / <code>isDistanceRandom</code> を追加</td></tr>
+                <tr><td><code>frontend/src/utils/routeResponse.js</code></td><td>選ばれた値を画面用の形（<code>selectedGenres</code> / <code>selectedDistanceKm</code>）に変換</td></tr>
+                <tr><td><code>frontend/src/views/RouteConditionView.vue</code></td><td>フォームとストアをつなぐ。未選択時の文言を変更</td></tr>
+                <tr><td><code>frontend/src/views/RouteSuggestionView.vue</code></td><td>選ばれた内容をトーストで表示</td></tr>
+                <tr><td><code>frontend/src/components/base/BaseToast.vue</code></td><td><code>omakase</code> の見た目を追加</td></tr>
+                <tr><td><code>frontend/src/composables/useToastMessage.js</code></td><td>トーストの種類（<code>variant</code>）を管理</td></tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

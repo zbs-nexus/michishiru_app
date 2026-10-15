@@ -6,6 +6,23 @@ import router from '@/router';
 import { AUTH_CONFIG, HAS_CONFIGURED_AUTH } from '@/constants/authConfig';
 import '@/assets/styles/global.css';
 
+/*
+ * アプリ全体の書体（DotGothic16）。外部CDNへ取りに行かせないため自前で配信する。
+ * この書体はウェイト400しか持たないため、読み込むのも400のみ。
+ * 太字を指定している箇所はブラウザが合成太字で描くことになる。
+ *
+ * 日本語は文字数が多く、文字の範囲ごとに分割された @font-face の定義だけで
+ * 70KB（gzip後）を超える。最初の描画を待たせないよう、動的importで
+ * 本体のCSSから切り離して後から読み込む。
+ * 読み込めるまでの間は --font-body / --font-display の次の候補
+ * （端末のゴシック）で表示される（font-display: swap）。
+ *
+ * 以前使っていた解星特ミン（@fontsource/kaisei-tokumin）は読み込みをやめたが、
+ * 依存は package.json に残してある。書体を戻したくなったときに
+ * ここの1行と global.css の変数を直すだけで済むようにしておくため。
+ */
+import('@fontsource/dotgothic16/400.css');
+
 // 認証の設定は最初の画面を描く前に渡す必要がある。
 // 未設定のまま進むとログイン時に分かりにくい例外になるため、ここで気付けるようにする
 if (HAS_CONFIGURED_AUTH) {

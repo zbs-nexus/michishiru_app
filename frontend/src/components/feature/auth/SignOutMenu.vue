@@ -143,9 +143,9 @@ onBeforeUnmount(() => {
   width: 40px;
   height: 40px;
   padding: 10px;
-  border: none;
+  border: 1px solid var(--border-gold);
   border-radius: 10px;
-  background: var(--white);
+  background: var(--surface);
   box-shadow: var(--shadow);
   cursor: pointer;
 }
@@ -172,8 +172,9 @@ onBeforeUnmount(() => {
   min-width: 160px;
   padding: 6px;
   list-style: none;
+  border: 1px solid var(--border-gold);
   border-radius: 10px;
-  background: var(--white);
+  background: var(--surface);
   box-shadow: var(--shadow);
 }
 

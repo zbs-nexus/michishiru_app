@@ -13,6 +13,7 @@ import {
   toPasswordResetErrorMessage,
   toSignUpErrorMessage
 } from '@/services/authService';
+import { verifyPasswordResetTarget } from '@/services/passwordResetService';
 
 /**
  * @description ログイン状態を保持するグローバルストア。
@@ -150,16 +151,24 @@ export const useAuthStore = defineStore('auth', () => {
   };
 
   /**
-   * @description パスワード再設定の確認コードを送る。
+   * @description ユーザー名とメールアドレスの組み合わせを照合し、
+   * 一致した場合だけパスワード再設定の確認コードを送る。
    * この時点ではまだパスワードは変わらない。
+   *
+   * 照合はサーバー側（`/api/v1/password-reset-verifications`）で行う。
+   * 一致しなかった場合はコードを送らずに失敗として返す。
    * @param {string} inputUsername 入力されたユーザー名
+   * @param {string} inputEmail 入力されたメールアドレス
    * @returns {Promise<{isSucceeded: boolean, codeDeliveryDestination: string|null}>} 送信の結果とコードの送信先
    */
-  const resetPassword = async (inputUsername) => {
+  const resetPassword = async (inputUsername, inputEmail) => {
     isResettingPassword.value = true;
     errorMessage.value = null;
 
     try {
+      // 先に組み合わせを照合する。一致しない場合は例外になり、コードは送らない
+      await verifyPasswordResetTarget(inputUsername, inputEmail);
+
       const codeDeliveryDestination = await sendPasswordResetCode(inputUsername);
 
       return { isSucceeded: true, codeDeliveryDestination };

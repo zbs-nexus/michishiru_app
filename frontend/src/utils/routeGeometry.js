@@ -77,7 +77,8 @@ export const toRouteMeasure = (coordinates) => {
  * 区間ごとに平面へ近似して射影し、最も近い区間の結果を返す。
  * @param {object|null} measure toRouteMeasureで作った測定用データ
  * @param {{lat: number, lng: number}} position 射影する座標
- * @returns {{alongM: number, deviationM: number}|null} 始点からの距離と折れ線までの離れ。射影できない場合はnull
+ * @returns {{alongM: number, deviationM: number, position: {lat: number, lng: number}}|null}
+ *   始点からの距離・折れ線までの離れ・射影先の座標。射影できない場合はnull
  */
 export const toRouteProjection = (measure, position) => {
   if (measure === null || !isPosition(position)) {
@@ -123,7 +124,12 @@ export const toRouteProjection = (measure, position) => {
 
       nearest = {
         deviationM,
-        alongM: measure.cumulativeM[index] + segmentLengthM * ratio
+        alongM: measure.cumulativeM[index] + segmentLengthM * ratio,
+        // 平面近似と同じ比率で、区間の始点から終点へ補間した座標
+        position: {
+          lng: start.lng + (end.lng - start.lng) * ratio,
+          lat: start.lat + (end.lat - start.lat) * ratio
+        }
       };
     }
   }
@@ -160,4 +166,23 @@ export const calculateAlongRouteDistanceM = ({
   }
 
   return Math.abs(to.alongM - from.alongM);
+};
+
+/**
+ * @description 座標を経路の折れ線上へ吸着させる。
+ * 経路から離れすぎている場合は、本当に道を外れた可能性があるため吸着させない。
+ * @param {object} conditions 計算条件
+ * @param {object|null} conditions.measure toRouteMeasureで作った測定用データ
+ * @param {{lat: number, lng: number}} conditions.position 吸着させる座標
+ * @param {number} conditions.maxDeviationM 吸着させる、経路からの離れの上限（メートル）
+ * @returns {{lat: number, lng: number}|null} 吸着先の座標。吸着させない場合はnull
+ */
+export const snapToRoute = ({ measure, position, maxDeviationM }) => {
+  const projection = toRouteProjection(measure, position);
+
+  if (projection === null || projection.deviationM > maxDeviationM) {
+    return null;
+  }
+
+  return projection.position;
 };

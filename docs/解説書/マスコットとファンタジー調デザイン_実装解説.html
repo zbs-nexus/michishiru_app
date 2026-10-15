@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マスコットとファンタジー調デザイン - 実装解説</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Meiryo, sans-serif;
+            line-height: 1.8;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+        }
+        .info-box {
+            background-color: #e8f4f8;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .prereq {
+            background-color: #f0f7ec;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .code-block {
+            background-color: #f8f8f8;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 15px;
+            overflow-x: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+        }
+        .flow-step {
+            background-color: #fff9e6;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .file-list {
+            background-color: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .important {
+            background-color: #ffe6e6;
+            border-left: 4px solid #e74c3c;
+            padding: 10px;
+            margin: 15px 0;
+        }
+        ul, ol {
+            margin-left: 20px;
+        }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #3498db;
+            color: white;
+        }
+        a {
+            color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>マスコットとファンタジー調デザイン - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
+            <strong>📅 マージ日:</strong> 2026-10-07<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-178<br>
+            <strong>🔖 対象マージ:</strong> <code>3c4fc0b</code>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+
+        <div class="prereq">
+            <strong>Vue のコンポーネントと props</strong><br>
+            コンポーネントは画面の部品で、1ファイル（<code>.vue</code>）が1部品です。部品の見た目や文言を外から変えたいときは「props（プロップス）」という入れ口を用意し、使う側から値を渡します。この機能では「マスコットのレベル」「表示サイズ」「吹き出しの並べ方」などを props で渡しています。
+        </div>
+
+        <div class="prereq">
+            <strong>CSS カスタムプロパティ（CSS変数）と <code>:root</code></strong><br>
+            CSS では <code>--primary-color: #45356B;</code> のように自分で名前を付けた値を定義し、<code>color: var(--primary-color)</code> で呼び出せます。<code>:root</code> はページ全体を指す書き方なので、ここに定義しておけばどのコンポーネントからも同じ名前で参照できます。この機能の土台はこの仕組みです。
+        </div>
+
+        <div class="prereq">
+            <strong>スロット（slot）</strong><br>
+            props が「値」を渡す仕組みなのに対し、スロットは「HTMLの中身そのもの」を渡す仕組みです。<code>&lt;slot /&gt;</code> と書いた場所に、使う側がタグの内側に書いた内容がそのまま入ります。吹き出しの中身は画面ごとに見出し＋本文など形が違うため、スロットで受け取っています。
+        </div>
+
+        <div class="prereq">
+            <strong>画面読み上げ（支援技術）と代替テキスト</strong><br>
+            目が見えにくい人はスクリーンリーダーという読み上げソフトで画面を使います。画像には <code>alt</code> 属性で説明文を書き、文言が差し替わる場所には <code>role="status"</code> や <code>aria-live</code> を付けると「変わったこと」が読み上げられます。逆に <code>alt=""</code> と <code>aria-hidden="true"</code> を付けると、その要素は読み上げの対象から外れます。
+        </div>
+
+        <div class="prereq">
+            <strong>Webフォントの「自前配信」と「外部CDN」</strong><br>
+            Webフォント（ブラウザがダウンロードして使う書体）は、他社のサーバー（CDN）から読み込む方法と、自分のサーバーに置いて配る方法（自前配信）があります。どちらを選ぶかで、通信先・読み込みの速さ・プライバシーが変わります。この機能では自前配信を選んでいて、その理由は後述します。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            この変更は、<strong>アプリの見た目全体を「羊皮紙と古地図」のファンタジー調に揃え、案内役のマスコット（フクロウ）を各画面に登場させる</strong>ものです。機能としての振る舞い（ルートを作る、案内する）は変えていません。変わったのは次の4点です。
+        </p>
+        <ul>
+            <li>配色と書体を <code>global.css</code> の <code>:root</code> に集約し、羊皮紙の地色・金の縁取り・紫のインクの3点で全画面を揃えた</li>
+            <li>マスコットの部品（<code>MascotAvatar</code> / <code>MascotSpeechBubble</code>）を新規に作り、各画面のコメントを吹き出しで話させた</li>
+            <li>見出しの書体を「解星特ミン」に変え、外部CDNではなく自前で配信するようにした</li>
+            <li>デザインを確認するための開発専用画面（<code>/design-preview</code>）を追加した</li>
+        </ul>
+        <p>
+            マスコットは Lv.1〜Lv.10 まで姿が変わる想定で、名前の一覧と画像の対応表だけ先に用意してあります。現時点で画像があるのは Lv.1「ミチのタマゴ」だけです。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            これまでの画面は、紺色（<code>#2D3E50</code>）と白を基調にした一般的な業務アプリ寄りの見た目でした。配色の変数は <code>global.css</code> にいくつかありましたが、書体の指定は <code>body</code> に直接書かれており、各コンポーネントにも <code>#1f5fa8</code> <code>#ddd</code> のような色が直接書かれていました。この状態には2つの困りごとがあります。
+        </p>
+        <ul>
+            <li><strong>散歩アプリらしい世界観がない。</strong> 「知らない道を歩く楽しさ」を伝える見た目になっていない</li>
+            <li><strong>色を変えたいとき、全ファイルを探して直すことになる。</strong> 直し漏れが出て画面ごとに色がずれる</li>
+        </ul>
+        <p>
+            そこで、色と書体の定義を1か所に集めたうえで世界観を作り直し、同時に「アプリが話しかけてくる」案内役としてマスコットを置きました。マスコットは単なる飾りではなく、<strong>これまで画面の地の文として置かれていたコメント（「ルートを作成中...」「お疲れさまでした」など）を話す役</strong>です。
+        </p>
+        <p>
+            この方針は前提条件書の「確定した要素」に記録されています（画面デザインの方向性 / マスコットの表示方法 / 見出しの書体 / Webフォントの配信方法、いずれも 2026/10/07 確定）。対応する画面は US-1（ホーム）、US-2（ルート作成中）、US-3（ルート提案）、US-6（案内）、US-8（散歩結果）です。受け入れ条件そのものは変えていません。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <p>
+            この変更は「実行時にこう動く」というより「どの層で何を決めるか」という組み立ての話です。下から順に積み上がっています。
+        </p>
+
+        <div class="flow-step">
+            <strong>Step 1:</strong> 配色と書体を <code>global.css</code> の <code>:root</code> に集約する<br>
+            色（羊皮紙・金・紫のインクなど）と書体（見出し用・本文用）を変数として定義します。ここが土台で、以降のすべての画面・部品はこの変数を参照します。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 2:</strong> マスコットのレベル定義表を作る（<code>constants/mascotLevels.js</code>）<br>
+            Lv.1〜Lv.10 の「レベル・名前・画像」の対応表を1か所に置きます。画像が未用意のレベルは <code>null</code> にしておきます。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 3:</strong> 姿だけを表示する部品を作る（<code>MascotAvatar.vue</code>）<br>
+            レベルを受け取り、定義表から画像と名前を引いて表示します。<strong>何を話すかは持ちません。</strong>
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 4:</strong> 吹き出しと組み合わせる部品を作る（<code>MascotSpeechBubble.vue</code>）<br>
+            内部で <code>MascotAvatar</code> を呼び、その隣（または上）に吹き出しを置きます。話す内容は props の <code>message</code> かスロットで受け取ります。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 5:</strong> 各画面に1体ずつ組み込む<br>
+            ホーム・ルート作成中・ルート提案・案内・散歩結果の5か所に、それぞれ1体だけ置きます。画面がすでに持っていたコメントを吹き出しの中へ移します。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 6:</strong> 見出しの書体を自前配信で読み込む（<code>main.js</code>）<br>
+            npm パッケージ <code>@fontsource/kaisei-tokumin</code>（5.3.0）を入れ、<code>main.js</code> から動的 import で読み込みます。これでフォントのファイルも自分のサーバー（CloudFront + S3）から配られます。
+        </div>
+
+        <div class="flow-step">
+            <strong>Step 7:</strong> デザイン確認用の画面を足す（<code>DesignPreviewView.vue</code>）<br>
+            ログイン済みの状態と作成済みのルートをストアへ入れてから各画面へ飛ばす開発専用の画面です。Cognito もルート作成APIも呼ばずに本物の画面を確認できます。
+        </div>
+
+        <h3>どのマージがどこを担っているか</h3>
+        <p>
+            この解説書の対象は <code>3c4fc0b</code> の1マージだけですが、中身は次の4コミットに分かれています。
+        </p>
+        <table>
+            <tr>
+                <th>コミット</th>
+                <th>担っている部分</th>
+            </tr>
+            <tr>
+                <td><code>68fc151</code></td>
+                <td>Step 1〜5。配色・書体の集約、マスコットの部品2つ、各画面への組み込み</td>
+            </tr>
+            <tr>
+                <td><code>8846737</code></td>
+                <td>用語辞書と前提条件書への追記（マスコットの節、確定した要素）</td>
+            </tr>
+            <tr>
+                <td><code>7582ddc</code></td>
+                <td>Step 7。デザイン確認用のプレビュー画面</td>
+            </tr>
+            <tr>
+                <td><code>d0baac1</code></td>
+                <td>Step 6。見出しの書体の変更と自前配信への切り替え、文言の改行位置の調整</td>
+            </tr>
+        </table>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/assets/styles/global.css（配色と書体の定義）</h3>
+        <p>
+            全画面の色と書体をここで決めます。各コンポーネントは色コードや書体名を書かず、この変数名だけを使います。
+        </p>
+        <div class="code-block">
+            <pre>:root {
+  /* 紫のインク。見出し・主要ボタン・つまみに使う */
+  --primary-color: #45356B;
+  --primary-light: #5F4C91;
+  /* 森の緑。開始地点マーカーと案内バナーの帯に使う */
+  --accent-green: #3F7A5C;
+  /* 金。飾りと縁取り専用。明るい面の文字色には使わない（コントラストが足りない） */
+  --accent-gold: #B8862B;
+  --border-gold: #DCC48A;
+  /* ルートを示す青。mapDefaults.js の ROUTE_LINE_COLOR と同値にする */
+  --route-blue: #1A73E8;
+  /* 羊皮紙。画面の地の色 */
+  --bg-light: #FBF4E4;
+  --bg-deep: #F1E3C8;
+  --bg-map: #E4EDDC;
+  /* カードや吹き出しの面。紙より少し明るいクリーム */
+  --surface: #FFFCF4;
+  --surface-alert: #FDF0EE;
+  --text-dark: #3A2E20;
+  --text-gray: #6B5B46;
+  --danger: #B3372B;
+  ...
+  --font-display: 'Kaisei Tokumin', 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'Noto Serif JP', 'Georgia', serif;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif;
+}</pre>
+        </div>
+        <p>
+            <strong>変更前との違い：</strong> 以前は <code>--primary-color: #2D3E50</code>（紺）などの色変数が10個弱あるだけで、書体は <code>body</code> に直接書かれていました。今回は書体も <code>--font-display</code> / <code>--font-body</code> として変数にしたため、<strong>書体を変えたいときに直すのはこの1行と <code>main.js</code> の読み込み行だけ</strong>になります。
+        </p>
+        <p>
+            <code>--font-display</code> に書体名が6つ並んでいるのは「候補リスト」です。先頭の <code>Kaisei Tokumin</code> が読み込めなかった場合、ブラウザは順に次を試し、最後は端末の明朝体で表示します。見た目は多少変わりますが、文字が出ないことはありません。
+        </p>
+
+        <h3>frontend/src/constants/mascotLevels.js（レベルの定義表）</h3>
+        <p>
+            レベルと名前と画像の対応表、およびレベルから定義を引く関数を持ちます。画面側はこのファイルだけを見れば済みます。
+        </p>
+        <div class="code-block">
+            <pre>export const MASCOT_LEVELS = [
+  { level: 1, mascotName: 'ミチのタマゴ', mascotImage: mascotLv01Image },
+  { level: 2, mascotName: 'よちよちヒナ', mascotImage: null },
+  { level: 3, mascotName: 'てくてくフクロウ', mascotImage: null },
+  ...
+  { level: 10, mascotName: '極・ミチシル', mascotImage: null }
+];
+
+export const getMascotLevel = (level = DEFAULT_MASCOT_LEVEL) => {
+  const requested = MASCOT_LEVELS.find(
+    (definition) => definition.level === level
+  );
+
+  if (requested?.mascotImage) {
+    return requested;
+  }
+
+  const requestedLevel = requested?.level ?? DEFAULT_MASCOT_LEVEL;
+  const substitute = availableMascotLevels
+    .filter((definition) => definition.level &lt;= requestedLevel)
+    .at(-1);
+
+  return substitute ?? availableMascotLevels[0];
+};</pre>
+        </div>
+        <p>
+            <strong>入力：</strong> レベル（数値）。省略すると <code>DEFAULT_MASCOT_LEVEL</code>（= 1）。<br>
+            <strong>出力：</strong> <code>{ level, mascotName, mascotImage }</code> の形のオブジェクト。<strong>必ず画像が入ったものを返します。</strong>
+        </p>
+        <p>
+            ポイントは「画像が未用意のレベルを渡されても壊れない」ことです。例えば Lv.5 を渡しても画像がまだ無いので、用意済みで最も高いレベル（今は Lv.1）の姿を返します。これにより、<strong>画面側に「画像が無かったらどうするか」の分岐を書かずに済みます。</strong> 新しい姿が描けたら、画像を追加して <code>null</code> を差し替えるだけで全画面に反映されます。
+        </p>
+
+        <h3>frontend/src/components/feature/mascot/MascotAvatar.vue（姿の表示）</h3>
+        <p>
+            レベルから画像と名前を引いて表示するだけの部品です。話す内容は持ちません。
+        </p>
+        <div class="code-block">
+            <pre>&lt;img
+  class="mascot-image"
+  :src="mascot.mascotImage"
+  :alt="isDecorative ? '' : mascotLabel"
+  :aria-hidden="isDecorative ? 'true' : undefined"
+&gt;</pre>
+        </div>
+        <p>props は4つです。</p>
+        <table>
+            <tr>
+                <th>props</th>
+                <th>既定値</th>
+                <th>意味</th>
+            </tr>
+            <tr>
+                <td><code>level</code></td>
+                <td><code>DEFAULT_MASCOT_LEVEL</code>（1）</td>
+                <td>表示するマスコットのレベル</td>
+            </tr>
+            <tr>
+                <td><code>size</code></td>
+                <td><code>'medium'</code></td>
+                <td>表示サイズ。<code>small</code>（44px）/ <code>medium</code>（76px）/ <code>large</code>（128px）の3段階</td>
+            </tr>
+            <tr>
+                <td><code>hasLevelLabel</code></td>
+                <td><code>false</code></td>
+                <td>真のとき <code>Lv.1 ミチのタマゴ</code> という札を画像の下に添える</td>
+            </tr>
+            <tr>
+                <td><code>isDecorative</code></td>
+                <td><code>false</code></td>
+                <td>真のとき代替テキストを空にし、読み上げソフトから隠す</td>
+            </tr>
+        </table>
+        <p>
+            <strong><code>isDecorative</code> がなぜ必要か。</strong> <code>role="status"</code> を付けた箱の中身が変わると、読み上げソフトはその箱の中身を読み直します。案内画面の帯（次の目的地と距離）はまさにこれで、距離が10m動くたびに読み直されます。このときマスコットの画像の説明（「Lv.1 ミチのタマゴ」）まで一緒に読まれると、肝心の目的地名の前に毎回同じ言葉が挟まって邪魔になります。そこで「この画像は飾りで、意味は持たない」と伝えるのが <code>isDecorative</code> です。
+        </p>
+
+        <h3>frontend/src/components/feature/mascot/MascotSpeechBubble.vue（吹き出し）</h3>
+        <p>
+            マスコットの姿と吹き出しを組み合わせる部品です。1画面に1体だけ置きます。
+        </p>
+        <div class="code-block">
+            <pre>&lt;div
+  class="mascot-speech"
+  :class="[`is-${placement}`, { 'is-alert': isAlert }]"
+&gt;
+  &lt;MascotAvatar
+    :level="level"
+    :size="size"
+    :has-level-label="hasLevelLabel"
+  /&gt;
+
+  &lt;!-- 文言が入れ替わるため読み上げの対象にする。注意のときだけ割り込ませる --&gt;
+  &lt;div
+    class="speech-bubble"
+    :role="isAlert ? 'alert' : 'status'"
+    :aria-live="isAlert ? 'assertive' : 'polite'"
+  &gt;
+    &lt;slot&gt;{{ message }}&lt;/slot&gt;
+  &lt;/div&gt;
+&lt;/div&gt;</pre>
+        </div>
+        <p>
+            <code>&lt;slot&gt;{{ message }}&lt;/slot&gt;</code> の書き方により、<strong>短い一文なら <code>message</code> props で渡し、見出し＋本文のような複数行ならタグの内側に書く</strong>という2通りの使い方ができます。スロットに何も入れなければ <code>message</code> が表示されます。
+        </p>
+        <p>追加された props は2つです。</p>
+        <table>
+            <tr>
+                <th>props</th>
+                <th>値</th>
+                <th>意味</th>
+            </tr>
+            <tr>
+                <td><code>placement</code></td>
+                <td><code>side</code>（既定） / <code>stacked</code></td>
+                <td>マスコットと吹き出しの並べ方。<code>side</code> は横並び（左にマスコット）、<code>stacked</code> は吹き出しを上・マスコットを下に置く</td>
+            </tr>
+            <tr>
+                <td><code>variant</code></td>
+                <td><code>normal</code>（既定） / <code>alert</code></td>
+                <td>吹き出しの種類。<code>alert</code> は縁取りと文字色を赤に変え、読み上げも割り込みで伝える</td>
+            </tr>
+        </table>
+        <p>
+            <code>stacked</code> は CSS の <code>flex-direction: column-reverse</code> で実現しています。HTMLの並び順はマスコットが先のままで、見た目だけ逆にしています。<strong>読み上げの順序は HTML の順序に従うため、見た目を変えても読み上げ順は変わりません。</strong>
+        </p>
+        <p>
+            <code>variant</code> の値が <code>alert</code> のときは <code>role="alert"</code> と <code>aria-live="assertive"</code> になります。<code>polite</code> が「今読んでいる内容が終わってから伝える」、<code>assertive</code> が「割り込んですぐ伝える」です。異常を知らせるときだけ割り込ませる、という使い分けです。
+        </p>
+        <p>
+            なお <code>variant</code> という props 名は <code>BaseToast</code> でも使われていますが、取る値は別（トーストは <code>error</code> / <code>omakase</code>）です。どちらも「その部品の見た目の種類」を指す語として使っています。
+        </p>
+
+        <h3>frontend/src/views/RouteConditionView.vue（ホーム画面での使い方）</h3>
+        <p>
+            画面が持っている3つの状態（読み込み中・条件を出せない・入力待ち）を、そのままマスコットの文言に変換しています。
+        </p>
+        <div class="code-block">
+            <pre>const mascotMessage = computed(() => {
+  if (isLoadingOptions.value) {
+    return '地図をひろげているよ。少し待っていてね';
+  }
+
+  if (!hasConditionOptions.value) {
+    return optionsErrorMessage.value ?? '条件をよみこめなかったみたい。もう一度ためしてね';
+  }
+
+  return 'どんなお散歩にする？ ジャンルと距離をえらんで、ぼくに教えて！';
+});
+
+/** 吹き出しの種類。条件を出せないときだけ注意として見せる */
+const mascotMessageVariant = computed(() =>
+  !isLoadingOptions.value && !hasConditionOptions.value ? 'alert' : 'normal'
+);</pre>
+        </div>
+        <p>
+            <code>computed</code>（算出プロパティ）は「元になる値が変わったら自動で計算し直される値」です。読み込みが終われば <code>isLoadingOptions</code> が <code>false</code> になり、文言も自動で入力待ちのものに切り替わります。テンプレート側はこう書かれています。
+        </p>
+        <div class="code-block">
+            <pre>&lt;MascotSpeechBubble
+  class="home-mascot"
+  :message="mascotMessage"
+  :variant="mascotMessageVariant"
+  placement="side"
+  size="medium"
+/&gt;</pre>
+        </div>
+        <p>
+            失敗の理由を吹き出しで伝えるようにしたため、画面上に別のエラー文を置く必要がなくなりました。エラー時に残るのは「再読み込み」ボタンだけです。
+        </p>
+
+        <h3>frontend/src/components/feature/route/RouteNextSpotBanner.vue（案内画面での使い方）</h3>
+        <p>
+            ここだけは吹き出しを使わず、<code>MascotAvatar</code> を直接使っています。帯そのものが案内役の言葉として見えればよく、吹き出しの枠を重ねると狭くなるためです。
+        </p>
+        <div class="code-block">
+            <pre>&lt;!--
+  読み上げ範囲の中にあるため装飾として置く。
+  距離が変わるたびにマスコットの説明が読み直されるのを防ぐ。
+--&gt;
+&lt;MascotAvatar
+  size="small"
+  is-decorative
+/&gt;</pre>
+        </div>
+        <p>
+            <code>is-decorative</code> と書くと <code>isDecorative</code> に <code>true</code> が渡ります（値を省略した属性は <code>true</code> 扱い）。宣言は camelCase、HTMLに書くときは kebab-case、というVueの決まりに従った書き方です。
+        </p>
+
+        <h3>frontend/src/main.js（フォントの自前配信）</h3>
+        <p>
+            見出しの書体を npm パッケージから読み込みます。1行ですが、コメントに判断の理由が書かれています。
+        </p>
+        <div class="code-block">
+            <pre>/*
+ * 見出し用の書体（解星特ミン）。外部CDNへ取りに行かせないため自前で配信する。
+ * 使っているのは太字だけなので、ウェイトは700のみ読み込む。
+ *
+ * 日本語は文字数が多く、文字の範囲ごとに分割された @font-face の定義だけで
+ * 90KB（gzip後）を超える。最初の描画を待たせないよう、動的importで
+ * 本体のCSSから切り離して後から読み込む。
+ * 読み込めるまでの間は --font-display の次の候補（端末の明朝）で表示される
+ * （font-display: swap）。
+ */
+import('@fontsource/kaisei-tokumin/700.css');</pre>
+        </div>
+        <p>
+            ファイルの先頭に並ぶ <code>import ... from ...</code> は「このファイルを動かす前に必ず読み込む」宣言ですが、<code>import('...')</code> という関数の形（動的 import）は「別の荷物として後から取りに行く」書き方です。こうすると書体の定義が本体のJS/CSSから切り離され、最初の表示を待たせません。
+        </p>
+        <p>
+            <strong>なぜ外部CDNを使わないのか。</strong> 前提条件書に理由が3つ挙げられています。
+        </p>
+        <ol>
+            <li><strong>キャッシュの利点が消えた。</strong> 以前は「他のサイトで同じCDNのフォントを読み込んでいれば、ブラウザの保存済みデータが再利用されて速い」という利点がありました。しかし2020年以降、ブラウザはキャッシュをサイトごとに分けて保存するようになり、この利点はなくなりました</li>
+            <li><strong>訪問者のIPアドレスが第三者に渡る。</strong> CDNからフォントを取りに行くと、利用者の端末が直接その会社のサーバーへ通信します</li>
+            <li><strong>同一オリジンで閉じた設計と噛み合わない。</strong> ミチシルはフロントもAPIも同じ CloudFront のドメインから配る設計（だからCORS設定が不要）です。フォントだけ外部に依存させる理由がありません</li>
+        </ol>
+        <p>
+            書体「解星特ミン（Kaisei Tokumin）」は SIL Open Font License で公開されているため、自分のサーバーに置いて配ることができます。
+        </p>
+
+        <h3>frontend/src/router/index.js（開発専用画面の登録）</h3>
+        <p>
+            デザイン確認用の画面は、開発サーバーで動かしているときだけ登録します。
+        </p>
+        <div class="code-block">
+            <pre>/**
+ * デザイン確認用の画面。開発サーバーでのみ登録する。
+ * 本番ビルドでは import.meta.env.DEV が false になり、
+ * この画面とDesignPreviewViewのコードは成果物に含まれない。
+ */
+if (import.meta.env.DEV) {
+  routes.unshift({
+    path: '/design-preview',
+    name: 'design-preview',
+    component: () => import('@/views/DesignPreviewView.vue'),
+    meta: { isPreview: true }
+  });
+}</pre>
+        </div>
+        <p>
+            <code>import.meta.env.DEV</code> は、ビルドツール（Vite）が「開発中かどうか」を入れてくれる値です。本番ビルドではこれが <code>false</code> になり、<code>if</code> の中が通らないと分かるため、<strong>プレビュー画面のコードそのものが成果物（<code>dist</code>）から取り除かれます。</strong>
+        </p>
+        <p>
+            さらにルーターの入口（<code>beforeEach</code>）でも、<code>meta.isPreview</code> を持つこの画面だけはログイン判定より先に通しています。ログイン済みの状態を作るのがこの画面の役目なので、判定を先に通すとログイン画面へ飛ばされてしまうためです。この <code>meta</code> を持つ画面は本番ビルドでは登録されないため、本番では効きません。
+        </p>
+
+        <h3>frontend/src/views/DesignPreviewView.vue（確認用の見本データ）</h3>
+        <p>
+            この画面は、ログイン済みの状態と作成済みのルートをストアへ入れてから各画面へ移動します。これにより Cognito（ログイン基盤）もルート作成API（Location Service / Bedrock）も呼ばずに本物の画面を確認できます。
+        </p>
+        <div class="code-block">
+            <pre>const seedSignedInState = () => {
+  enablePreviewIdToken();
+  authStore.username = 'デザイン確認';
+  authStore.isSessionRestored = true;
+  routeStore.selectGenre('nature', '自然');
+  routeStore.selectDistance(3);
+  routeStore.setCurrentRoute(SAMPLE_ROUTE);
+};</pre>
+        </div>
+        <p>
+            <code>enablePreviewIdToken()</code> は API の認可に使うトークンを開発用のダミーへ切り替える関数で、これが無いと検索条件マスタの取得が「ログインの有効期限が切れました」で失敗します。見本のルートは新宿駅を出て新宿御苑・花園神社・甘味処を回る周回コースで、座標も実在の位置に合わせた固定値です。散歩結果の画面には歩いた実績（3240m・3スポット・48分）も入れてから移動します。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>1. マスコットは1画面に1体だけ</h3>
+            <p>
+                かわいいので増やしたくなりますが、1画面に1体という決まりです。2体以上置くと「どれが今話しているのか」が分からなくなり、読み上げの対象（<code>role="status"</code>）も複数できて読み上げが重なります。現在の配置は次の5か所です。
+            </p>
+            <table>
+                <tr>
+                    <th>画面</th>
+                    <th>置いている場所</th>
+                    <th>使っている部品</th>
+                </tr>
+                <tr>
+                    <td>ホーム（US-1）</td>
+                    <td><code>RouteConditionView.vue</code></td>
+                    <td><code>MascotSpeechBubble</code>（side / medium）</td>
+                </tr>
+                <tr>
+                    <td>ルート作成中（US-2）</td>
+                    <td><code>RouteLoadingOverlay.vue</code></td>
+                    <td><code>MascotSpeechBubble</code>（stacked / large）</td>
+                </tr>
+                <tr>
+                    <td>ルート提案（US-3）</td>
+                    <td><code>RouteInfoCard.vue</code></td>
+                    <td><code>MascotSpeechBubble</code>（side / medium）</td>
+                </tr>
+                <tr>
+                    <td>案内（US-6）</td>
+                    <td><code>RouteNextSpotBanner.vue</code></td>
+                    <td><code>MascotAvatar</code>（small / 装飾）</td>
+                </tr>
+                <tr>
+                    <td>散歩結果（US-8）</td>
+                    <td><code>WalkResultView.vue</code></td>
+                    <td><code>MascotSpeechBubble</code>（stacked / large / レベル札あり）</td>
+                </tr>
+            </table>
+            <p>
+                ログイン・ユーザー登録・パスワード再設定の3画面にはマスコットを置いていません。これらの画面は配色と書体の変更（ロゴ見出しの書体が変わり、ロゴ下の説明文を1行削除）だけを受けています。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>2. 色と書体をコンポーネントに直書きしない</h3>
+            <p>
+                新しく画面や部品を作るとき、<code>color: #45356B</code> のように色コードを書いてはいけません。<code>color: var(--primary-color)</code> と書きます。書体も <code>font-family: var(--font-display)</code> です。直書きすると、配色を見直したときにその箇所だけ取り残され、画面ごとに色が違う状態になります。
+            </p>
+            <p>
+                例外は <code>rgba()</code> で作る影や光のような、半透明の重ね色です（マスコット背後の光など）。これらは変数にすると種類が増えすぎるため、その部品の <code>&lt;style scoped&gt;</code> の中に書いています。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>3. 読み上げ範囲の中に画像を置くときは装飾にする</h3>
+            <p>
+                <code>role="status"</code> や <code>role="alert"</code> を付けた箱の中にマスコットを置く場合は、必ず <code>is-decorative</code> を付けます。付け忘れると、文言が変わるたびに「Lv.1 ミチのタマゴ」が読み上げられ、肝心の内容が頭に入らなくなります。
+            </p>
+            <p>
+                逆に、吹き出しの外（読み上げ範囲の外）に単体で置く場合は付けません。その場合はマスコットの説明が1回だけ読まれるのが正しい動きです。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>4. レベルは枠組みだけで、まだ Lv.1 しか見えない</h3>
+            <p>
+                Lv.1〜Lv.10 の名前と、レベルから定義を引く関数は用意済みですが、<strong>Lv.2 以降の画像はまだありません。</strong> また「どの実績でレベルが上がるか」（累積距離・散歩回数などのしきい値）も決まっていません。
+            </p>
+            <p>
+                そのため現在は全画面が <code>DEFAULT_MASCOT_LEVEL</code>（Lv.1）を表示します。画像が増えたら <code>mascotLevels.js</code> の <code>mascotImage: null</code> を差し替えるだけでよく、呼び出し側のコードは変えません。しきい値の決定は前提条件書の「今後追加予定の要素」に残っています。
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>5. プレビュー画面を本番に出さない</h3>
+            <p>
+                <code>DesignPreviewView</code> は、ログイン済みの状態とAPI認可用のダミートークンを自分で作る画面です。本番に出れば誰でもログインを迂回できてしまいます。<strong>登録箇所の <code>import.meta.env.DEV</code> の条件を外さないでください。</strong>
+            </p>
+        </div>
+
+        <div class="important">
+            <h3>6. 用語は辞書に揃える</h3>
+            <p>
+                キャラクターを指す語は <code>mascot</code> に統一します（<code>character</code> / <code>chara</code> は使いません）。吹き出しは <code>speechBubble</code> で、<code>balloon</code> / <code>tooltip</code> は使いません（<code>tooltip</code> は補助説明という別の概念です）。立ち絵は <code>MascotAvatar</code> と接頭辞を付けます。<code>avatar</code> 単独だと利用者のアイコンと混同するためです。
+            </p>
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>
+                <strong>フロントとAPIを同時に起動する</strong>（リポジトリのルートで実行）
+                <div class="code-block">
+                    <pre>npm run dev</pre>
+                </div>
+            </li>
+            <li>
+                <strong>デザイン確認用の画面を開く</strong><br>
+                ブラウザで <code>http://localhost:5173/design-preview</code> を開きます。画面上部に赤い「開発時のみ / デザイン確認用」の札が出ます。
+            </li>
+            <li>
+                <strong>5つの画面のマスコットを順に確認する</strong><br>
+                「ホーム画面」「ルート作成中画面」「ルート提案画面」「ルート案内画面」「案内終了画面」のボタンから移動します。案内画面は位置情報の許可を求められます。各画面でマスコットが1体だけ表示され、吹き出しにその画面のコメントが入っていればOKです。元の画面へ戻るときはブラウザの戻るか、<code>/design-preview</code> を開き直します。
+            </li>
+            <li>
+                <strong>吹き出しの注意表示を確認する</strong><br>
+                ホーム画面で検索条件マスタの取得に失敗させると（APIサーバーを止めるなど）、吹き出しの縁取りと文字が赤に変わり、「再読み込み」ボタンだけが残ります。
+            </li>
+            <li>
+                <strong>見出しの書体を確認する</strong><br>
+                ロゴの「ミチシル」や見出しが明朝体の太字になっていればフォントが効いています。ブラウザの開発者ツールのネットワークタブで、フォントの取得先が <code>localhost</code>（本番では自分のドメイン）になっていること、外部のCDNへ通信していないことも確認できます。
+            </li>
+            <li>
+                <strong>チェックとビルドを通す</strong>（<code>frontend/</code> で実行）
+                <div class="code-block">
+                    <pre>npm run lint
+npm run build
+npm test</pre>
+                </div>
+                <p>
+                    この変更はマスコットの部品に対するテストを追加していないため、<code>npm test</code> は既存のテストのみが走ります。見た目の確認は上記の手順で目視で行います。
+                </p>
+            </li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr>
+                    <th>ファイル</th>
+                    <th>役割</th>
+                    <th>由来のブランチ</th>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/assets/styles/global.css</code></td>
+                    <td>配色と書体の変数を <code>:root</code> に集約。紙の地色・ヘッダーの空・待機画面などの共通スタイルもここ</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/constants/mascotLevels.js</code></td>
+                    <td>マスコットのレベル・名前・画像の対応表と、レベルから定義を引く <code>getMascotLevel</code>（新規）</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/mascot/MascotAvatar.vue</code></td>
+                    <td>マスコットの姿とレベル札を表示する部品（新規）</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/mascot/MascotSpeechBubble.vue</code></td>
+                    <td>姿と吹き出しを組み合わせ、画面のコメントを話させる部品（新規）</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/assets/images/mascot/mascot-lv01.svg</code></td>
+                    <td>Lv.1「ミチのタマゴ」の画像（新規）</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/main.js</code></td>
+                    <td>見出し用の書体を動的 import で自前配信から読み込む</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/package.json</code></td>
+                    <td>依存に <code>@fontsource/kaisei-tokumin</code>（5.3.0）を追加</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/DesignPreviewView.vue</code></td>
+                    <td>デザイン確認用の開発専用画面（新規）</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/router/index.js</code></td>
+                    <td>プレビュー画面を開発時のみ登録し、ログイン判定より先に通す</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/services/authService.js</code></td>
+                    <td>プレビュー用のダミー idToken へ切り替える <code>enablePreviewIdToken</code> を追加（開発時のみ有効）</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteConditionView.vue</code></td>
+                    <td>ホーム画面。3つの状態をマスコットの文言に変換して吹き出しで表示</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteLoadingOverlay.vue</code></td>
+                    <td>ルート作成中の待機画面。待っている間の案内を吹き出しへ移した</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteInfoCard.vue</code></td>
+                    <td>ルートの名前・説明・所要時間を、マスコットが紹介する形に変更</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteNextSpotBanner.vue</code></td>
+                    <td>案内中の帯。左にマスコットを装飾として添え、案内役の言葉に見せる</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/WalkResultView.vue</code></td>
+                    <td>散歩結果。労いの言葉をマスコットが話し、レベル札も表示する</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteConditionForm.vue</code></td>
+                    <td>おまかせの札などの色を変数へ置き換え</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/base/BaseToast.vue</code></td>
+                    <td>通知の配色を羊皮紙・金・紫のインクへ置き換え</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteMap.vue</code></td>
+                    <td>地図上に重ねる小さな表示の面の色を変数へ置き換え</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/auth/SignOutMenu.vue</code>、<code>PasswordVisibilityButton.vue</code></td>
+                    <td>配色を変数へ置き換え</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/review/ReviewPostForm.vue</code>、<code>ReviewRatingInput.vue</code></td>
+                    <td>配色を変数へ置き換え</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/LoginView.vue</code>、<code>SignUpView.vue</code>、<code>PasswordResetView.vue</code></td>
+                    <td>ロゴ下の説明文を1行削除（見出しの書体変更に合わせた整理）</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteNavigationView.vue</code></td>
+                    <td>終了確認の文言を「ルート案内を終了しますか？」へ調整</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+                <tr>
+                    <td><code>.kiro/steering/naming-glossary.md</code>、<code>.kiro/steering/ミチシル_前提条件.md</code></td>
+                    <td>マスコットの用語と、デザインの方向性・書体・配信方法の決定を記録</td>
+                    <td>feature/NZ-178</td>
+                </tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr>
+                <th>ドキュメント</th>
+                <th>何が書いてあるか</th>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td>
+                <td>「確定した要素」に画面デザインの方向性・マスコットの表示方法・見出しの書体・Webフォントの配信方法が、「今後追加予定の要素」にマスコットのレベルの決め方（画像と実績のしきい値が未定）が書かれている</td>
+            </tr>
+            <tr>
+                <td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td>
+                <td>「マスコット」の節に <code>mascotLevel</code> / <code>placement</code> / <code>variant</code> / <code>isDecorative</code> などの語の意味と、<code>character</code> / <code>balloon</code> を使わない理由がまとまっている</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td>
+                <td>この変更でマスコットを添えた案内中の帯の、元々の仕組み（到達判定と距離の計算）</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a></td>
+                <td>配色を置き換えた「おまかせ」の札と通知の、元々の仕組み</td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td>
+                <td>プレビュー画面が呼ばずに済ませている、ルート作成の中身（Location Service と Bedrock）</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

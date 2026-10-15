@@ -34,7 +34,7 @@ export const useToastMessage = () => {
   /**
    * @description メッセージを表示する
    * @param {string} text 表示する文言
-   * @param {'error'|'omakase'} [type] メッセージの種類。省略時はエラー
+   * @param {'error'|'omakase'|'success'} [type] メッセージの種類。省略時はエラー
    * @returns {void}
    */
   const showMessage = (text, type = 'error') => {

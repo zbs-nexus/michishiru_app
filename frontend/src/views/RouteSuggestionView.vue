@@ -13,7 +13,7 @@ import { useRouteStore } from '@/stores/routeStore';
 
 /**
  * @description 提案されたルートを確認する画面。
- * 決定で案内へ進み、再作成で同じ条件のまま作り直す。
+ * 決定で案内へ進み、再作成で同じ条件のまま作り直し、ホームに戻るで条件入力へ戻る。
  */
 const router = useRouter();
 const routeStore = useRouteStore();
@@ -91,6 +91,15 @@ const handleRegenerate = async () => {
   // 再作成ではおまかせで選び直されるため、新しい値を知らせる
   showRandomSelectionMessage();
 };
+
+/**
+ * @description 提案を採用せずにホーム画面へ戻る。
+ * 検索条件はストアに残るため、戻った先で条件を変えて作り直せる。
+ * @returns {void}
+ */
+const handleBackToHome = () => {
+  router.push({ name: 'route-condition' });
+};
 </script>
 
 <template>
@@ -141,6 +150,12 @@ const handleRegenerate = async () => {
             @click="handleRegenerate"
           >
             再作成
+          </BaseButton>
+          <BaseButton
+            variant="secondary"
+            @click="handleBackToHome"
+          >
+            ホームに戻る
           </BaseButton>
         </div>
       </div>

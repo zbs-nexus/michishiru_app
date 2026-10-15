@@ -1,0 +1,35 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "用語辞書への用語追記と、実績保存のためのインフラ（DynamoDB テーブル WalkResult-<環境>、createWalkResult Lambda、POST /api/v1/walk-results、CfnOutput）を AWS CDK に追加する。API のメソッドは既存の Cognito オーソライザーで保護する。iac/test/iac.test.ts の既存テスト『ログイン後に呼ぶ3つのメソッド』はメソッドが4つになるため必ず更新する。plan.md の手順1〜3に対応。Lambda の中身（backend/functions/createWalkResult/）は FEAT-002 で作るため、このFEAT単体では cdk synth でハンドラのソースが存在しない状態になるが、lambda.Code.fromAsset(backendDir) はディレクトリ全体を資産にするだけで個別ファイルの存在を検査しないため synth は通る。",
+  "status": "completed",
+  "steps": [
+    "最初に .agents/tasks/plan.md と .agents/tasks/task-walk-result-save/context.json を読む。plan.md の『設計判断』と手順1〜3がこのFEATの仕様で、設計を作り直さない。",
+    ".kiro/steering/naming-glossary.md の『### 画面と操作』の表の末尾（isScreenAwake の行の直後）に walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults の6行を追記する。文面は plan.md 手順1に書かれたものをそのまま使う。既存行は1行も消さず、表の列構成を崩さない。",
+    ".kiro/steering/naming-glossary.md 末尾の更新履歴表の最終行の後ろに 2026/10/07 の1行を追記する（文面は plan.md 手順1のとおり）。",
+    "iac/lib/michishiru-stack.ts の if (withBackend) ブロック内、routeTable の定義の直後に WalkResultTable（TableV2 / pk・sk の String / Billing.onDemand / prod は RETAIN・dev は DESTROY / GSI なし）を追加する。単一テーブル設計と GSI を持たない理由を日本語コメントで書く。",
+    "同ファイルの getConditionsFn の定義の直後に CreateWalkResultFunction（lambda.Function / NODEJS_LATEST / handler は 'functions/createWalkResult/handler.handler' / 既存の backendCode を再利用 / memorySize 256 / timeout 10秒 / environment は WALK_RESULT_TABLE_NAME）を追加し、walkResultTable.grantWriteData(createWalkResultFn) だけを与える。読み取り権限を与えない理由をコメントで書く。",
+    "同ファイルの conditionsResource の定義の直後に v1Resource.addResource('walk-results') を作り、POST を LambdaIntegration + 既存の cognitoAuthorized で追加する。Lambda が claims.sub で利用者を識別しボディの userId を読まないことをコメントで書く。",
+    "同ファイルの RestApi 定義の上にあるエンドポイント一覧コメントに POST /api/v1/walk-results の行を追加し、RouteTableName の CfnOutput の直後に WalkResultTableName の CfnOutput を追加する。",
+    "iac/test/iac.test.ts の既存テスト『ログイン後に呼ぶ3つのメソッドを Cognito 認可で保護する』をテスト名ごと4メソッドへ更新する（toHaveLength(4)、HttpMethod の並びは ['GET','GET','POST','POST']、コメントに walk-results の POST を追記）。『未認証のメソッドはログイン前に呼ぶ照合APIだけである』は変更しない。",
+    "iac/test/iac.test.ts の describe('MichishiruStack (バックエンド有効)') に新規4件を追加する（plan.md 手順3(c)の4観点: WalkResult-prod のキー構成と GSI なし / createWalkResult の Handler と環境変数 / PathPart 'walk-results' / CreateWalkResultFunctionServiceRoleDefaultPolicy に PutItem・UpdateItem を含み Query・GetItem を含まない）。既存16件の記述は壊さない。",
+    "`cd iac; npm run build` と `npm test` を実行し、20件すべてパスすることを確認する。続けて `npx cdk synth Michishiru-dev -c withBackend=true` を実行する（失敗する場合は先に `cd backend; npm ci`）。",
+    "FEAT-001.json の status を completed にし、findings に『テーブル名・論理ID・追加したメソッド数・iac のテスト件数』を書く（FEAT-002 の Lambda 実装と FEAT-003 の API パスがこれに依存する）。",
+    "変更をローカルにコミットしない（このリポジトリでは git commit / git push を禁止している）。"
+  ],
+  "acceptance_criteria": [
+    "`cd iac; npm test` が 20 件すべてパスする（既存16 + 新規4）",
+    "`cd iac; npm run build` が終了コード0で、型エラーが出ない",
+    "`cd iac; npx cdk synth Michishiru-dev -c withBackend=true` が成功する",
+    "`git diff --stat .kiro/steering/naming-glossary.md` の削除行数が0である",
+    "iac/lib/michishiru-stack.ts の既存の論理ID（SiteBucket / UserPool / RouteTable / GetRouteFunction など）が1つも変わっていない"
+  ],
+  "verification": [
+    "cd c:\\ミチシル開発\\michishiru_app\\iac; npm run build",
+    "cd c:\\ミチシル開発\\michishiru_app\\iac; npm test",
+    "cd c:\\ミチシル開発\\michishiru_app\\iac; npx cdk synth Michishiru-dev -c withBackend=true",
+    "git diff --stat .kiro/steering/naming-glossary.md"
+  ],
+  "blocked_reason": null,
+  "findings": "後続FEATが依拠する事実。\n\n【DynamoDB テーブル】物理名は `WalkResult-dev` / `WalkResult-prod`（`WalkResult-${stage}`）。CDK 論理ID は `WalkResultTable`。キーは pk（String / HASH）と sk（String / RANGE）の複合キー。課金は on-demand。removalPolicy は prod が RETAIN、dev が DESTROY。GSI は持たない（履歴は pk + sk の前方一致で引く想定）。既存の `RouteTable`（`Route-<環境>`）には一切手を入れていない。\n\n【Lambda】CDK 論理ID は `CreateWalkResultFunction`。物理名は指定していない（CDK の自動生成）。`lambda.Function` を使い、既存4関数のうち getRoute / getConditions と同じ `backendCode`（`lambda.Code.fromAsset(backendDir)`、exclude は node_modules / package-lock.json / **/__tests__/**）を共有する。esbuild のバンドルはしない。handler 文字列は `functions/createWalkResult/handler.handler` — したがって FEAT-002 は `backend/functions/createWalkResult/handler.js` から `handler` を named export する必要がある。runtime は NODEJS_LATEST、memorySize 256、timeout 10秒。\n\n【環境変数】`WALK_RESULT_TABLE_NAME` のみ。値は `walkResultTable.tableName`。FEAT-002 の `backend/functions/createWalkResult/constants.js` はこの名前で `process.env` を読む。\n\n【IAM】`walkResultTable.grantWriteData(createWalkResultFn)` のみ。付与されるのは BatchWriteItem / PutItem / UpdateItem / DeleteItem / DescribeTable 系で、`dynamodb:Query` と `dynamodb:GetItem` は含まれない。FEAT-002 の repository は読み取りを行ってはいけない（権限がなく実行時に失敗する）。TransactWriteItems は PutItem / UpdateItem の権限で通る。\n\n【API パス】`POST /api/v1/walk-results`。CloudFront の `/api/*` 経由で同一オリジン配信されるため CORS 設定は不要。FEAT-003 のフロントは `/api/v1/walk-results` へ POST する。\n\n【認可】既存の `cognitoAuthorized`（`ApiAuthorizer` / COGNITO_USER_POOLS）を適用済み。これで Cognito 認可付きメソッドは3→4になった（routes の GET / POST、conditions の GET、walk-results の POST）。未認証のメソッドは `POST /api/v1/password-reset-verifications` の1件のみで変わらず。Lambda は `event.requestContext.authorizer.claims.sub` で利用者を識別し、リクエストボディの `userId` は読まない。\n\n【CfnOutput】`WalkResultTableName`（`RouteTableName` の直後）を追加。既存の出力（UserPoolId / UserPoolClientId / ApiEndpoint / RouteTableName / SiteUrl / DistributionId / SiteBucketName）は変更なし。\n\n【iac のテスト件数】16件 → 20件。既存テスト『ログイン後に呼ぶ3つのメソッドを Cognito 認可で保護する』を『…4つのメソッド…』へ改名し toHaveLength(4) / ['GET','GET','POST','POST'] に更新。新規4件は (1) 実績テーブルの pk・sk 構成と GSI なし、(2) createWalkResult の Handler 文字列と環境変数、(3) PathPart 'walk-results'、(4) `CreateWalkResultFunctionServiceRoleDefaultPolicy` に PutItem・UpdateItem を含み Query・GetItem を含まない。\n\n【検証結果】`npm run build` 終了コード0、`npm test` 20/20 pass、`npx cdk synth Michishiru-dev -c withBackend=true` 終了コード0（backend/node_modules は既に導入済みで `npm ci` は不要だった）。`git diff --stat .kiro/steering/naming-glossary.md` は 14 insertions / 0 deletions（うち7行がこのFEATの追記、残り7行は段階3aの未コミット分）。\n\n【用語辞書】`### 画面と操作` に walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults の6語を追記済み。FEAT-002 / FEAT-003 でこれらの語をそのまま使う。\n\n【コミット】していない（このリポジトリでは git commit / git push を禁止）。"
+}

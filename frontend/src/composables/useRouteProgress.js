@@ -7,17 +7,16 @@ import {
 
 /**
  * @description 案内中の進捗（次の目的地と到達状況）を管理する composable。
- * 現在地の更新をきっかけに、次の目的地へ到達したかを判定する。
  *
- * 到達済みのスポットは未到達へ戻さない。GPSの精度により現在地が前後しても
- * 案内が逆行しないようにするため、判定は一方向にのみ進める。
+ * 次の目的地への切り替えは利用者のボタン操作（advanceToNextSpot）でのみ行う。
+ * 現在地からの自動判定は行わない。GPSの誤差で、立ち寄っていないスポットが
+ * 到達済みになったり、立ち寄ったのに到達にならなかったりするのを避けるため。
  *
- * 表示する距離は経路の折れ線に沿って測り、到達判定は直線距離で行う。
- * 判定に道沿いの距離を使うと、近道した場合に到達と見なせなくなるため分けている。
+ * 到達済みのスポットは未到達へ戻さない。切り替えは一方向にのみ進める。
+ *
+ * 現在地は次の目的地までの距離の表示にだけ使う。
+ * 距離は経路の折れ線に沿って測り、測れない場合は直線距離で代替する。
  */
-
-/** 到達とみなす距離（メートル）。一般的なGPSの誤差を見込んで余裕を持たせる */
-const ARRIVAL_THRESHOLD_M = 40;
 
 /**
  * 経路に沿った距離を採用する、経路からの離れの上限（メートル）。
@@ -29,18 +28,16 @@ const MAX_ROUTE_DEVIATION_M = 100;
  * @description 次の目的地と到達状況を提供する
  * @param {object} sources 参照する状態
  * @param {import('vue').Ref<object[]>} sources.spots 巡る順に並んだスポットの一覧
- * @param {import('vue').Ref<{lat: number, lng: number}>} sources.currentLocation 現在地
- * @param {import('vue').Ref<number|null>} sources.accuracy 位置情報の精度（メートル）
+ * @param {import('vue').Ref<{lat: number, lng: number}>} sources.currentLocation 現在地（距離の表示に使う）
  * @param {import('vue').Ref<object|null>} [sources.geometry] 経路の形（GeoJSONのLineString）
- * @returns {object} 次の目的地・距離・到達状況
+ * @returns {object} 次の目的地・距離・到達状況・次の目的地へ進める関数
  */
 export const useRouteProgress = ({
   spots,
   currentLocation,
-  accuracy,
   geometry = ref(null)
 }) => {
-  /** 到達済みのスポットID。判定が進む方向にのみ追加する */
+  /** 到達済みのスポットID。ボタン操作で末尾にのみ追加する */
   const visitedSpotIds = ref([]);
 
   /** 次に向かう目的地。すべて到達済みの場合はnull */
@@ -67,7 +64,7 @@ export const useRouteProgress = ({
   /** 経路の累積距離。ルートが変わったときだけ組み立て直す */
   const routeMeasure = computed(() => toRouteMeasure(geometry.value?.coordinates));
 
-  /** 次の目的地までの直線距離（メートル）。到達判定に使う */
+  /** 次の目的地までの直線距離（メートル）。経路沿いで測れない場合の代替に使う */
   const straightDistanceToNextM = computed(() => {
     if (nextSpotPosition.value === null) {
       return null;
@@ -108,28 +105,26 @@ export const useRouteProgress = ({
     visitedSpotIds.value = [];
   });
 
-  // 現在地が更新されるたびに、次の目的地への到達を判定する
-  watch([currentLocation, accuracy], () => {
-    // 初回の測位までは現在地にフォールバック座標が入っているため、判定しない。
-    // accuracyは実際に測位できた時点で数値が入る
-    if (accuracy.value === null || nextSpot.value === null) {
-      return;
-    }
-
-    const distanceM = straightDistanceToNextM.value;
-
-    if (distanceM === null || distanceM > ARRIVAL_THRESHOLD_M) {
+  /**
+   * @description 利用者の操作で次の目的地へ切り替える。
+   * 今の目的地を巡ったものとして到達済みにし、その次のスポットを次の目的地にする。
+   * 配列は丸ごと差し替える（呼び出し側の watch が deep なしで拾えるようにするため）。
+   * @returns {void}
+   */
+  const advanceToNextSpot = () => {
+    if (nextSpot.value === null) {
       return;
     }
 
     visitedSpotIds.value = [...visitedSpotIds.value, nextSpot.value.spotId];
-  });
+  };
 
   return {
     nextSpot,
     distanceToNextM,
     visitedSpotIds,
     visitedCount,
-    isCompleted
+    isCompleted,
+    advanceToNextSpot
   };
 };

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-189 ユーザー登録画面 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NZ-189 ユーザー登録画面（＋ユーザープールのCDK化） - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026-09-30<br>
+            <strong>🌿 ブランチ / コミット:</strong><br>
+            &nbsp;&nbsp;・<code>feature/NZ-189</code>（PR #55 / <code>bec0487</code> / 13:55）ユーザー登録画面<br>
+            &nbsp;&nbsp;・<code>411c27d</code>（14:57）ユーザープールのCDK化とデプロイ手順の変更。PR を通さず <code>develop</code> に直接入ったコミットです<br>
+            <strong>📝 課題番号:</strong> NZ-189
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>アプリの利用者が、自分でアカウントを作れる画面（<code>/sign-up</code>）を追加しました。ログイン画面の「アカウントをお持ちでない方は」のリンクから開けます。</p>
+        <p>あわせて、ログインの仕組みを支える Cognito のユーザープール（利用者の名簿のようなもの）を、手作業ではなく CDK（AWS の構成をコードで書く仕組み）で作るように変えました。それに伴い、自動デプロイの手順も変わっています。</p>
+        <p>ログイン画面と Cognito の基本は <code>docs/Cognitoログイン画面_構築手順書.html</code> を参照してください。ただし手順書の「GitHub の Variables に ID を登録する」手順は、この変更で不要になりました（後述）。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li>これまでは管理者がコンソールで1人ずつユーザーを作る必要がありました。</li>
+            <li>ユーザープールを手作業で作ると、dev と prod で設定がずれたり、IDを GitHub に登録し忘れたりします。コードにしておけば、同じ設定で何度でも作れます。</li>
+        </ul>
+
+        <h2>🔄 処理の流れ（ユーザー登録）</h2>
+        <pre class="code-block">[ログイン画面] 「ユーザー登録」リンク
+     ▼
+[SignUpView 1段目] ユーザー名・メールアドレス・パスワード
+     │  authStore.signUp → authService.signUpWithEmail → Cognito signUp
+     │  （Cognito がメールに6桁の確認コードを送る）
+     ▼
+[SignUpView 2段目] 確認コード
+     │  authStore.confirmSignUp → authService.confirmSignUpWithCode → Cognito confirmSignUp
+     ▼
+[ログイン画面] /login?registered=1 → 「ユーザー登録が完了しました」</pre>
+
+        <div class="flow-step">
+            <strong>Step 1: 登録情報を送る</strong><br>
+            <code>SignUpForm.vue</code> が入力値（ユーザー名とメールは前後の空白を除く）を親に渡し、<code>SignUpView.vue</code> がストアの <code>signUp</code> を呼びます。この時点のユーザーは「未確認」で、まだログインできません。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 確認コードを入れる</strong><br>
+            <code>SignUpConfirmForm.vue</code> に送り先（一部が隠された形）を表示します。メールに届いたコードを入れると、ストアの <code>confirmSignUp</code> でユーザーが有効になります。届かないときは「再送」で <code>resendCode</code> を呼びます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: ログイン画面へ</strong><br>
+            成功すると <code>/login?registered=1</code> に移り、完了メッセージが出ます。自動ではログインしないので、登録した内容でログインしてもらいます。
+        </div>
+
+        <h2>🔄 処理の流れ（デプロイ）</h2>
+        <pre class="code-block">GitHub Actions（deploy.yml）
+  1. cdk deploy（1回目）… ユーザープールを含むインフラを作る
+       └ --outputs-file cdk-outputs.json に UserPoolId などが書き出される
+  2. node tools/exportCognitoOutputs.js
+       └ cdk-outputs.json から ID を取り出し、VITE_COGNITO_* として次のステップへ渡す
+  3. frontend で npm run build … ID がビルド結果に埋め込まれる
+  4. cdk deploy（2回目）… できあがった frontend/dist を S3 に配信する</pre>
+        <p><strong>なぜ2回デプロイするのか:</strong> ユーザープールの ID は、作ってみるまで決まりません。フロントはビルドするときに ID を埋め込むので、「プールを作る → ID を受け取る → ビルド → 配信」の順にする必要があります。1回目の時点では <code>frontend/dist</code> がないので、静的ファイルのアップロードは行われません。</p>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/services/authService.js — signUpWithEmail</h3>
+        <div class="code-block"><pre>const { isSignUpComplete, nextStep } = await cognitoSignUp({
+  username,
+  password,
+  options: { userAttributes: { email } }
+});
+
+if (nextStep.signUpStep === 'CONFIRM_SIGN_UP') {
+  return {
+    isConfirmationRequired: true,
+    codeDeliveryDestination: nextStep.codeDeliveryDetails?.destination ?? null
+  };
+}</pre></div>
+        <ul>
+            <li>入力: ユーザー名・メールアドレス・パスワード。出力: 確認コードが必要か、と送り先。</li>
+            <li>ユーザープールはメールアドレスを必須にしているので、登録時に必ず送ります。</li>
+            <li>想定外の次の手順（自動サインインなど）が返ってきたら、失敗として扱います。</li>
+            <li>ほかに <code>confirmSignUpWithCode</code>（コードで有効化）と <code>resendConfirmationCode</code>（コード再送）を追加しました。</li>
+        </ul>
+
+        <h3>エラー文言</h3>
+        <p>Cognito のエラー名を日本語に置き換える表（<code>ERROR_MESSAGES</code>）に、登録で出るものを追加しました。<code>toSignUpErrorMessage</code> は表にないエラーのとき「ユーザー登録に失敗しました…」を返します。</p>
+        <table>
+            <tr><th>エラー名</th><th>画面の文言</th></tr>
+            <tr><td><code>UsernameExistsException</code></td><td>このユーザー名は既に使われています</td></tr>
+            <tr><td><code>InvalidPasswordException</code></td><td>パスワードの条件を満たしていません…</td></tr>
+            <tr><td><code>CodeMismatchException</code></td><td>確認コードが違います</td></tr>
+            <tr><td><code>ExpiredCodeException</code></td><td>確認コードの有効期限が切れています。コードを再送してください</td></tr>
+        </table>
+
+        <h3>frontend/src/stores/authStore.js</h3>
+        <p><code>signUp</code> / <code>confirmSignUp</code> / <code>resendCode</code> を追加しました。通信中は <code>isSigningUp</code> を <code>true</code> にしてボタンを押せなくし、失敗したら <code>errorMessage</code> に文言を入れます。</p>
+
+        <h3>frontend/src/constants/authValidation.js（新規）</h3>
+        <p>パスワードの最小文字数（8）、条件の説明文、確認コードの桁数（6）をまとめた定数です。ユーザー登録とパスワード再設定の両方で使います。</p>
+
+        <h3>frontend/src/assets/styles/global.css / LoginForm.vue</h3>
+        <p>ログイン画面にあった入力欄のスタイルを <code>auth-form</code> / <code>auth-field</code> / <code>auth-error</code> などの共通クラスとして <code>global.css</code> に移しました。ログイン・登録・再設定の画面で同じ見た目を使い回せます。</p>
+
+        <h3>iac/lib/michishiru-stack.ts — ユーザープール</h3>
+        <div class="code-block"><pre>const userPool = new cognito.UserPool(this, 'UserPool', {
+  userPoolName: `michishiru-users-${stage}`,
+  selfSignUpEnabled: true,          // 利用者が自分で登録できる
+  signInAliases: { username: true }, // ユーザー名でサインイン
+  signInCaseSensitive: false,        // 大文字小文字の違いで別人にならない
+  standardAttributes: { email: { required: true, mutable: true } },
+  autoVerify: { email: true },       // メールの確認コードで有効化
+  ...
+  deletionProtection: isProd,
+  removalPolicy: isProd ? cdk.RemovalPolicy.RETAIN : cdk.RemovalPolicy.DESTROY
+});</pre></div>
+        <ul>
+            <li>環境ごとに別のプール（<code>michishiru-users-dev</code> / <code>michishiru-users-prod</code>）を作ります。</li>
+            <li>パスワードは8文字以上で、大文字・小文字・数字・記号が必須です。</li>
+            <li>本番は誤って消えないよう保護し（<code>RETAIN</code>）、開発は作り直せるようにしています（<code>DESTROY</code>）。</li>
+            <li>アプリクライアント（<code>michishiru-web-&lt;環境&gt;</code>）はシークレットを持たせません。ブラウザに置く値は誰でも見られるので、SPA ではシークレットが使えないためです。</li>
+            <li><code>preventUserExistenceErrors: true</code> で、ログイン失敗時に「そのユーザーはいない」と分からないようにしています。</li>
+            <li>ID は <code>CfnOutput</code>（<code>UserPoolId</code> / <code>UserPoolClientId</code>）として出力され、デプロイ時に受け取れます。</li>
+        </ul>
+
+        <h3>tools/exportCognitoOutputs.js（新規）</h3>
+        <p><code>iac/cdk-outputs.json</code> から <code>Michishiru-&lt;stage&gt;</code> スタックの出力を読み、<code>VITE_COGNITO_USER_POOL_ID</code> / <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code> として <code>GITHUB_ENV</code>（後のステップに環境変数を引き継ぐための GitHub Actions の仕組み）に書き込みます。出力が見つからないときはエラーで止めます。</p>
+        <p><code>VITE_</code> で始まる値は、ビルドのときにプログラムへ埋め込まれます。実行時には読まれないので、ビルドより前に渡しておく必要があります。なお、ユーザープールID とクライアントID は秘密の値ではありません（<code>constants/authConfig.js</code> のコメント参照）。</p>
+
+        <h3>.github/workflows/deploy.yml</h3>
+        <ul>
+            <li>デプロイ先を決める <code>setup</code> ジョブを分けました。GitHub の Environment（環境ごとのデプロイ履歴）はジョブの開始時に決まるため、先に別のジョブで決めておく必要があるからです。</li>
+            <li>以前の「Variables に ID が登録されているか確認する」ステップを削除し、上の「2回デプロイ」の流れに変えました。</li>
+        </ul>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>構築手順書の一部が古くなった</strong><br>
+            <code>docs/Cognitoログイン画面_構築手順書.html</code> の「コンソールでユーザープールを作る」「GitHub の Variables に ID を登録する」手順は、今は不要です。プールは CDK が作り、ID はデプロイの出力から自動で渡されます。また、<code>michishiru-stack.ts</code> の <code>CfnOutput</code> の説明文にも「GitHub の Environment 変数に設定する」と古い記述が残っています。
+        </div>
+        <div class="important">
+            <strong>パスワードの条件は2か所</strong><br>
+            画面の説明（<code>constants/authValidation.js</code>）と実際のルール（<code>michishiru-stack.ts</code> の <code>passwordPolicy</code>）は別々に書かれています。変えるときは両方直してください。
+        </div>
+        <div class="important">
+            <strong>ユーザープールの論理ID（<code>UserPool</code>）を変えない</strong><br>
+            CDK の論理IDを変えると、プールが作り直されて登録済みのユーザーが全員消えます（prod は <code>RETAIN</code> なので古いプールは残りますが、アプリからは新しい空のプールが使われます）。
+        </div>
+        <div class="important">
+            <strong>確認メールは Cognito の既定の送信元から届く</strong><br>
+            <code>UserPoolEmail.withCognito()</code> を使っているため、送信元は AWS のアドレスで、1日に送れる数にも上限があります。迷惑メールフォルダも確認してください。独自ドメインから送るには SES の設定が必要です。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>ローカルでは <code>frontend/.env.local</code> に <code>VITE_COGNITO_USER_POOL_ID</code> と <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code> を書きます（dev 環境の値を使う。<code>*.local</code> は Git の管理外です）。</li>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行します。</li>
+            <li>ログイン画面から「ユーザー登録」を開き、ユーザー名・メールアドレス・パスワードを入れて登録します。</li>
+            <li>メールに届いた6桁のコードを入れ、ログイン画面に「ユーザー登録が完了しました」と出ることを確認します。</li>
+            <li>登録した内容でログインできることを確認します。</li>
+            <li>同じユーザー名でもう一度登録し「このユーザー名は既に使われています」と出ることも確認します。</li>
+            <li>フロントのチェック: <code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code>（フロントの自動テストは未導入）。</li>
+            <li>IaC のチェック: <code>iac/</code> で <code>npm run build</code>、<code>npm test</code>（ユーザープールとアプリクライアントのテストが追加されています）、<code>npx cdk synth</code>。</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th></tr>
+                <tr><td><code>frontend/src/views/SignUpView.vue</code></td><td>（新規）ユーザー登録画面。2段の切り替えと遷移</td></tr>
+                <tr><td><code>frontend/src/components/feature/auth/SignUpForm.vue</code></td><td>（新規）ユーザー名・メール・パスワードの入力欄</td></tr>
+                <tr><td><code>frontend/src/components/feature/auth/SignUpConfirmForm.vue</code></td><td>（新規）確認コードの入力欄と再送ボタン</td></tr>
+                <tr><td><code>frontend/src/components/feature/auth/LoginForm.vue</code></td><td>スタイルを共通クラスへ移動</td></tr>
+                <tr><td><code>frontend/src/views/LoginView.vue</code></td><td>登録画面へのリンクと完了メッセージ</td></tr>
+                <tr><td><code>frontend/src/services/authService.js</code></td><td>登録・確認・再送の Cognito 呼び出しとエラー文言</td></tr>
+                <tr><td><code>frontend/src/stores/authStore.js</code></td><td>登録の状態（<code>isSigningUp</code>）とエラーの保持</td></tr>
+                <tr><td><code>frontend/src/constants/authValidation.js</code></td><td>（新規）パスワード条件・確認コード桁数</td></tr>
+                <tr><td><code>frontend/src/router/index.js</code></td><td><code>/sign-up</code> を追加</td></tr>
+                <tr><td><code>frontend/src/assets/styles/global.css</code></td><td>認証画面の共通スタイル</td></tr>
+                <tr><td><code>iac/lib/michishiru-stack.ts</code></td><td>ユーザープールとアプリクライアントの定義、ID の出力</td></tr>
+                <tr><td><code>iac/test/iac.test.ts</code></td><td>ユーザープールの設定を確かめるテスト</td></tr>
+                <tr><td><code>iac/.gitignore</code></td><td><code>cdk-outputs.json</code> を管理外に</td></tr>
+                <tr><td><code>tools/exportCognitoOutputs.js</code></td><td>（新規）デプロイ出力から ID を取り出してビルドへ渡す</td></tr>
+                <tr><td><code>.github/workflows/deploy.yml</code></td><td>デプロイを2回に分ける</td></tr>
+                <tr><td><code>.kiro/steering/*.md</code></td><td>認証の用語と、構成の確定事項を追記</td></tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

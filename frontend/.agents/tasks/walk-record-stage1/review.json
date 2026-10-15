@@ -1,0 +1,50 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "id": "accuracy-dead-band",
+      "label": "精度 200m 超で距離が積まれない帯域",
+      "severity": "minor",
+      "blocking": false,
+      "confidence": "confirmed",
+      "files": ["frontend/src/composables/useWalkRecord.js"],
+      "detail": "ガード④の MAX_SEGMENT_DISTANCE_M=200 と、ガード⑤の max(accuracy, MIN_SEGMENT_DISTANCE_M) の間に、accuracy > 200 のとき満たせる区間距離が存在しない。測位が届いていても addDistanceM が一度も呼ばれず totalDistanceM が 0、hasLocationFix も false のまま終わる。useLocationTracking は通常 100m 超の精度を弾くが、10秒間採用が途切れた場合の救済パス（MAX_POSITION_AGE_MS）は精度を問わず採用するため到達しうる。",
+      "why": "誤差の方向は安全側（過大計上しない）なので段階1の表示としては許容できるが、段階2で実績をユーザーごとにDBへ保存すると「0km の散歩記録」が残る。保存を入れる前にしきい値の関係を決める必要がある。",
+      "action": "段階2の着手前に、精度に応じて MAX_SEGMENT_DISTANCE_M を動かすか、精度上限を超えた測位を useWalkRecord 側でも弾くかを決める。"
+    },
+    {
+      "id": "has-location-fix-wording",
+      "label": "hasLocationFix と注記文言のずれ",
+      "severity": "minor",
+      "blocking": false,
+      "confidence": "confirmed",
+      "files": ["frontend/src/stores/walkStore.js", "frontend/src/views/WalkResultView.vue"],
+      "detail": "hasLocationFix は addDistanceM が加算に成功した時のみ true になるため、実体は「距離を積めたか」であって「測位できたか」ではない。結果画面の文言「位置情報を取得できなかったため、実績を計測できませんでした」の前半が実態と一致しない。",
+      "why": "plan.md は「一歩も動かなかった場合」を既知の制約として挙げているが、accuracy > 200 が続くケース（finding: accuracy-dead-band）でも同じ文言が出るため、plan.md の記載に含まれない経路がもう1つある。",
+      "action": "文言は依頼指定のため実装は変更していない。文言を「実績を計測できませんでした」のみに留めるか hasWalkRecord と組み合わせて出し分けるかを依頼者に確認する。"
+    },
+    {
+      "id": "has-walk-record-unused",
+      "label": "hasWalkRecord が未使用",
+      "severity": "trivial",
+      "blocking": false,
+      "confidence": "confirmed",
+      "files": ["frontend/src/stores/walkStore.js"],
+      "detail": "仕様で要求された computed だが、フロント全体を検索しても参照箇所がない。",
+      "why": "hasLocationFix と役割が混同されやすく、未使用のまま残ると次に触る人がどちらを使うべきか判断できない。",
+      "action": "段階2で使う前提ならそのまま残してよい。使わないなら削除するか、用途をコメントに書き足す。"
+    },
+    {
+      "id": "manual-verification-pending",
+      "label": "手動確認①〜⑥が未実施",
+      "severity": "major",
+      "blocking": false,
+      "confidence": "confirmed",
+      "files": ["frontend/.agents/tasks/walk-record-stage1/verification.md"],
+      "detail": "verification.md のとおり lint と build は最終状態で成功しているが、plan.md 手順6の手動確認①〜⑥が未実施。ガード④の飛び判定、ガード⑤のゆらぎ判定と起点据え置きによる累積、startWalk / resetWalk による2回目の散歩でのリセット、到達スポット数のストア同期は lint・build では一切検出できない。",
+      "why": "本変更の核心がしきい値判定と状態のリセットであり、そこがまったく検証されていない。git-workflow.md はPRの前提条件に「動作確認済み」を明示している。",
+      "action": "PR作成前に plan.md 手順6の①〜⑥（開発者ツールの Sensors による座標操作を含む）を実施する。コードの修正は不要。"
+    }
+  ],
+  "reviewDoc": "c:\\ミチシル開発\\michishiru_app\\frontend\\.agents\\tasks\\walk-record-stage1\\review.md"
+}

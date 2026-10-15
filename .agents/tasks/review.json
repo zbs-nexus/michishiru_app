@@ -1,0 +1,41 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    {
+      "label": "結果画面の再マウントで2件目の実績が増える",
+      "severity": "non-blocking",
+      "confidence": "likely",
+      "file": "frontend/src/composables/useWalkResultSave.js",
+      "detail": "walkId は buildCurrentWalkResult() の中で保存のたびに crypto.randomUUID() で作られるため、冪等性（attribute_not_exists(pk)）が効くのは『同じペイロードを送り直す』退避キューの再送だけで、『同じ散歩をもう一度組み立てて送る』経路には効かない。計画の判断1にある『万一重なっても walkId の冪等性で累計は増えない』は後者には当てはまらない。実際の経路はブラウザの戻る→進む（/result → /navigation が再マウントされ startWalk() が走る → /result が再マウントされ2件目を保存）。多くの場合 hasLocationFix が false で measurementStatus が unavailable になり createWalkResultWithoutTotals を通るため累計は守られるが、その間に測位が1回通ると partial になり walkCount が距離0のまま1増える。walkId を startWalk() の時点で決めてストアに持たせれば、2回目は条件エラーで止まり 200 が返る。"
+    },
+    {
+      "label": "低精度区間の中断を数え始めるのが最大10秒遅れる",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "file": "frontend/src/views/RouteNavigationView.vue",
+      "detail": "isMeasurementInterrupted は accuracy > MAX_MEASURABLE_ACCURACY_M（100m）で低精度区間を拾うが、useLocationTracking.handlePositionUpdate は精度の悪い測位を『初回』『100m以内』『直前の採用から MAX_POSITION_AGE_MS=10秒経過』以外では採用しないため accuracy ref が更新されない。良い測位の直後に150mの測位が届き続けても、10秒の救済で採用されるまで中断として数え始めず、10秒未満のバーストは一切数えない。数え落とす区間は復帰時に useWalkRecord が200m以内の直線として繋ぐため実害は小さく、しきい値60秒の根拠と整合する。現状維持でよいなら『採用された測位の精度でしか判定できない』ことをコメントに残す。"
+    },
+    {
+      "label": "持ち主が一致しない退避項目が残り続ける",
+      "severity": "non-blocking",
+      "confidence": "likely",
+      "file": "frontend/src/composables/useWalkResultSave.js",
+      "detail": "flushPendingWalkResults は ownerUsername が現在のユーザーと一致しない項目を continue で飛ばすだけで、捨てる経路が無い。該当するのは①保存の待ち合わせ中にサインアウトされて ownerUsername が null になった項目（null !== 'alice' で永久に飛ばされる）②イテレーション1の形式（9キーのペイロードを直接積んでいたため ownerUsername も walkResult を持たない）で、どちらも MAX_PENDING_COUNT（20件）に押し出されるまで残る。他ユーザー分を残すのは意図どおりだが、送れないと確定した項目（持ち主が null・walkResult を持たない）は捨てる判定を足す。"
+    },
+    {
+      "label": "実績テーブルに deletionProtection と PITR が無い",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "file": "iac/lib/michishiru-stack.ts",
+      "detail": "WalkResultTable は removalPolicy（prod は RETAIN）だけで、CloudFormation 以外の経路（コンソール・CLI からのテーブル削除、誤った項目更新）に備えがない。同じスタックの userPool は deletionProtection: isProd を持つのに、再生成できない散歩の履歴を持つこのテーブルには無い。累計（TOTAL）は ADD の単調増加で、段階3bには履歴取得APIも削除APIもエクスポートも無いため壊れても組み直せない。prod では deletionProtection: isProd と pointInTimeRecoverySpecification を検討する。"
+    },
+    {
+      "label": "しきい値が View とテストに二重定義",
+      "severity": "non-blocking",
+      "confidence": "confirmed",
+      "file": "frontend/src/views/RouteNavigationView.vue",
+      "detail": "MEASUREMENT_GAP_THRESHOLD_MS（60000）が RouteNavigationView.vue と RouteNavigationView.test.js の両方に定義されている（段階3aからの繰り越し）。値がずれればテストが落ちるため黙って壊れることはないが、今回 MAX_MEASURABLE_ACCURACY_M を export して二重定義を避けたのと同じ扱いにできる。"
+    }
+  ],
+  "reviewDoc": "c:\\ミチシル開発\\michishiru_app\\.agents\\tasks\\review.md"
+}

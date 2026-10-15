@@ -38,6 +38,24 @@ export const createNotFoundError = (message, context) =>
   new ApplicationError(ERROR_CODES.ROUTE_NOT_FOUND, message, context);
 
 /**
+ * @description 認証されていない場合のエラーを作る
+ * @param {string} message 呼び出し元へ返すメッセージ
+ * @param {object} [context] 調査用の付随情報
+ * @returns {ApplicationError} 生成したエラー
+ */
+export const createUnauthorizedError = (message, context) =>
+  new ApplicationError(ERROR_CODES.UNAUTHORIZED, message, context);
+
+/**
+ * @description 競合が起きた場合のエラーを作る
+ * @param {string} message 呼び出し元へ返すメッセージ
+ * @param {object} [context] 調査用の付随情報
+ * @returns {ApplicationError} 生成したエラー
+ */
+export const createConflictError = (message, context) =>
+  new ApplicationError(ERROR_CODES.REVIEW_CONFLICT, message, context);
+
+/**
  * @description データストアへのアクセスに失敗した場合のエラーを作る
  * @param {string} message 呼び出し元へ返すメッセージ
  * @param {object} [context] 調査用の付随情報

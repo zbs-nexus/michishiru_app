@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NZ-153 次の目的地表示 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NZ-153 案内中の次の目的地表示 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>📅 マージ日:</strong> 2026-09-30（4回に分けてマージ）<br>
+            <strong>🌿 ブランチ:</strong> <code>feature/NZ-153</code><br>
+            &nbsp;&nbsp;・PR #51（<code>2c29b50</code> / 10:16）次の目的地表示を実装<br>
+            &nbsp;&nbsp;・PR #57（<code>3e8aed6</code> / 14:51）距離を経路沿いに計算、GPSの揺らぎ対策<br>
+            &nbsp;&nbsp;・PR #59（<code>3e9c18d</code> / 15:07）地図上の要素の重なりを修正<br>
+            &nbsp;&nbsp;・PR #62（<code>134185b</code> / 15:42）GPS精度が悪い環境で現在地が固まる問題を改善<br>
+            <strong>📝 課題番号:</strong> NZ-153<br>
+            <small>※ 同じブランチの 9/16 のマージ（PR #45 / #48：リアルタイム現在地表示）は <code>docs/NZ-143_現在地取得機能の実装解説.html</code> で解説済みのため、ここでは扱いません。</small>
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>案内画面の上部に「次の目的地」のバナーを出し、目的地の名前と、そこまでの残り距離を表示します。目的地の近く（40m以内）まで来ると「到達した」と判定し、自動で次の目的地に切り替わります。すべて回ると「すべての目的地を通過しました。開始地点へ戻ります」と表示します。</p>
+
+        <h3>先に知っておきたい用語</h3>
+        <table>
+            <tr><th>用語</th><th>意味</th></tr>
+            <tr><td><code>spot</code>（スポット）</td><td>ユーザーが立ち寄る場所（公園・神社・カフェ等）。1ルートに数個。バナーに出すのはこちら</td></tr>
+            <tr><td><code>waypoint</code>（経由点）</td><td>経路の線を描くための座標の点（交差点・道の折れ点）。1ルートに数十個。ユーザーには見せない</td></tr>
+            <tr><td><code>geometry</code></td><td>経路の線の形。<code>coordinates</code> に <code>[経度, 緯度]</code> の点（= waypoint）が並ぶ</td></tr>
+            <tr><td>GPSの精度（<code>accuracy</code>）</td><td>「本当の位置はこの半径 ○m の円のどこか」という目安。数字が小さいほど正確</td></tr>
+        </table>
+        <p>spot と waypoint を混ぜると「巡ったスポット数」に道の曲がり角まで数えてしまうので、必ず区別します。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li>地図だけでは「次にどこへ向かえばいいか」「あとどれくらいか」が分かりにくいため。</li>
+            <li>直線距離だと、道が回り込んでいるときに実際より短く見えてしまうため（PR #57 で経路沿いの距離に変更）。</li>
+            <li>GPS は止まっていても数m揺れます。そのまま表示すると、歩いていないのに数字が動き続けて落ち着かないため。</li>
+        </ul>
+
+        <h2>🔄 処理の流れ</h2>
+        <pre class="code-block">useLocationTracking（現在地を受け取る）
+   │  精度の悪い測位は捨てる（ただし10秒以上止まったら受け入れる）
+   ▼
+currentLocation / accuracy
+   │
+   ▼
+useRouteProgress（進み具合を計算）
+   ├─ 直線距離 ≦ 40m なら到達 → visitedSpotIds に追加 → 次のスポットへ
+   └─ 表示用の距離 = 経路に沿った距離（だめなら直線距離）
+   │
+   ▼
+RouteNextSpotBanner（10m 単位に丸めて表示）</pre>
+
+        <div class="flow-step">
+            <strong>Step 1: 現在地を受け取る（useLocationTracking.js）</strong><br>
+            ブラウザの <code>watchPosition</code>（位置が変わるたびに知らせてくれる機能）から現在地を受け取ります。精度が 100m より悪い測位は「座標が大きく飛ぶ」ので使わず、前回の位置を保ちます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 到達したか判定する（useRouteProgress.js）</strong><br>
+            現在地が更新されるたびに、次のスポットまでの直線距離を測ります。40m 以内なら到達済みにして、次のスポットへ進めます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 残り距離を測る（useRouteProgress.js + routeGeometry.js）</strong><br>
+            現在地と次のスポットを、経路の線の上に「一番近い点」として落とし込み、その2点の間を線に沿って測ります。経路から 100m 以上離れているときは直線距離に切り替えます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 表示する（RouteNextSpotBanner.vue）</strong><br>
+            1km 未満は 10m 単位、1km 以上は 0.1km 単位で「約○m」「約○km」と表示します。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/composables/useRouteProgress.js — 到達判定</h3>
+        <div class="code-block"><pre>watch([currentLocation, accuracy], () =&gt; {
+  // 初回の測位までは現在地に仮の座標が入っているため、判定しない
+  if (accuracy.value === null || nextSpot.value === null) {
+    return;
+  }
+
+  const distanceM = straightDistanceToNextM.value;
+
+  if (distanceM === null || distanceM &gt; ARRIVAL_THRESHOLD_M) {
+    return;
+  }
+
+  visitedSpotIds.value = [...visitedSpotIds.value, nextSpot.value.spotId];
+});</pre></div>
+        <ul>
+            <li>入力: スポット一覧・現在地・精度・経路の形。出力: <code>nextSpot</code> / <code>distanceToNextM</code> / <code>visitedSpotIds</code> / <code>visitedCount</code> / <code>isCompleted</code>。</li>
+            <li><code>nextSpot</code> は「まだ <code>visitedSpotIds</code> に入っていない最初のスポット」です。</li>
+            <li>到達済みは<strong>追加するだけで、取り消しません</strong>。GPS が前後にぶれても案内が逆戻りしないためです。</li>
+            <li>ルート（<code>spots</code>）が差し替わったときだけ、到達状況をリセットします。</li>
+        </ul>
+
+        <h3>判定は直線、表示は経路沿い。なぜ分けるのか</h3>
+        <p>到達判定まで経路沿いの距離にすると、ユーザーが近道して経路から外れた場所でスポットに着いたとき、「経路上ではまだ遠い」と判断されて到達になりません。そこで、<strong>判定は直線距離（いま実際にどれだけ近いか）</strong>、<strong>表示は経路沿い（あとどれだけ歩くか）</strong>と使い分けています。</p>
+
+        <h3>frontend/src/utils/routeGeometry.js — 経路沿いの距離</h3>
+        <table>
+            <tr><th>関数</th><th>やること</th></tr>
+            <tr><td><code>toRouteMeasure(coordinates)</code></td><td>経路の各点までの累積距離（スタートから何m目か）を先に計算しておく。これが <code>routeMeasure</code>。ルートが変わったときだけ作り直すので、現在地が動くたびの計算が軽くなる</td></tr>
+            <tr><td><code>toRouteProjection(measure, position)</code></td><td>座標を経路の線上の一番近い点に落とし込み、「スタートから何m目か（<code>alongM</code>）」と「線からどれだけ離れているか（<code>deviationM</code>）」を返す</td></tr>
+            <tr><td><code>calculateAlongRouteDistanceM(...)</code></td><td>現在地と目的地の <code>alongM</code> の差 = 経路に沿った距離（<code>alongRouteDistanceM</code>）。現在地が <code>maxDeviationM</code> より離れていたら <code>null</code></td></tr>
+        </table>
+        <p>線からの距離が大きいときに使わない理由: 経路から遠く離れると、「一番近い点」が全然違う区間（たとえば帰り道の部分）に吸い寄せられ、距離が急に何百mも飛ぶことがあるためです。</p>
+        <p>計算では、狭い範囲なら地球を平面とみなしてよいので、緯度・経度をメートルに換算してから点と線分の距離を求めています。2点間の直線距離は <code>utils/geoDistance.js</code> の <code>calculateDistanceM</code>（ハバーサイン公式という、球面上の距離を求める式）を使います。</p>
+
+        <h3>frontend/src/composables/useLocationTracking.js — GPSの揺らぎ対策</h3>
+        <div class="code-block"><pre>// 測位そのものは届いているため、精度に関わらずエラー表示を解除する
+trackingError.value = null;
+
+const isFirstFix = accuracy.value === null;
+const isReliableAccuracy =
+  Number.isFinite(positionAccuracy) &amp;&amp;
+  positionAccuracy &lt;= MAX_ACCEPTABLE_ACCURACY_M;
+// 精度が悪い測位しか来ない環境で、現在地が固まったままにならないようにする
+const isPositionStale =
+  lastAcceptedAt !== null &amp;&amp; Date.now() - lastAcceptedAt &gt;= MAX_POSITION_AGE_MS;
+
+if (!isFirstFix &amp;&amp; !isReliableAccuracy &amp;&amp; !isPositionStale) {
+  return;
+}</pre></div>
+        <p>次の3つのどれかに当てはまれば、その測位を現在地として採用します。</p>
+        <ol>
+            <li>最初の1回目（これを捨てると、精度が悪い場所では案内が始まらない）</li>
+            <li>精度が 100m 以内</li>
+            <li>最後に採用してから 10 秒以上たった（PR #62 で追加。ビル街などで精度の悪い測位しか来ないと、現在地がずっと動かなくなるため）</li>
+        </ol>
+        <p>PR #62 では上限を 50m → 100m に緩めました。開発者ツールで位置を偽装したときも精度が大きめに返るためです。</p>
+
+        <h3>定数の一覧</h3>
+        <table>
+            <tr><th>定数</th><th>値</th><th>場所</th><th>意味</th></tr>
+            <tr><td><code>ARRIVAL_THRESHOLD_M</code></td><td>40</td><td><code>useRouteProgress.js</code></td><td>この距離以内に入ったら到達</td></tr>
+            <tr><td><code>MAX_ROUTE_DEVIATION_M</code></td><td>100</td><td><code>useRouteProgress.js</code></td><td>経路からこれ以上離れたら直線距離に切り替え</td></tr>
+            <tr><td><code>MAX_ACCEPTABLE_ACCURACY_M</code></td><td>100</td><td><code>useLocationTracking.js</code></td><td>これより精度が悪い測位は採用しない</td></tr>
+            <tr><td><code>MAX_POSITION_AGE_MS</code></td><td>10000</td><td><code>useLocationTracking.js</code></td><td>採用が途切れてこの時間がたったら、精度が悪くても受け入れる</td></tr>
+            <tr><td><code>DISTANCE_ROUNDING_UNIT_M</code></td><td>10</td><td><code>RouteNextSpotBanner.vue</code></td><td>距離表示を丸める単位</td></tr>
+        </table>
+
+        <h3>RouteNextSpotBanner.vue — 表示</h3>
+        <ul>
+            <li>表示だけを担当し、到達判定はしません（値は親の <code>RouteNavigationView.vue</code> から受け取ります）。</li>
+            <li>丸めた結果が 0m になると「着いたのに0m」と読めるので、最小でも「約10m」と出します。</li>
+            <li><code>role="status"</code> / <code>aria-live="polite"</code> を付け、スクリーンリーダーにも内容の変化を伝えます。</li>
+        </ul>
+
+        <h3>RouteNavigationView.vue — 追跡を1か所にまとめる</h3>
+        <p>現在地の追跡はこの画面で1回だけ開始し、地図とバナーの両方に同じ値を渡します。地図とバナーがそれぞれ追跡すると、<code>watchPosition</code> が二重に動いてしまうためです。</p>
+
+        <h3>PR #59 — 地図上の要素の重なり修正</h3>
+        <ul>
+            <li>案内画面では、地図のズームボタンがバナーの下に隠れて押せなかったため、<code>RouteNavigationMap.vue</code> でボタンを 84px 下げました。</li>
+            <li>位置情報のエラー表示が終了ボタンと重なっていたため、上へずらしました。</li>
+            <li><code>RouteMap.vue</code> のお知らせ表示が、地図の帰属表示（右下の i マーク）を覆っていたので右端を空けました。帰属表示は地図の利用規約上、隠してはいけません。</li>
+        </ul>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>到達判定は「順番どおり」</strong><br>
+            判定するのは <code>nextSpot</code>（次の1件）だけです。順番を飛ばして先のスポットに行っても、そのスポットは到達になりません。
+        </div>
+        <div class="important">
+            <strong>初回の測位までは判定しない</strong><br>
+            測位前の現在地には仮の座標（フォールバック値）が入っています。<code>accuracy</code> が <code>null</code> の間は判定しないことで、仮の座標が偶然スポットに近くても誤って到達にしないようにしています。
+        </div>
+        <div class="important">
+            <strong>定数を変えるときはセットで考える</strong><br>
+            <code>ARRIVAL_THRESHOLD_M</code> を GPS の誤差（数十m）より小さくすると、到達できなくなることがあります。新しい定数を足すときは、先に <code>naming-glossary.md</code> へ登録してください。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行します。</li>
+            <li>ホーム画面からルートを作成し、「決定」で案内画面へ進みます。</li>
+            <li>上部に「次の目的地」と名前・距離が出ることを確認します。</li>
+            <li>位置を動かして確認します。Chrome の場合:
+                <ul>
+                    <li>F12 で開発者ツールを開き、右上の「︙」→「More tools」→「Sensors」を開く</li>
+                    <li>「Location」で「Other…」を選び、緯度・経度を入力する</li>
+                    <li>スポットの座標に近い値を入れると、到達して次の目的地に切り替わる</li>
+                </ul>
+            </li>
+            <li>全スポットに到達すると「すべての目的地を通過しました」と出ることを確認します。</li>
+            <li>ズームボタンがバナーに隠れず押せること、エラー表示が終了ボタンと重ならないことを確認します。</li>
+            <li><code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code> を実行します。フロントの自動テストツールは未導入のため、計算部分（<code>routeGeometry.js</code> など）のテストはまだありません。</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th></tr>
+                <tr><td><code>frontend/src/composables/useRouteProgress.js</code></td><td>（新規）次の目的地・到達判定・残り距離</td></tr>
+                <tr><td><code>frontend/src/composables/useLocationTracking.js</code></td><td>精度による測位の採用判定、10秒ルール</td></tr>
+                <tr><td><code>frontend/src/utils/geoDistance.js</code></td><td>（新規）2点間の直線距離</td></tr>
+                <tr><td><code>frontend/src/utils/routeGeometry.js</code></td><td>（新規）経路沿いの距離</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteNextSpotBanner.vue</code></td><td>（新規）次の目的地バナー</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteNavigationMap.vue</code></td><td>案内用の地図。現在地を親から受け取る形に変更、ズームボタンの位置調整</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteMap.vue</code></td><td>お知らせ表示と帰属表示の重なり修正</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td>追跡の開始と、地図・バナーへの受け渡し</td></tr>
+                <tr><td><code>.kiro/steering/naming-glossary.md</code></td><td><code>nextSpot</code> / <code>visitedSpotIds</code> / <code>routeMeasure</code> などの用語を登録</td></tr>
+            </table>
+        </div>
+    </div>
+</body>
+</html>

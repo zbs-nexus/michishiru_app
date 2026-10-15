@@ -37,8 +37,60 @@ defineProps({
   trackingError: {
     type: String,
     default: null
+  },
+  /** 口コミ投稿のために地図の長押しを受け付けるかどうか */
+  isLongPressEnabled: {
+    type: Boolean,
+    default: false
+  },
+  /** 新規で口コミを投稿する場所に立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
+  pinPosition: {
+    type: Object,
+    default: null
+  },
+  /** 見えている地図範囲の中央へ寄せる座標 { lng, lat }。未設定の場合はnull */
+  focusPosition: {
+    type: Object,
+    default: null
+  },
+  /** 寄せるときの、地図中央からの縦のずれ（ピクセル）。下方向が正 */
+  focusOffsetY: {
+    type: Number,
+    default: 0
+  },
+  /** 自分が投稿した口コミの場所の一覧 */
+  myReviewSpots: {
+    type: Array,
+    default: () => []
+  },
+  /** 自分の口コミのオレンジピンを表示するかどうか */
+  showMyReviews: {
+    type: Boolean,
+    default: false
+  },
+  /** 他の人が投稿した口コミの場所の一覧 */
+  otherReviewSpots: {
+    type: Array,
+    default: () => []
+  },
+  /** 他の人の口コミの紫ピンを表示するかどうか */
+  showOtherReviews: {
+    type: Boolean,
+    default: false
+  },
+  /** 到達済みのスポットID。地図のマーカーをスタンプ表示にする */
+  visitedSpotIds: {
+    type: Array,
+    default: () => []
+  },
+  /** 選択中の口コミの場所のID。該当するピンを大きく前面に出す */
+  selectedReviewSpotId: {
+    type: String,
+    default: null
   }
 });
+
+defineEmits(['longPressMap', 'selectReviewSpot']);
 </script>
 
 <template>
@@ -50,6 +102,18 @@ defineProps({
         :show-current-location="isTracking"
         :current-location="currentLocation"
         :current-accuracy="currentAccuracy"
+        :is-long-press-enabled="isLongPressEnabled"
+        :pin-position="pinPosition"
+        :focus-position="focusPosition"
+        :focus-offset-y="focusOffsetY"
+        :my-review-spots="myReviewSpots"
+        :show-my-reviews="showMyReviews"
+        :other-review-spots="otherReviewSpots"
+        :show-other-reviews="showOtherReviews"
+        :visited-spot-ids="visitedSpotIds"
+        :selected-review-spot-id="selectedReviewSpotId"
+        @long-press-map="$emit('longPressMap', $event)"
+        @select-review-spot="$emit('selectReviewSpot', $event)"
       />
     </div>
     <div
@@ -75,11 +139,12 @@ defineProps({
 }
 
 /*
- * ズームボタンが次の目的地バナー（top: 12px、高さ約60px）の下に隠れて
+ * ズームボタンが次の目的地バナー（top: 12px、高さ約60px）と、
+ * その右下の「次の目的地へ」ボタン（top: 84px、高さ約30px）に隠れて
  * 押せなくなるため、この画面だけコントロールを下へ寄せる。
  */
 .navigation-map :deep(.maplibregl-ctrl-top-right) {
-  margin-top: 84px;
+  margin-top: 124px;
 }
 
 /*

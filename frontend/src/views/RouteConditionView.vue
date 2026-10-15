@@ -1,10 +1,12 @@
 <script setup>
 import { useRouter } from 'vue-router';
+import { computed } from 'vue';
 import logoImage from '@/assets/images/logo.png';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import SignOutMenu from '@/components/feature/auth/SignOutMenu.vue';
+import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteConditionForm from '@/components/feature/route/RouteConditionForm.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import { useRouteConditionOptions } from '@/composables/useRouteConditionOptions';
@@ -41,6 +43,27 @@ const {
 
 // 初回描画前に読み込み中の状態へ入れるため、setup内で取得を開始する
 loadConditionOptions();
+
+/**
+ * マスコットが話す文言。
+ * 読み込み中・失敗・入力待ちの3つの状態を、この画面の案内役がそのまま話す。
+ */
+const mascotMessage = computed(() => {
+  if (isLoadingOptions.value) {
+    return '地図をひろげているよ。少し待っていてね';
+  }
+
+  if (!hasConditionOptions.value) {
+    return optionsErrorMessage.value ?? '条件をよみこめなかったみたい。もう一度ためしてね';
+  }
+
+  return 'どんなお散歩にする？ ジャンルと距離をえらんで、ぼくに教えて！';
+});
+
+/** 吹き出しの種類。条件を出せないときだけ注意として見せる */
+const mascotMessageVariant = computed(() =>
+  !isLoadingOptions.value && !hasConditionOptions.value ? 'alert' : 'normal'
+);
 
 /**
  * @description 選択されたジャンルを、表示名と合わせてストアへ保存する。
@@ -115,7 +138,6 @@ const handleSignOut = async () => {
       </div>
       <div class="logo-text">
         <h1>ミチシル</h1>
-        <p>ルート提案型お散歩アプリ</p>
       </div>
 
       <SignOutMenu
@@ -124,19 +146,20 @@ const handleSignOut = async () => {
       />
     </div>
 
+    <!-- 読み込み中・失敗・入力待ちの案内は、この画面の案内役が吹き出しで話す -->
+    <MascotSpeechBubble
+      class="home-mascot"
+      :message="mascotMessage"
+      :variant="mascotMessageVariant"
+      placement="side"
+      size="medium"
+    />
+
     <h2 class="section-title">
       お散歩ルートを作成
     </h2>
 
-    <p
-      v-if="isLoadingOptions"
-      class="hint"
-      role="status"
-    >
-      条件を読み込み中...
-    </p>
-
-    <template v-else-if="hasConditionOptions">
+    <template v-if="hasConditionOptions">
       <RouteConditionForm
         :genre="routeStore.genre"
         :distance-km="routeStore.distanceKm"
@@ -156,22 +179,14 @@ const handleSignOut = async () => {
       </BaseButton>
     </template>
 
-    <template v-else>
-      <p
-        v-if="optionsErrorMessage"
-        class="hint"
-        role="alert"
-      >
-        {{ optionsErrorMessage }}
-      </p>
-
-      <BaseButton
-        variant="secondary"
-        @click="loadConditionOptions"
-      >
-        再読み込み
-      </BaseButton>
-    </template>
+    <!-- 失敗の理由は吹き出しで伝えるため、ここは操作のみ置く -->
+    <BaseButton
+      v-else-if="!isLoadingOptions"
+      variant="secondary"
+      @click="loadConditionOptions"
+    >
+      再読み込み
+    </BaseButton>
   </DefaultLayout>
 </template>
 
@@ -179,5 +194,10 @@ const handleSignOut = async () => {
 /* ロゴの右側の余白へ寄せ、ヘッダーの右上に置く */
 .header-menu {
   margin-left: auto;
+}
+
+/* 見出しとの間を空け、案内役が最初に目に入るようにする */
+.home-mascot {
+  margin-bottom: 26px;
 }
 </style>

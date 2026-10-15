@@ -1,0 +1,12 @@
+{
+  "name": "get-user-reviews",
+  "version": "1.0.0",
+  "description": "呼び出し元ユーザーの口コミ一覧を返すLambda関数",
+  "private": true,
+  "type": "module",
+  "main": "handler.js",
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "3.1118.0",
+    "@aws-sdk/lib-dynamodb": "3.1118.0"
+  }
+}

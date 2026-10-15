@@ -12,6 +12,11 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  // Vitest の設定。コンポーネントの描画を確かめるためDOMを用意する
+  test: {
+    environment: 'jsdom',
+    include: ['src/**/__tests__/**/*.test.js']
+  },
   server: {
     port: 3000,
     // ポートが使用中の場合は別ポートへ切り替えず、明示的に失敗させる

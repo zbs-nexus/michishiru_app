@@ -1,6 +1,7 @@
 import {
   confirmResetPassword as cognitoConfirmResetPassword,
   confirmSignUp as cognitoConfirmSignUp,
+  fetchAuthSession,
   getCurrentUser,
   resendSignUpCode as cognitoResendSignUpCode,
   resetPassword as cognitoResetPassword,
@@ -13,6 +14,45 @@ import {
  * @description Cognito を使った認証処理をまとめる。
  * ライブラリへの依存をこのファイルに閉じ込め、呼び出し側は例外だけを扱う。
  */
+
+/**
+ * セッションが無い・失効した場合に画面へ出す文言。
+ *
+ * この文言だけ定数に切り出しているのは、2つの経路から同じものを出す必要があるため。
+ * サインインの失敗は authStore が `toAuthErrorMessage` で対応表を引くが、
+ * API の認可で失敗した場合は composable が `error.message` をそのまま表示する。
+ * 対応表と throw するメッセージが別々だと、経路によって文言が変わってしまう。
+ */
+const NO_VALID_SESSION_MESSAGE =
+  'ログインの有効期限が切れました。もう一度ログインしてください';
+
+/**
+ * デザイン確認用のダミートークン（開発時のみ）。
+ * ローカルAPIハーネスはトークンを検証しないため、形だけ揃っていれば通る。
+ * 本物と見間違えないよう、値そのものに用途を書いておく。
+ */
+const PREVIEW_ID_TOKEN = 'design-preview-dummy-id-token';
+
+/**
+ * ダミートークンを返す状態かどうか。
+ * 既定は false で、デザイン確認用の画面（DesignPreviewView）だけが真にする。
+ */
+let isPreviewIdTokenEnabled = false;
+
+/**
+ * @description 以降の `fetchIdToken` がダミートークンを返すようにする。
+ *
+ * デザイン確認用の画面は Cognito のセッションを作らずログイン済みに見せるため、
+ * このままではAPIの認可でトークンが取れず画面を確認できない。
+ * その回避のための開発時限定の口であり、本番ビルドでは
+ * `import.meta.env.DEV` が false になってこの関数は何もしない。
+ * @returns {void}
+ */
+export const enablePreviewIdToken = () => {
+  if (import.meta.env.DEV) {
+    isPreviewIdTokenEnabled = true;
+  }
+};
 
 /** Cognito が返す例外名と、画面に出す文言の対応 */
 const ERROR_MESSAGES = {
@@ -45,7 +85,9 @@ const ERROR_MESSAGES = {
   EmptyResetPasswordUsername: 'ユーザー名を入力してください',
   EmptyConfirmResetPasswordUsername: 'ユーザー名を入力してください',
   EmptyConfirmResetPasswordConfirmationCode: '確認コードを入力してください',
-  EmptyConfirmResetPasswordNewPassword: '新しいパスワードを入力してください'
+  EmptyConfirmResetPasswordNewPassword: '新しいパスワードを入力してください',
+  // ここから下はAPIの認可で出るもの
+  NoValidSession: NO_VALID_SESSION_MESSAGE
 };
 
 /**
@@ -56,9 +98,23 @@ const ERROR_MESSAGES = {
 const PASSWORD_RESET_ERROR_MESSAGES = {
   // ユーザーの有無を画面で言い当てないよう、あいまいな文言にする
   UserNotFoundException: 'ユーザー名を確認してください',
+  // 入力されたユーザー名とメールアドレスの組み合わせが、登録内容と一致しなかった場合
+  EmailMismatch: 'ユーザー名とメールアドレスの組み合わせが一致しません',
+  // 照合そのものができなかった場合（APIへ到達できない等）
+  VerificationUnavailable:
+    '組み合わせを確認できませんでした。通信状況を確認してください',
   // メールアドレスが未確認のユーザーは、送信先が無いため再設定できない
   InvalidParameterException:
     'このユーザーはメールアドレスが未確認のため再設定できません。管理者に連絡してください'
+};
+
+/**
+ * サインインで追加の手続きを求められたとき、例外名を読み替える対応。
+ * Amplify v6 は未確認のユーザーに対して UserNotConfirmedException を投げず、
+ * 次の手続き（CONFIRM_SIGN_UP）として返すため、例外として扱う名前へ寄せる。
+ */
+const SIGN_IN_STEP_ERROR_NAMES = {
+  CONFIRM_SIGN_UP: 'UserNotConfirmedException'
 };
 
 /** サインインの対応表に無い例外に使う文言 */
@@ -115,10 +171,11 @@ export const signInWithPassword = async (username, password) => {
     return;
   }
 
-  // MFAや初回パスワード変更など、追加の手続きを求められた場合。
+  // 未確認のユーザー・MFA・初回パスワード変更など、追加の手続きを求められた場合。
   // 対応する画面を用意していないため、失敗として上位へ返す
   const error = new Error(`サインインが完了しませんでした: ${nextStep.signInStep}`);
-  error.name = nextStep.signInStep;
+  error.name =
+    SIGN_IN_STEP_ERROR_NAMES[nextStep.signInStep] ?? nextStep.signInStep;
   throw error;
 };
 
@@ -202,6 +259,10 @@ export const resendConfirmationCode = async (username) => {
  *
  * 新しいパスワードはこの時点では決めず、`confirmPasswordResetWithCode` で設定する。
  * 送信先はユーザープールで確認済みのメールアドレスで、こちらからは指定できない。
+ *
+ * この関数を呼ぶ時点でコードが送信される。
+ * ユーザー名とメールアドレスの組み合わせの照合は、呼ぶ前に
+ * `passwordResetService.verifyPasswordResetTarget` で済ませておく。
  * @param {string} username ユーザー名
  * @returns {Promise<string|null>} コードの送信先（マスクされた形）。取得できない場合はnull
  * @throws {Error} 送信に失敗した場合、または未対応の手続きを求められた場合
@@ -256,4 +317,39 @@ export const fetchSignedInUsername = async () => {
     // 未サインインでも例外になる仕様のため、サインインしていない状態として扱う
     return null;
   }
+};
+
+/**
+ * @description APIの認可に使うIDトークンを取得する。
+ * API Gateway のCognitoオーソライザーが検証するため、呼び出し側はこの値を
+ * Authorization ヘッダーへそのまま載せる。
+ *
+ * 取得した値をモジュール変数にキャッシュしてはいけない。
+ * idTokenの有効期限は1時間だが、散歩はそれより長く続くことがある。
+ * `fetchAuthSession` はリフレッシュトークン（5日）で期限切れのトークンを
+ * 自動更新するため、リクエストごとに呼ぶのが最も単純で安全。
+ * キャッシュすると期限切れのトークンを送り続け、401になる。
+ *
+ * 取得できない場合はnullを返さず例外を投げる。呼び出し側が
+ * 「通信に失敗した」ではなく「認証が切れた」と区別できる必要があるため。
+ * @returns {Promise<string>} Cognito が発行したIDトークン
+ * @throws {Error} 未サインイン、またはセッションが失効している場合（name は NoValidSession）
+ */
+export const fetchIdToken = async () => {
+  // デザイン確認用の画面から有効にしたときのみ通る。本番ビルドでは条件ごと消える
+  if (import.meta.env.DEV && isPreviewIdTokenEnabled) {
+    return PREVIEW_ID_TOKEN;
+  }
+
+  const session = await fetchAuthSession();
+  const idToken = session.tokens?.idToken?.toString();
+
+  if (idToken) {
+    return idToken;
+  }
+
+  // composable は error.message をそのまま画面へ出すため、ここに利用者向けの文言を入れる
+  const error = new Error(NO_VALID_SESSION_MESSAGE);
+  error.name = 'NoValidSession';
+  throw error;
 };

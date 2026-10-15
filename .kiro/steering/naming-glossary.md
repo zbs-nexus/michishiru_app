@@ -71,13 +71,29 @@ inclusion: always
 | 次の目的地までの距離 | distanceToNextM | 現在地から次の目的地までの直線距離（メートル） |
 | 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
 | 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
-| 到達判定の距離 | ARRIVAL_THRESHOLD_M | 到達とみなす距離（メートル）。`useRouteProgress.js` の定数 |
+| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。`useRouteProgress.js` の関数 |
 | 距離表示の丸め単位 | DISTANCE_ROUNDING_UNIT_M | 距離表示を丸める単位（メートル）。`RouteNextSpotBanner.vue` の定数 |
 | 採用する測位精度の上限 | MAX_ACCEPTABLE_ACCURACY_M | この値より精度が悪い測位は現在地に採用しない（メートル）。`useLocationTracking.js` の定数 |
 | 経路に沿った距離 | alongRouteDistanceM | 直線距離ではなく、経路の折れ線をたどった距離（メートル） |
 | 経路からの離れ | deviationM | 現在地が経路の折れ線からどれだけ離れているか（メートル） |
 | 経路の測定用データ | routeMeasure | 経路の各点までの累積距離をまとめたもの。距離計算に使う |
 | 経路沿いを採用する離れの上限 | MAX_ROUTE_DEVIATION_M | これ以上経路から離れたら直線距離へ切り替える（メートル）。`useRouteProgress.js` の定数 |
+| 地図に表示する現在地 | displayLocation | 経路の近くでは経路の線上へ吸着させた現在地。表示専用で、距離の計算には使わない。`useRouteSnapping.js` が返す |
+| 経路へ吸着させているかどうか | isSnappedToRoute | 現在地が経路から `MAX_SNAP_DEVIATION_M` 以内で、線上へ寄せて表示しているか |
+| 経路へ吸着させる離れの上限 | MAX_SNAP_DEVIATION_M | これ以上経路から離れたら吸着をやめ、測位した座標をそのまま表示する（メートル）。`useRouteSnapping.js` の定数 |
+| 徒歩として採用する速さの上限 | MAX_WALKING_SPEED_MPS | 前回採用した地点からこれを超える速さで動いた測位は、座標の飛びとして捨てる（メートル毎秒）。`locationPlausibility.js` の定数 |
+| 飛びの候補 | jumpCandidate | 飛びと判定して捨てた直近の測位と、互いに矛盾せず続いた回数。`useLocationTracking.js` の内部状態 |
+| 飛びを受け入れる連続回数 | MAX_CONSECUTIVE_JUMP_COUNT | 飛びと判定した測位が矛盾せずこの回数続いたら受け入れる。前回の採用地点が誤っていた場合に現在地が固まるのを防ぐ。`useLocationTracking.js` の定数 |
+| 実績の総距離 | totalDistanceM | 実際に歩いた距離（メートル）。GPSの軌跡から積算する |
+| 測位できたかどうか | hasLocationFix | 一度でも現在地を採用できたか。できていない場合は実績を計測できない |
+| 区間距離 | segmentDistanceM | 前回採用した地点から現在地までの距離（メートル） |
+| 採用する最小区間距離 | MIN_SEGMENT_DISTANCE_M | これを下回る移動はGPSのゆらぎとみなして積算しない。`useWalkRecord.js` の定数 |
+| 採用する最大区間距離 | MAX_SEGMENT_DISTANCE_M | これを上回る移動は測位の飛びとみなして積算しない。`useWalkRecord.js` の定数 |
+| 距離を積算できる精度の上限 | MAX_MEASURABLE_ACCURACY_M | これより精度が悪い測位では距離を積算しない（メートル）。`useWalkRecord.js` の定数。現在地の採用を決める `MAX_ACCEPTABLE_ACCURACY_M` とは目的が別 |
+| 計測状態 | measurementStatus | 実績をどこまで計測できたか。complete / partial / unavailable の3値 |
+| 計測の欠落があったかどうか | hasMeasurementGap | 画面を切られた・測位が途切れたことを検知したか |
+| 計測の欠落とみなす継続時間 | MEASUREMENT_GAP_THRESHOLD_MS | 測位の中断・画面の非表示がこの時間を超えたら欠落として扱う（ミリ秒）。`RouteNavigationView.vue` の定数 |
+| 最後に距離を積めた時刻 | lastDistanceAddedAt | 距離を加算できた最後の時刻。記録のみで、現時点では計測状態の判定には使っていない |
 
 ### 検索条件
 
@@ -118,6 +134,92 @@ inclusion: always
 | 案内 | navigation | ルートに沿って歩く際の画面・機能 |
 | 再作成 | regenerate | 同じ条件で別のルートを作り直すこと |
 | ロード中 | loading | 処理中の状態 |
+| 散歩の開始時刻 | startedAt | 案内を開始した時刻 |
+| 散歩の終了時刻 | endedAt | 案内を終了した時刻 |
+| 経過時間 | elapsedMinutes | 案内の開始から終了までの時間（分） |
+| 画面の消灯を抑止しているかどうか | isScreenAwake | Screen Wake Lock を取得できている状態 |
+| 散歩のID | walkId | 1回の散歩を一意に識別する値（UUID v4）。フロントで生成して送り、再送時も同じ値を使う |
+| 散歩の回数 | walkCount | 保存した散歩の件数。累計レコードが持つ |
+| 累計の距離 | cumulativeDistanceM | 全散歩の距離の合計（メートル）。1回分の totalDistanceM とは別概念 |
+| 累計のスポット数 | cumulativeSpotCount | 全散歩で巡ったスポット数の合計 |
+| 累計の時間 | cumulativeMinutes | 全散歩の経過時間の合計（分） |
+| 保存待ちの実績 | pendingWalkResults | 保存に失敗して端末のブラウザストレージへ退避した実績の一覧 |
+| 退避した実績の持ち主 | ownerUsername | 退避した実績を保存する利用者のユーザー名。再送はこの人がサインインしているときだけ行う |
+
+### 口コミ
+
+| 日本語 | 英語（コード上） | 説明 |
+|---|---|---|
+| 口コミ | review | ユーザーがスポットに付ける感想と評価のまとまり |
+| 口コミ投稿 | postReview | 口コミを投稿すること |
+| 口コミ投稿フォーム | ReviewPostForm | 口コミを入力するフォーム（コンポーネント名） |
+| 評価 | rating | スポットへの5段階評価（1〜5の整数） |
+| 平均評価 | ratingAverage | その場所の評価の平均。合計と件数から算出する |
+| 評価件数 | ratingCount | その場所に付いた口コミ（評価）の件数 |
+| ロケーション名 | spotName | 口コミ対象のスポットの名称。ユーザーが入力する |
+| 写真 | photo | 口コミに添える画像。場所あたり最大4枚、初回投稿時のみ設定する |
+| 写真キー | photoKeys | S3に保存した写真のオブジェクトキーの配列 |
+| 写真表示URL | photoUrls | 写真表示用の署名付きGET URLの配列（getSpotが返す） |
+| 写真の全画面表示 | ReviewPhotoViewer | 写真を全画面で拡大表示する部品。複数枚はスワイプ・矢印・キーボードで送る |
+| 拡大表示する写真の一覧 | viewerPhotoUrls | 全画面表示に渡す写真のURLの一覧。空のときは非表示 |
+| 拡大表示を開く位置 | viewerStartIndex | 全画面表示を開いたときに最初に見せる写真の位置 |
+| 拡大表示中の写真の位置 | viewerIndex | 全画面表示で今見ている写真の位置 |
+| 送りと判定する最小の横移動量 | SWIPE_THRESHOLD_PX | 横スワイプを写真の送りとみなす移動量（ピクセル）。`ReviewPhotoViewer.vue` の定数 |
+| 作成者本人か | isOwner | 呼び出し元がその場所の作成者か。本人は名前・ジャンル・写真も編集できる |
+| 自分の口コミ一覧 | myReviews | 自分が投稿した口コミ（場所つき）。地図のオレンジピン表示に使う |
+| 口コミが付いた場所の一覧 | reviewSpots | 誰かが口コミを投稿した場所の全件。自分のぶんも含む |
+| 他の人の口コミの場所 | otherReviewSpots | `reviewSpots` から自分が投稿済みの場所を除いたもの。地図の紫ピン表示に使う |
+| 自分の口コミを表示するか | showMyReviews | オレンジピンの表示切り替え |
+| 他の人の口コミを表示するか | showOtherReviews | 紫ピンの表示切り替え |
+| 選択中の口コミの場所のID | selectedReviewSpotId | 選択中のピンを大きく前面に出すための目印。未選択はnull |
+| ピンの座標 | pinPosition | 地図の長押しで立てるピンの座標 `{ lng, lat }` |
+| 口コミフォームの対象座標 | reviewTargetPosition | 投稿フォームが対象にしている座標。長押しした位置、または選んだピンの位置 |
+| 新規投稿の場所のピン | newSpotPin | 赤いピンの座標。まだ口コミが無い場所にだけ立てる |
+| 投稿済みのピンから開いたか | isExistingSpotSelected | 真のとき赤いピンを立てない（長押しと区別する） |
+| 寄せる対象の座標 | focusPosition | 見えている地図範囲の中央へ持ってくる座標。ピンを描く `pinPosition` とは別概念 |
+| 寄せ位置の縦のずれ | focusOffsetY | 地図中央からの縦のずれ（ピクセル）。バナーとフォームで隠れるぶんを親が測って渡す。下方向が正 |
+| フォームを全体表示しているか | isExpanded | 投稿フォームの高さの状態。偽は半分（42vh）、真は全体（85vh） |
+| スワイプと判定する最小の移動量 | SWIPE_THRESHOLD_PX | 上下スワイプを展開・収納とみなす移動量（ピクセル）。`ReviewPostForm.vue` の定数 |
+| 丸めセル | geoCell | 近接する場所を同一視するためのグリッドのセルキー。半径40mの候補絞り込みに使う |
+
+`location`（単独）は使わない。口コミ対象の場所の名称は `spotName` に統一する（辞書の「使ってはいけない表記揺れ」で `place` / `location` を `spot` に寄せているため）。
+
+#### 口コミのピンの色
+
+色と意味は1対1で固定する。色を増やす場合はこの表に追記する。
+
+| 色 | 意味 | コード上のクラス |
+|---|---|---|
+| 赤 | 新規で口コミ投稿をする場所 | `location-pin` |
+| オレンジ | 自分が口コミ投稿済みの場所 | `review-pin-mine` |
+| 紫 | 他の人の口コミ投稿の場所 | `review-pin-other` |
+
+選択中のピンは色を変えず、大きくして（`--pin-size`）縁・影を強め前面へ出す（`is-selected`）。
+色は意味に固定しているため、選択という別の意味に色を使わない。
+
+### マスコット
+
+アプリの案内役として各画面に登場するフクロウのキャラクター。画面に表示しているコメントを吹き出しで話させる。
+
+| 日本語 | 英語（コード上） | 説明 |
+|---|---|---|
+| マスコット | mascot | アプリの案内役のフクロウのキャラクター。1画面に1体だけ表示する |
+| マスコットのレベル | mascotLevel | マスコットの成長段階（1〜10）。ユーザーの実績に応じて上がる |
+| マスコットの名前 | mascotName | レベルごとの呼び名（`ミチのタマゴ` / `よちよちヒナ` 等） |
+| マスコットの画像 | mascotImage | レベルごとの姿の画像。未用意のレベルは `null` |
+| マスコットの定義 | mascotLevels | レベルと名前と画像の対応表。`constants/mascotLevels.js` |
+| 既定のマスコットのレベル | DEFAULT_MASCOT_LEVEL | 実績連動が入るまで全画面で使う固定レベル（1） |
+| マスコットのレベルの下限 | MASCOT_MIN_LEVEL | 1 |
+| マスコットのレベルの上限 | MASCOT_MAX_LEVEL | 10 |
+| 吹き出し | speechBubble | マスコットが話しているように見せる枠（コンポーネント名は `MascotSpeechBubble`） |
+| マスコットの立ち絵 | MascotAvatar | 画像とレベル表示だけを担うコンポーネント名 |
+| 吹き出しの並び | placement | マスコットと吹き出しの並べ方（`side` = 横並び / `stacked` = 吹き出しを上） |
+| 吹き出しの種類 | variant | 吹き出しの見た目と読み上げ優先度（`normal` / `alert`） |
+| マスコットの表示サイズ | size | `small` / `medium` / `large` |
+| 装飾としての表示か | isDecorative | 真のとき代替テキストを空にし支援技術から隠す（読み上げの重複を防ぐ） |
+| レベル表示を出すか | hasLevelLabel | 真のとき `Lv.1 ミチのタマゴ` の表示を添える |
+
+`variant` は `BaseToast` でも同名で使っているが、値は別（トーストは `error` / `omakase`）。どちらもその部品の「見た目の種類」を指す語として使う。
 
 ### 地図
 
@@ -177,7 +279,13 @@ inclusion: always
 | パスワード再設定（画面・行為） | resetPassword | 画面名は「パスワードの再設定」、コード上は `resetPassword`（`/password-reset` / `isResettingPassword`） |
 | パスワード再設定の確認 | confirmResetPassword | 確認コードと新しいパスワードで再設定を確定すること |
 | 新しいパスワード | newPassword | 再設定で利用者が決めるパスワード |
+| 確認パスワード | passwordConfirmation | 打ち間違いを防ぐため、パスワードをもう一度入力させる欄 |
+| 入力チェックの結果 | fieldErrors | 項目名をキーに、エラー文言を持つオブジェクト。エラーが無い項目は持たない |
 | ログイン済みかどうか | isSignedIn | - |
+| パスワードを表示中かどうか | isPasswordVisible | 目のアイコンでパスワードを平文表示しているかどうか |
+| 表示ボタンを出せるかどうか | isPasswordRevealAvailable | エラー直後は false にし、入力が修正されるまで表示ボタンを出さない |
+| IDトークン | idToken | Cognito が発行する、ユーザーの属性（sub など）を含むトークン。API の認可で Authorization ヘッダーに載せる |
+| ユーザーの一意なID | sub | Cognito が発行する不変のユーザー識別子。ユーザー名は変更され得るためデータのキーにはこちらを使う |
 
 `logout` は使わない（`signOut` に統一）。`register` / `signup`（大文字なし）も使わない。
 `forgotPassword` / `reissuePassword` も使わない（`resetPassword` に統一）。Cognito は新しいパスワードを発行せず利用者に決めさせるため、「再発行」ではなく「再設定」と呼ぶ。
@@ -203,6 +311,9 @@ inclusion: always
 | development / production | dev / prod | 環境名は短い形に統一 |
 | stg / staging | （使わない） | 環境は dev / prod の2つのみ |
 | env | stage | 環境の区分を指す語は stage に統一（`env` はAWSのアカウント・リージョン指定に使うため） |
+| character / chara | mascot | キャラクターを指す語は mascot に統一 |
+| balloon / tooltip | speechBubble | 吹き出しは speechBubble に統一（tooltip は補助説明の別概念） |
+| avatar（単独） | MascotAvatar | 利用者のアイコンと混同するため、マスコットの立ち絵は接頭辞を付ける |
 
 `spot` は使用可。以前は禁止語だったが、`waypoint` とは別概念のため解禁した（「特に間違えやすい2組」を参照）。
 
@@ -261,5 +372,25 @@ inclusion: always
 | 2026/09/09 | ジャンルマスタ参照の実装に伴い `genreId` / `genreName` / `spotCategoryId` を追加。`genreId`（英語ID）と `genreName`（日本語の表示名）を明確に区別する |
 | 2026/09/30 | ユーザー登録画面の追加に伴い「認証」の節を新設。未登録だったログイン関連の語（login / signIn / signOut / isSignedIn / username / password）と、登録で使う語（signUp / email / confirmationCode / confirmSignUp）を登録。`logout` / `register` を禁止 |
 | 2026/09/30 | パスワード再設定画面の追加に伴い「認証」へ `resetPassword` / `confirmResetPassword` / `newPassword` を登録。`forgotPassword` / `reissuePassword` を禁止し、「再発行」ではなく「再設定」と呼ぶことを明記 |
+| 2026/09/30 | 認証フォームの入力チェック追加に伴い「認証」へ `passwordConfirmation` / `fieldErrors` を登録 |
 | 2026/09/30 | GPSのゆらぎ対策に伴い「ルートとスポット」へ `DISTANCE_ROUNDING_UNIT_M` / `MAX_ACCEPTABLE_ACCURACY_M` を追加 |
 | 2026/09/30 | 次の目的地までの距離を経路沿いに変更。「ルートとスポット」へ `alongRouteDistanceM` / `deviationM` / `routeMeasure` / `MAX_ROUTE_DEVIATION_M` を追加 |
+| 2026/10/07 | 口コミ投稿機能（フロント）の追加に伴い「口コミ」の節を新設。`review` / `postReview` / `ReviewPostForm` / `rating` / `spotName` / `pinPosition` を登録。口コミ対象の場所の名称は `spotName` に統一し `location` 単独を禁止 |
+| 2026/10/07 | 口コミ投稿のバックエンド実装に伴い「口コミ」へ `ratingAverage` / `ratingCount` / `geoCell` を追加（半径40mで同じ場所とみなし、場所ごとに評価を集計する） |
+| 2026/10/07 | 口コミ写真（場所あたり最大4枚・初回投稿時・S3）の実装に伴い「口コミ」へ `photo` / `photoKeys` / `photoUrls` を追加 |
+| 2026/10/07 | 本人編集・自分の口コミのオレンジピン表示の実装に伴い「口コミ」へ `isOwner` / `myReviews` を追加 |
+| 2026/10/07 | 散歩の実績計測に伴い `totalDistanceM` / `startedAt` / `endedAt` / `elapsedMinutes` / `hasLocationFix` / `segmentDistanceM` / `MIN_SEGMENT_DISTANCE_M` / `MAX_SEGMENT_DISTANCE_M` / `MAX_MEASURABLE_ACCURACY_M` を追加 |
+| 2026/10/07 | API の認可（Cognito オーソライザー）の実装に伴い「認証」へ `idToken` / `sub` を追加 |
+| 2026/10/07 | マスコット（フクロウのキャラクター）の導入に伴い「マスコット」の節を新設。`mascot` / `mascotLevel` / `mascotName` / `mascotImage` / `mascotLevels` / `DEFAULT_MASCOT_LEVEL` / `MASCOT_MIN_LEVEL` / `MASCOT_MAX_LEVEL` / `speechBubble` / `MascotAvatar` / `placement` / `size` / `isDecorative` / `hasLevelLabel` を登録。`character` / `balloon` / `avatar` 単独を禁止 |
+| 2026/10/07 | 散歩の計測信頼性の実装に伴い measurementStatus / hasMeasurementGap / lastDistanceAddedAt / isScreenAwake を追加 |
+| 2026/10/07 | 欠落の判定を継続時間のしきい値に変更したことに伴い MEASUREMENT_GAP_THRESHOLD_MS を追加 |
+| 2026/10/07 | 実績のDB保存に伴い walkId / walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / pendingWalkResults を追加 |
+| 2026/10/07 | 退避した実績を持ち主ごとに送り直すようにしたことに伴い ownerUsername を追加 |
+| 2026/10/14 | 他の人の口コミの紫ピン表示に伴い「口コミ」へ reviewSpots / otherReviewSpots / showMyReviews / showOtherReviews / reviewTargetPosition / newSpotPin / isExistingSpotSelected を追加。ピンの色と意味の対応表（赤＝新規 / オレンジ＝自分 / 紫＝他の人）を明記 |
+| 2026/10/14 | 投稿フォームのボトムシート化とピンの寄せ位置の分離に伴い focusPosition / focusOffsetY / isExpanded / SWIPE_THRESHOLD_PX を追加。ピンを描く座標（pinPosition）と可視範囲の中央へ寄せる座標（focusPosition）を別概念として区別する |
+| 2026/10/14 | 写真の全画面表示（複数枚の送り）に伴い ReviewPhotoViewer / viewerPhotoUrls / viewerStartIndex / viewerIndex を追加。`SWIPE_THRESHOLD_PX` はフォームの高さ切り替えと写真の送りの2か所で使う（どちらもスワイプの判定量） |
+| 2026/10/14 | 口コミフォームを開く経路を長押しとピン選択で分けたことに伴い showReviewFormAt を追加。長押しは解決を待たず入力欄を出し、ピン選択は解決後に描く |
+| 2026/10/14 | 案内中に手動で次の目的地へ進めるボタンの追加に伴い「ルートとスポット」へ advanceToNextSpot / VISITED_STAMP_LABEL を追加 |
+| 2026/10/14 | 次の目的地の切り替えをボタン操作のみにし、現在地からの到達判定を廃止したことに伴い ARRIVAL_THRESHOLD_M を削除 |
+| 2026/10/14 | 到達済みのスタンプを「済」の文字から足跡の画像（`assets/images/spot-visited-stamp.png`）に変更したことに伴い VISITED_STAMP_LABEL を削除 |
+| 2026/10/14 | ビル群での現在地のずれ対策（速さによる飛びの除外・経路への吸着表示）に伴い「ルートとスポット」へ displayLocation / isSnappedToRoute / MAX_SNAP_DEVIATION_M / MAX_WALKING_SPEED_MPS / jumpCandidate / MAX_CONSECUTIVE_JUMP_COUNT を追加 |

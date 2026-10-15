@@ -1,3 +1,4 @@
+import { fetchIdToken } from '@/services/authService';
 import { isJsonResponse } from '@/utils/apiResponse';
 import { toRoute } from '@/utils/routeResponse';
 
@@ -5,6 +6,17 @@ import { toRoute } from '@/utils/routeResponse';
  * @description ルートリソースのAPI通信を担当する。
  * レスポンスを画面で扱う形へ変換して返し、失敗時は例外を投げる。
  * 例外の捕捉はcomposableが行う。
+ *
+ * APIはAPI GatewayのCognitoオーソライザーで保護しているため、
+ * すべてのリクエストにIDトークンをAuthorizationヘッダーで載せる。
+ * `Bearer ` などのスキーム接頭辞は付けない。オーソライザーは既定で
+ * ヘッダーの値をトークンそのものとして検証するため、接頭辞を付けると検証に失敗する。
+ *
+ * `fetchIdToken` が投げた例外はここで捕まえず上位へそのまま伝播させる。
+ * セッション切れの文言への変換は `toAuthErrorMessage` 側の責務。
+ *
+ * 同じヘッダーの付与を conditionService.js にも書いているが、呼び出し箇所が
+ * 3つだけのため今回は抽象化しない。3ファイル目が出た時点で共通化する。
  */
 
 /** APIのベースパス */
@@ -70,7 +82,7 @@ const ensureUsableResponse = async (response) => {
  * @param {string} conditions.genre ジャンル
  * @param {number} conditions.distanceKm 希望距離（km）
  * @returns {Promise<object>} 画面で扱う形に変換したルート情報
- * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
+ * @throws {Error} 通信に失敗した場合、APIがエラーを返した場合、またはセッションが失効している場合
  */
 export const fetchRoute = async ({ genre, distanceKm }) => {
   const query = new URLSearchParams({
@@ -81,7 +93,11 @@ export const fetchRoute = async ({ genre, distanceKm }) => {
     distance: String(distanceKm)
   });
 
-  const response = await fetch(`${ROUTE_API_URL}?${query.toString()}`);
+  const idToken = await fetchIdToken();
+
+  const response = await fetch(`${ROUTE_API_URL}?${query.toString()}`, {
+    headers: { Authorization: idToken }
+  });
 
   await ensureUsableResponse(response);
 
@@ -136,7 +152,7 @@ const buildCreateRouteBody = ({
  * @param {boolean} [conditions.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lng: number, lat: number}} conditions.currentLocation 出発地となる現在地
  * @returns {Promise<object>} 画面で扱う形に変換したルート情報
- * @throws {Error} 通信に失敗した場合、またはAPIがエラーを返した場合
+ * @throws {Error} 通信に失敗した場合、APIがエラーを返した場合、またはセッションが失効している場合
  */
 export const createRoute = async ({
   genreId,
@@ -145,9 +161,14 @@ export const createRoute = async ({
   isDistanceRandom,
   currentLocation
 }) => {
+  const idToken = await fetchIdToken();
+
   const response = await fetch(`${API_BASE_PATH}/routes`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: idToken
+    },
     body: JSON.stringify(
       buildCreateRouteBody({
         genreId,
