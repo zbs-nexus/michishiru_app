@@ -100,11 +100,6 @@ const handleReturnHome = () => {
     />
 
     <div class="result-content">
-      <div
-        class="confetti"
-        aria-hidden="true"
-      />
-
       <MascotSpeechBubble
         class="result-mascot"
         placement="stacked"

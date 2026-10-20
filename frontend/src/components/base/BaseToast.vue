@@ -82,17 +82,22 @@ const isError = computed(() => props.variant === 'error');
   width: calc(100% - 40px);
   max-width: 390px;
   padding: 14px 16px;
-  border-radius: 10px;
-  border: 2px solid var(--border-ink);
-  border-left: 5px solid var(--danger);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
-  box-shadow: var(--shadow-raised);
+  background-clip: padding-box;
+  /*
+   * 左端の色帯で種別を示す。
+   * border-image は辺ごとに色を変えられないため、border-left ではなく
+   * 内側の影（inset）で帯を引く。
+   */
+  box-shadow: inset 5px 0 0 var(--danger), var(--shadow-raised);
   animation: toast-slide-in 0.2s ease-out;
 }
 
 /* 成功通知: 左端の色帯を緑にしてエラー（赤）と見分ける */
 .toast.is-success {
-  border-left-color: var(--accent-green);
+  box-shadow: inset 5px 0 0 var(--accent-green), var(--shadow-raised);
 }
 
 .toast-body {
@@ -134,10 +139,9 @@ const isError = computed(() => props.variant === 'error');
  */
 .toast.is-omakase {
   padding: 12px 14px;
-  border: 2px solid var(--border-ink);
-  border-left-width: 2px;
-  border-radius: 10px;
   background: linear-gradient(135deg, var(--surface) 0%, var(--bg-deep) 100%);
+  background-clip: padding-box;
+  /* おまかせは種別の帯を出さないため、内側の影は付けない */
   box-shadow: var(--shadow-raised);
   animation: toast-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
@@ -146,8 +150,8 @@ const isError = computed(() => props.variant === 'error');
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  border-radius: 10px;
-  border: 2px solid var(--border-ink);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   animation: toast-logo-bounce 0.6s ease-out 0.35s;
 }

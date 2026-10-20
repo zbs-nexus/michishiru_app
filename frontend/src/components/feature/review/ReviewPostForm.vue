@@ -709,11 +709,12 @@ const handleSubmit = () => {
 /* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
 .review-name-input {
   width: 100%;
-  padding: 12px 14px;
+  padding: 10px 12px;
   font-size: 16px;
-  border: 2px solid var(--border-ink);
-  border-radius: 8px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
+  background-clip: padding-box;
   box-shadow: var(--shadow);
 }
 

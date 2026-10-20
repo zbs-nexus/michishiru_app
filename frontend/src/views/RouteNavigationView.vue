@@ -683,8 +683,9 @@ const handleConfirmEnd = () => {
   font-weight: 600;
   color: var(--white);
   background: var(--primary-color);
-  border: 2px solid var(--border-ink);
-  border-radius: 8px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }
@@ -717,8 +718,9 @@ const handleConfirmEnd = () => {
   font-weight: 600;
   color: var(--text-dark);
   background: var(--surface);
-  border: 2px solid var(--border-ink);
-  border-radius: 8px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }

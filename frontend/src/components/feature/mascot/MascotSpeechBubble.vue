@@ -92,15 +92,17 @@ const isAlert = computed(() => props.variant === 'alert');
 }
 
 /*
- * 吹き出し。羊皮紙の色に茶の縁取りで、巻物に書かれた言葉のように見せる。
+ * 吹き出し。羊皮紙の色にドット絵の枠で、巻物に書かれた言葉のように見せる。
  * 三角のしっぽは縁取りの色と内側の色を2枚重ねて描く。
+ * 枠（border-image）はしっぽの疑似要素には及ばないため、しっぽは三角のまま。
  */
 .speech-bubble {
   position: relative;
-  padding: 14px 16px;
-  border: 2px solid var(--border-ink);
-  border-radius: 12px;
+  padding: 12px 14px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
+  background-clip: padding-box;
   box-shadow: var(--shadow);
   font-size: 14px;
   font-weight: 600;
@@ -162,7 +164,9 @@ const isAlert = computed(() => props.variant === 'alert');
 /* 注意。縁取りを赤へ変え、文字色も合わせて見分けられるようにする */
 .mascot-speech.is-alert .speech-bubble {
   border-color: var(--danger);
+  border-image: var(--pixel-frame-danger);
   background: var(--surface-alert);
+  background-clip: padding-box;
   color: var(--danger);
 }
 

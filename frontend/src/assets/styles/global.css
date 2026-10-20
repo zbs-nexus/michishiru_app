@@ -65,6 +65,44 @@
    */
   --text-halo: 0 0 6px var(--bg-light), 0 0 3px var(--bg-light);
   /*
+   * ドット絵の枠。ボタン・入力欄・カードの輪郭に使う。
+   *
+   * 仕組み: border-image の9スライス。5×5のSVGを3×3に切り分け、
+   * 四隅のタイルはそのまま、辺のタイルだけ引き伸ばして任意の大きさに合わせる。
+   * 絵は「濃い茶の外枠」と「薄い茶の内枠」を1マスずつ重ねた二重線で、
+   * 四隅は1マス欠けて角が段差になる。角丸では出せないカクッとした折れ方になる。
+   *
+   *   外枠（濃い茶） ■■■■■    四隅は濃い茶だけが回り込み、
+   *   内枠（薄い茶） ■□□□■    内枠の線は角の手前で止まる
+   *
+   * SVGには width / height を必ず書くこと。
+   * 単位なしの border-image-slice は「画像のピクセル数」として解釈されるが、
+   * 寸法を持たないSVGは border の領域いっぱいに引き伸ばされた大きさが基準になり、
+   * 2 が意図した2マスにならない。切り出し位置がずれて枠がまだらに割れる。
+   *
+   * border-width 8px に対してスライスが2マスなので倍率は4倍。
+   * 外枠・内枠それぞれ4px、欠ける角も4pxになる。
+   * 太さを変えるときは --pixel-frame-width だけを触れば、
+   * 二重線の比率と角の段差が同じ比で付いてくる。
+   * ただし枠の分だけ要素が外へ広がるため、変えたあとは
+   * ジャンルの4列やボタンの高さが崩れていないか確認すること。
+   *
+   * 角丸（border-radius）とは併用できない。枠は四角いのに背景だけ角が丸まるため、
+   * この枠を使う要素では border-radius を書かないこと。
+   *
+   * 色はSVGに焼き込むため、枠の色ごとに変数を用意している。
+   * 増やす場合は2つの fill（%23 は # のエスケープ）を変えて追記する。
+   * 読み込めなかった場合は border の指定（solid）がそのまま残るため、
+   * 角が丸くない通常の一重の枠として表示される。
+   *
+   * clip-path でも同じ形は作れるが、focus のアウトラインと影まで
+   * 切り落としてしまうため採用していない。
+   */
+  --pixel-frame-width: 8px;
+  --pixel-frame-ink: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5' viewBox='0 0 5 5'%3E%3Cpath fill='%234A2E1C' d='M1 0H4V1H5V4H4V5H1V4H0V1H1Z'/%3E%3Cpath fill='%23B08E5C' d='M2 1H3V2H4V3H3V4H2V3H1V2H2Z'/%3E%3C/svg%3E") 2 stretch;
+  --pixel-frame-primary: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5' viewBox='0 0 5 5'%3E%3Cpath fill='%232E2449' d='M1 0H4V1H5V4H4V5H1V4H0V1H1Z'/%3E%3Cpath fill='%235F4C91' d='M2 1H3V2H4V3H3V4H2V3H1V2H2Z'/%3E%3C/svg%3E") 2 stretch;
+  --pixel-frame-danger: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5' viewBox='0 0 5 5'%3E%3Cpath fill='%236E2219' d='M1 0H4V1H5V4H4V5H1V4H0V1H1Z'/%3E%3Cpath fill='%23C25A4C' d='M2 1H3V2H4V3H3V4H2V3H1V2H2Z'/%3E%3C/svg%3E") 2 stretch;
+  /*
    * アプリ全体の書体。DotGothic16 のドット文字で、古いゲーム機の画面のような
    * 粗い輪郭を出す。見出しも本文も同じものを使う。
    * 配信は自前（main.js が @fontsource から読み込む）。外部CDNへは取りに行かない。
@@ -199,11 +237,11 @@ textarea {
   padding-top: 10px;
 }
 
-/* ロゴは茶の縁で囲み、紙に貼った封蝋のように見せる */
+/* ロゴはドット絵の枠で囲み、紙に貼った封蝋のように見せる */
 .logo-icon img {
   display: block;
-  border-radius: 10px;
-  border: 2px solid var(--border-ink);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
 }
 
@@ -286,23 +324,24 @@ textarea {
   gap: 10px;
 }
 
-/* 選択ボタンは紙の札。茶の線で囲み、選ぶと輪郭が紫のインクへ変わる */
+/* 選択ボタンは紙の札。ドット絵の枠で囲み、選ぶと輪郭が紫のインクへ変わる */
 .select-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px 8px;
-  border: 2px solid var(--border-ink);
-  border-radius: 10px;
+  padding: 14px 6px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  /* 欠けた角に背景が回り込まないよう、面は枠の内側だけに塗る */
   background: var(--surface);
+  background-clip: padding-box;
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s;
 }
 
 .select-btn:hover {
-  border-color: var(--primary-light);
   transform: translateY(-2px);
 }
 
@@ -312,7 +351,9 @@ textarea {
  */
 .select-btn.selected {
   border-color: var(--primary-color);
+  border-image: var(--pixel-frame-primary);
   background: var(--surface);
+  background-clip: padding-box;
   box-shadow: var(--shadow);
 }
 
@@ -429,15 +470,16 @@ textarea {
  */
 .primary-btn {
   width: 100%;
-  padding: 16px;
+  padding: 14px;
   font-family: var(--font-display);
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--white);
   background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-color) 100%);
-  border: 2px solid var(--border-ink);
-  border-radius: 10px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow-raised);
   cursor: pointer;
   transition: filter 0.2s, transform 0.2s;
@@ -459,15 +501,16 @@ textarea {
 }
 
 .secondary-btn {
-  padding: 14px 24px;
+  padding: 12px 22px;
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--primary-color);
   background: var(--surface);
-  border: 2px solid var(--primary-color);
-  border-radius: 10px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--primary-color);
+  border-image: var(--pixel-frame-primary);
   box-shadow: var(--shadow);
   cursor: pointer;
   transition: background 0.2s;
@@ -499,15 +542,16 @@ textarea {
 }
 
 /*
- * 入力欄。茶の線で太く囲み、紙に書き込む枠のように見せる。
+ * 入力欄。ドット絵の枠で囲み、紙に書き込む枠のように見せる。
  * 文字は16px未満にするとiOSで入力時に画面が拡大されるため、下げない。
  */
 .auth-field input {
-  padding: 14px;
+  padding: 12px;
   font-size: 16px;
-  border: 2px solid var(--border-ink);
-  border-radius: 8px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
+  background-clip: padding-box;
   color: var(--text-dark);
   box-shadow: var(--shadow);
 }
@@ -524,6 +568,7 @@ textarea {
 /* 入力チェックに引っかかった欄は枠を赤くして、どこを直すかを分かりやすくする */
 .auth-field input[aria-invalid="true"] {
   border-color: var(--danger);
+  border-image: var(--pixel-frame-danger);
 }
 
 .auth-field input[aria-invalid="true"]:focus {
@@ -579,8 +624,8 @@ textarea {
 /*
  * ローディング画面。
  * RouteLoadingOverlay が .screen に is-loading を付けて使う。
- * 地は他の画面と同じ古地図の絵（.paper-map-bg）で、
- * その上に月や樹の飾り（.loading-bg）を散らして旅立ちの前の時間を表す。
+ * 地は他の画面と同じ古地図の絵（.paper-map-bg）だけにして、
+ * 待っている間に目を向けてほしいマスコットと吹き出しを邪魔しないようにする。
  */
 .screen.is-loading {
   justify-content: center;
@@ -588,44 +633,6 @@ textarea {
   text-align: center;
   position: relative;
   overflow: hidden;
-}
-
-.loading-bg {
-  position: absolute;
-  inset: 0;
-  background-image:
-    /* 三日月 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%23E8C86A' d='M24 2a18 18 0 1 0 0 36 23 23 0 0 1 0-36z'/%3E%3C/svg%3E"),
-    /* 金の星 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23C8972F' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
-    /* 紫の星 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%235F4C91' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
-    /* 針葉樹 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 40'%3E%3Cpath fill='%235E8A64' d='M15 2l9 14H6z'/%3E%3Cpath fill='%236C9A70' d='M15 12l10 16H5z'/%3E%3Crect fill='%238A6E52' x='13' y='28' width='4' height='9'/%3E%3C/svg%3E"),
-    /* きのこ */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath fill='%23C06A5A' d='M15 3c7 0 11 5 11 9H4c0-4 4-9 11-9z'/%3E%3Crect fill='%23EFE3CF' x='11' y='12' width='8' height='12' rx='3'/%3E%3C/svg%3E"),
-    /* ランタン */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 34'%3E%3Cpath fill='none' stroke='%238A6E52' stroke-width='2' d='M12 2v5'/%3E%3Crect fill='%23E8C86A' x='5' y='8' width='14' height='16' rx='4'/%3E%3Crect fill='%238A6E52' x='3' y='24' width='18' height='3' rx='1'/%3E%3C/svg%3E"),
-    /* 羽根 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 36'%3E%3Cpath fill='%23D9CBB2' d='M10 1c6 7 6 20 0 34C4 21 4 8 10 1z'/%3E%3C/svg%3E");
-  background-position:
-    86% 8%,
-    14% 16%,
-    72% 26%,
-    12% 86%,
-    78% 82%,
-    48% 92%,
-    26% 70%;
-  background-size:
-    46px 46px,
-    16px 16px,
-    11px 11px,
-    44px 58px,
-    30px 30px,
-    26px 37px,
-    18px 32px;
-  background-repeat: no-repeat;
-  opacity: 0.75;
 }
 
 .loading-content {
@@ -691,11 +698,12 @@ textarea {
   50% { opacity: 1; transform: scale(1); }
 }
 
-/* マップ表示。古地図らしく茶の枠で囲む */
+/* マップ表示。古地図らしくドット絵の枠で囲む */
 .map-preview {
   background: var(--bg-map);
-  border: 2px solid var(--border-ink);
-  border-radius: 10px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   overflow: hidden;
   margin-bottom: 16px;
   box-shadow: var(--shadow);
@@ -709,8 +717,9 @@ textarea {
  */
 .maplibregl-ctrl-group {
   background: var(--surface);
-  border: 2px solid var(--border-ink);
-  border-radius: 8px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
 }
 
@@ -1036,8 +1045,9 @@ textarea {
  */
 .popup-content {
   background: var(--surface);
-  border: 2px solid var(--border-ink);
-  border-radius: 10px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow-raised);
   padding: 24px;
   margin: 20px;
@@ -1068,27 +1078,29 @@ textarea {
  */
 .popup-btn {
   flex: 1;
-  padding: 12px 10px;
+  padding: 10px 8px;
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
-  border-radius: 8px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }
 
 .popup-btn.primary {
   background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-color) 100%);
+  background-clip: padding-box;
   color: var(--white);
-  border: 2px solid var(--border-ink);
 }
 
 .popup-btn.secondary {
   background: var(--surface);
+  background-clip: padding-box;
   color: var(--text-dark);
-  border: 2px solid var(--border-ink);
 }
 
 /*
@@ -1110,31 +1122,14 @@ textarea {
 }
 
 /*
- * 紙吹雪の代わりに、降りそそぐ光の粒を流す。
- * 装飾のみなのでテンプレート側で aria-hidden にしている。
- */
-.confetti {
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='%23C8972F'%3E%3Cpath d='M18 14l1.2 3.6h3.8l-3.1 2.3 1.2 3.6L18 21.2l-3.1 2.3 1.2-3.6-3.1-2.3h3.8z'/%3E%3Cpath d='M78 34l1 3h3.2l-2.6 1.9 1 3L78 40l-2.6 1.9 1-3-2.6-1.9h3.2z'/%3E%3C/g%3E%3Cg fill='%235F4C91'%3E%3Cpath d='M34 72l1 3h3.2l-2.6 1.9 1 3L34 78l-2.6 1.9 1-3-2.6-1.9h3.2z'/%3E%3Ccircle cx='62' cy='58' r='1.6'/%3E%3C/g%3E%3Ccircle fill='%23E8C86A' cx='48' cy='26' r='1.8'/%3E%3Ccircle fill='%23E8C86A' cx='88' cy='78' r='1.5'/%3E%3C/svg%3E");
-  opacity: 0.65;
-  animation: confetti-fall 6s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes confetti-fall {
-  from { background-position: 0 -100px; }
-  to { background-position: 0 100px; }
-}
-
-/*
  * 実績の一覧。茶の枠の中に金の区切り線を入れて、旅の記録として見せる。
  */
 .result-stats {
   position: relative;
   background: var(--surface);
-  border: 2px solid var(--border-ink);
-  border-radius: 10px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   padding: 20px 24px;
   text-align: left;
@@ -1184,7 +1179,6 @@ textarea {
 
 /* 動きを減らす設定の場合は、装飾の動きを止める */
 @media (prefers-reduced-motion: reduce) {
-  .confetti,
   .loading-dots span {
     animation: none;
   }

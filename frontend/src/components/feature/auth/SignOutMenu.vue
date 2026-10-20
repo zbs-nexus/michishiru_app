@@ -142,10 +142,16 @@ onBeforeUnmount(() => {
   gap: 5px;
   width: 40px;
   height: 40px;
-  padding: 10px;
-  border: 2px solid var(--border-ink);
-  border-radius: 8px;
+  /*
+   * 40px の中に枠（--pixel-frame-width × 2）が入るため、
+   * 3本の線（2px × 3 + 隙間 5px × 2 = 16px）が収まる余白までしか取れない。
+   * 枠を太くするときはこの値も見直すこと。
+   */
+  padding: 3px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
+  background-clip: padding-box;
   box-shadow: var(--shadow);
   cursor: pointer;
 }
@@ -172,9 +178,10 @@ onBeforeUnmount(() => {
   min-width: 160px;
   padding: 6px;
   list-style: none;
-  border: 2px solid var(--border-ink);
-  border-radius: 8px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
+  background-clip: padding-box;
   box-shadow: var(--shadow);
 }
 
