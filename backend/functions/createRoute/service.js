@@ -26,8 +26,10 @@ import {
   MAX_SEARCH_CATEGORIES,
   MAX_SPOT_COUNT,
   METERS_PER_KM,
+  MIN_REVIEW_SPOT_LIMIT,
   MIN_SPOT_COUNT,
   REVIEW_SPOT_DUPLICATE_RADIUS_M,
+  REVIEW_SPOT_RATIO,
   SEARCH_RADIUS_RANGE_M,
   SEARCH_RADIUS_RATIO,
   STRANDED_DISTANCE_THRESHOLD_M
@@ -211,26 +213,107 @@ const markReviewSpots = (spots, promptCandidateSpots, reviewCandidates) => {
         ...spot,
         isReviewSpot: true,
         reviewSpotId: review.reviewSpotId,
-        reviewPosition: review.position
+        reviewPosition: review.position,
+        // 上限を超えたときに評価の低い場所から外すために持つ（応答には載せない）
+        ratingAverage: review.ratingAverage
       };
   });
 };
 
 /**
+ * @description スポット数に対して認める口コミの場所の上限を求める。
+ * スポット数 × REVIEW_SPOT_RATIO を四捨五入し、最低 MIN_REVIEW_SPOT_LIMIT か所は認める。
+ * @param {number} spotCount スポット数
+ * @returns {number} 口コミの場所の上限
+ */
+const resolveMaxReviewSpotCount = (spotCount) =>
+  Math.max(MIN_REVIEW_SPOT_LIMIT, Math.round(spotCount * REVIEW_SPOT_RATIO));
+
+/**
+ * @description 口コミの場所の数を数える
+ * @param {object[]} spots スポット
+ * @returns {number} 口コミの場所の数
+ */
+const countReviewSpots = (spots) => spots.filter((spot) => spot.isReviewSpot === true).length;
+
+/**
+ * @description 評価が最も低い口コミの場所の位置を返す。評価が同じなら後ろのものを選ぶ
+ * （巡る順の前のほうを残す）。
+ * @param {object[]} spots スポット
+ * @returns {number} 位置。口コミの場所が無ければ -1
+ */
+const findLowestRatedReviewIndex = (spots) => {
+  let lowestIndex = -1;
+
+  spots.forEach((spot, index) => {
+    if (spot.isReviewSpot !== true) {
+      return;
+    }
+
+    if (
+      lowestIndex === -1 ||
+      (spot.ratingAverage ?? 0) <= (spots[lowestIndex].ratingAverage ?? 0)
+    ) {
+      lowestIndex = index;
+    }
+  });
+
+  return lowestIndex;
+};
+
+/**
+ * @description 口コミの場所が上限（スポット数の4割を四捨五入・最低1か所）を超えていれば、
+ * 評価の低い口コミの場所から外す。
+ *
+ * Bedrockへの指示だけでは割合が守られず、4か所中3か所が口コミの場所になることがあるため、
+ * コードで上限をかける。外すとスポット数が減って上限も下がるため、収まるまで繰り返す。
+ * @param {object[]} spots スポット
+ * @returns {object[]} 上限に収めたスポット（収まっていればそのまま）
+ */
+const limitReviewSpots = (spots) => {
+  let limited = spots;
+
+  while (countReviewSpots(limited) > resolveMaxReviewSpotCount(limited.length)) {
+    const removeIndex = findLowestRatedReviewIndex(limited);
+    limited = limited.filter((_, index) => index !== removeIndex);
+  }
+
+  if (limited.length !== spots.length) {
+    logInfo('口コミの場所が上限を超えたため、評価の低い場所から外しました', {
+      beforeSpotCount: spots.length,
+      afterSpotCount: limited.length,
+      reviewSpotCount: countReviewSpots(limited)
+    });
+  }
+
+  return limited;
+};
+
+/**
  * @description 距離超過の調整で外すスポットを決め、外した一覧を返す。
  * 口コミの場所はできるだけ残すため、最後尾から見て口コミでないスポットを外す。
- * すべて口コミの場所なら最後尾を外す（距離を優先する）。
+ * ただし、口コミでないスポットを外すと口コミの場所が上限（スポット数の4割を四捨五入・最低1か所）を
+ * 超える場合や、口コミでないスポットが無い場合は、評価の低い口コミの場所を外す。
  * @param {object[]} spots 現在のスポット
  * @returns {object[]} 1か所外したスポット
  */
 const removeOneSpotForDistance = (spots) => {
-  for (let index = spots.length - 1; index >= 0; index -= 1) {
-    if (spots[index].isReviewSpot !== true) {
-      return spots.filter((_, position) => position !== index);
+  const isOverLimitAfterRemoval =
+    countReviewSpots(spots) > resolveMaxReviewSpotCount(spots.length - 1);
+
+  if (!isOverLimitAfterRemoval) {
+    for (let index = spots.length - 1; index >= 0; index -= 1) {
+      if (spots[index].isReviewSpot !== true) {
+        return spots.filter((_, position) => position !== index);
+      }
     }
   }
 
-  return spots.slice(0, -1);
+  const removeIndex = findLowestRatedReviewIndex(spots);
+
+  return removeIndex === -1
+    ? spots.slice(0, -1)
+    : spots.filter((_, position) => position !== removeIndex);
 };
 
 /**
@@ -803,7 +886,10 @@ export const createRoute = async (
       retryCount
     });
 
-    spots = markReviewSpots(plan.spots, promptCandidateSpots, reviewCandidates);
+    // 口コミの場所が上限（スポット数の4割を四捨五入・最低1か所）を超えていれば、評価の低い場所から外す
+    spots = limitReviewSpots(
+      markReviewSpots(plan.spots, promptCandidateSpots, reviewCandidates)
+    );
     route = await repositories.calculateWalkingRoute({ currentLocation, spots });
 
     // 次の再生成に備えて、今回の総距離を控える
@@ -811,9 +897,12 @@ export const createRoute = async (
 
     // 経路から大きく外れたスポット（徒歩到達困難）を除外して再計算する。
     // 除外すると最小スポット数を下回る場合はそのまま残す。
-    const reachableSpots = spots.filter(
-      (_, index) =>
-        (route.spotStrayDistancesM[index] ?? 0) <= STRANDED_DISTANCE_THRESHOLD_M
+    // 除外でスポット数が減ると口コミの場所の割合が上がるため、ここでも上限に収める
+    const reachableSpots = limitReviewSpots(
+      spots.filter(
+        (_, index) =>
+          (route.spotStrayDistancesM[index] ?? 0) <= STRANDED_DISTANCE_THRESHOLD_M
+      )
     );
 
     if (reachableSpots.length !== spots.length && reachableSpots.length >= MIN_SPOT_COUNT) {

@@ -89,10 +89,16 @@ export const REVIEW_SPOT_QUERY_LIMIT = 200;
 export const MAX_PROMPT_REVIEW_CANDIDATES = 5;
 
 /**
- * ルートに含める口コミの場所の目安の割合（スポット数に対して）。
- * Bedrockへの指示に使う目安で、最低1か所の保証はService層で別に行う。
+ * ルートに含める口コミの場所の上限の割合（スポット数に対して）。
+ * 上限は「スポット数 × この割合」を四捨五入した数で、最低1か所は認める
+ * （2〜3か所なら1、4〜6か所なら2、7〜8か所なら3）。
+ * Bedrockへの指示だけでは守られないため、Service層で上限を超えた分を外す。
+ * 最低1か所を通す保証は、差し込み（ensureReviewSpot）で別に行う。
  */
-export const REVIEW_SPOT_RATIO = 0.2;
+export const REVIEW_SPOT_RATIO = 0.4;
+
+/** 口コミの場所の上限が割合で0か所になる場合でも、認める最小の数 */
+export const MIN_REVIEW_SPOT_LIMIT = 1;
 
 /**
  * 口コミの場所を1か所も通らなかったときに、差し込みを試す最大回数（経路の再計算の回数）。
