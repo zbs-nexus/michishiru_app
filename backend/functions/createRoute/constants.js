@@ -68,6 +68,46 @@ export const SPOT_CATEGORY_ID_ATTRIBUTE = 'category_id';
 /** 周辺スポット検索で1カテゴリあたり取得する最大件数 */
 export const MAX_SPOT_CANDIDATES = 15;
 
+/** 口コミ（場所メタ＋口コミ）を格納するテーブル名。口コミの場所をルートの候補に混ぜるために読む */
+export const REVIEW_TABLE_NAME = process.env.REVIEW_TABLE_NAME ?? '';
+
+/** 口コミが付いた場所を新しい順に引くためのGSI名（getReviewSpots と同じ索引） */
+export const GSI_SPOT_LIST = 'GSI-SpotList';
+
+/** 口コミの場所メタ行のソートキー */
+export const REVIEW_SPOT_SORT_KEY = 'SPOT';
+
+/**
+ * 口コミの場所を読み出す最大件数。
+ * 件数上限つきで新しい順に読み、現在地からの距離でService層が絞り込む。
+ * 場所が増えてこの件数を超えると古い場所は候補に入らなくなる。
+ * TODO(NZ未採番): 場所が増えたら、現在地周辺だけを引ける索引へ切り替える。
+ */
+export const REVIEW_SPOT_QUERY_LIMIT = 200;
+
+/** プロンプトへ渡す口コミの場所の最大件数。現在地に近い順に選ぶ */
+export const MAX_PROMPT_REVIEW_CANDIDATES = 5;
+
+/**
+ * ルートに含める口コミの場所の目安の割合（スポット数に対して）。
+ * Bedrockへの指示に使う目安で、最低1か所の保証はService層で別に行う。
+ */
+export const REVIEW_SPOT_RATIO = 0.2;
+
+/**
+ * 口コミの場所を1か所も通らなかったときに、差し込みを試す最大回数（経路の再計算の回数）。
+ * 経路計算は1回あたり1秒前後かかり、ゲートウェイのタイムアウト（29秒）に近づくため絞る。
+ * 総距離が条件に収まらない差し込みは採用しない（距離を優先する）。
+ */
+export const MAX_REVIEW_SPOT_ATTEMPTS = 3;
+
+/**
+ * 口コミの場所と同じ場所とみなす半径（m）。
+ * Placesの候補がこの範囲内にあれば、同じ場所が2回選ばれないよう候補から外す。
+ * 口コミの「同じ場所」判定（SAME_PLACE_RADIUS_M）と揃える。
+ */
+export const REVIEW_SPOT_DUPLICATE_RADIUS_M = 40;
+
 /**
  * 1回のルート生成で周辺検索を行うスポットカテゴリの最大数。
  * ジャンルに紐づくカテゴリが多い（例: 食べ歩きは20件超）と、その数だけ

@@ -275,12 +275,15 @@ const renderOriginMarker = () => {
  * スタイルは global.css に置いている。
  * @param {number} order 巡る順序（1始まり）
  * @param {boolean} isVisited 到達済みかどうか
+ * @param {boolean} [isReviewSpot] 口コミが付いた場所か（形を星にする）
  * @returns {HTMLElement} マーカーとして使う要素
  */
-const createSpotMarkerElement = (order, isVisited) => {
+const createSpotMarkerElement = (order, isVisited, isReviewSpot = false) => {
   const element = document.createElement('div');
   element.className = 'spot-marker';
-  applySpotMarkerState(element, order, isVisited);
+  // 口コミの場所は形だけを星にする（文字・色・大きさは他のスポットと同じ）
+  element.classList.toggle('is-review', isReviewSpot);
+  applySpotMarkerState(element, order, isVisited, isReviewSpot);
   return element;
 };
 
@@ -290,16 +293,22 @@ const createSpotMarkerElement = (order, isVisited) => {
  * @param {HTMLElement} element マーカーの要素
  * @param {number} order 巡る順序（1始まり）
  * @param {boolean} isVisited 到達済みかどうか
+ * @param {boolean} [isReviewSpot] 口コミが付いた場所か（読み上げで補う）
  * @returns {void}
  */
-const applySpotMarkerState = (element, order, isVisited) => {
+const applySpotMarkerState = (element, order, isVisited, isReviewSpot = false) => {
   element.classList.toggle('is-visited', isVisited);
   // スタンプは背景画像で出すため、到達済みでは番号の文字を消す
   element.textContent = isVisited ? '' : String(order);
-  // 見た目からは番号も到達済みかどうかも読み取れないため、読み上げで補う
+
+  // 見た目からは番号も到達済みかどうかも読み取れないため、読み上げで補う。
+  // 星の形の意味も、形だけでは伝わらないため添える
+  const reviewLabel = isReviewSpot ? '・口コミの場所' : '';
   element.setAttribute(
     'aria-label',
-    isVisited ? `${order}番目のスポット（到達済み）` : `${order}番目のスポット`
+    isVisited
+      ? `${order}番目のスポット（到達済み${reviewLabel}）`
+      : `${order}番目のスポット${isReviewSpot ? '（口コミの場所）' : ''}`
   );
 };
 
@@ -655,12 +664,14 @@ const renderSpotMarkers = () => {
   markers = props.spots
     .filter((spot) => spot.lng !== null && spot.lat !== null)
     .map((spot, index) => {
+      const isReviewSpot = spot.isReviewSpot === true;
       const element = createSpotMarkerElement(
         index + 1,
-        props.visitedSpotIds.includes(spot.spotId)
+        props.visitedSpotIds.includes(spot.spotId),
+        isReviewSpot
       );
 
-      spotMarkerStates.push({ spotId: spot.spotId, order: index + 1, element });
+      spotMarkerStates.push({ spotId: spot.spotId, order: index + 1, element, isReviewSpot });
 
       return new Marker({ element })
         .setLngLat([spot.lng, spot.lat])
@@ -675,8 +686,8 @@ const renderSpotMarkers = () => {
  * @returns {void}
  */
 const updateSpotMarkerStates = () => {
-  spotMarkerStates.forEach(({ spotId, order, element }) => {
-    applySpotMarkerState(element, order, props.visitedSpotIds.includes(spotId));
+  spotMarkerStates.forEach(({ spotId, order, element, isReviewSpot }) => {
+    applySpotMarkerState(element, order, props.visitedSpotIds.includes(spotId), isReviewSpot);
   });
 };
 
