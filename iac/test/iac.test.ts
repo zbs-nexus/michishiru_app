@@ -116,6 +116,28 @@ describe('MichishiruStack (バックエンド有効)', () => {
     expect(policyJson).toContain('michishiru_categorymaster_akutsu');
   });
 
+  test('createRoute に口コミテーブルの読み取り権限とテーブル名を与える', () => {
+    const policies = template.findResources('AWS::IAM::Policy');
+    const createRoutePolicy = Object.entries(policies).find(([logicalId]) =>
+      logicalId.startsWith('CreateRouteFunctionServiceRoleDefaultPolicy')
+    );
+    const policyJson = JSON.stringify(createRoutePolicy?.[1] ?? {});
+
+    // 口コミテーブルは CDK 管理のため ARN は Fn::GetAtt で参照される
+    expect(policyJson).toContain('ReviewTable');
+    // GSI-SpotList を引けるよう、索引への権限も付いている
+    expect(policyJson).toContain('/index/*');
+
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      Environment: {
+        Variables: Match.objectLike({
+          BEDROCK_MODEL_ID: Match.anyValue(),
+          REVIEW_TABLE_NAME: Match.anyValue()
+        })
+      }
+    });
+  });
+
   test('createRoute に Places / Routes / Bedrock の権限を与える', () => {
     template.hasResourceProperties('AWS::IAM::Policy', {
       PolicyDocument: {

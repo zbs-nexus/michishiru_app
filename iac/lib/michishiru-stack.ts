@@ -284,7 +284,9 @@ export class MichishiruStack extends cdk.Stack {
         environment: {
           BEDROCK_MODEL_ID: bedrockModelId,
           CONDITION_TABLE_NAME: conditionTable.tableName,
-          SPOT_CATEGORY_TABLE_NAME: spotCategoryTable.tableName
+          SPOT_CATEGORY_TABLE_NAME: spotCategoryTable.tableName,
+          // 口コミの場所をルートの候補に混ぜるために読む
+          REVIEW_TABLE_NAME: reviewTable.tableName
         },
         bundling: {
           // 既定では @aws-sdk/* と @smithy/* が外部化される。ランタイム同梱に
@@ -297,6 +299,8 @@ export class MichishiruStack extends cdk.Stack {
 
       conditionTable.grantReadData(createRouteFn);
       spotCategoryTable.grantReadData(createRouteFn);
+      // 口コミの場所（GSI-SpotList）を読むだけなので読み取りに限る
+      reviewTable.grantReadData(createRouteFn);
 
       // Location Service（Places / Routes）はリソース単位の指定に対応しないため
       // resources は '*' になる。アクションを個別に絞ることで権限を限定する。
