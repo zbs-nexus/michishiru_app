@@ -8,7 +8,7 @@
  * 距離の初期値（km）。
  * マスタに既定値が無く、選択中の値が取得した範囲外だった場合のフォールバックにも使う。
  */
-export const DEFAULT_DISTANCE_KM = 3;
+export const DEFAULT_DISTANCE_KM = 5;
 
 /** ローディング表示の最短時間（ミリ秒）。表示のちらつきを防ぐ */
 export const MIN_LOADING_DURATION_MS = 800;

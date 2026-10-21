@@ -134,14 +134,14 @@ const handleSignOut = async () => {
     is-home は、この画面だけの見た目（見出しの扱い・下部の余白）を
     global.css の .screen.is-home から当てるための目印。
   -->
+  <!--
+    背景はルート提案画面と揃える。提案画面は古地図の一枚絵を敷かず body の地
+    （羊皮紙色＋薄い格子）だけを見せているため、ホームでも paper-map-bg を使わない。
+  -->
   <DefaultLayout
     v-else
     class="is-home"
   >
-    <template #background>
-      <div class="paper-map-bg" />
-    </template>
-
     <BaseToast
       v-if="toastMessage"
       :message="toastMessage"
