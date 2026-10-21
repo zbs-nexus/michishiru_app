@@ -70,6 +70,23 @@ const toLineGeometry = (geometry) => {
 };
 
 /**
+ * @description ルート生成APIの区間ごとの線を取り出す。
+ * legs[i] はスポット i へ向かう区間、最後は出発地への帰り道。
+ * 1つでも線にならない区間があるとスポットとの対応がずれるため、その場合は全体を空にする。
+ * @param {object[]} items APIが返したlegsの配列
+ * @returns {Array<{geometry: {type: string, coordinates: number[][]}}>} 区間の一覧。無い場合は空配列
+ */
+const toLegs = (items) => {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const legs = items.map((item) => ({ geometry: toLineGeometry(item?.geometry) }));
+
+  return legs.every((leg) => leg.geometry !== null) ? legs : [];
+};
+
+/**
  * @description ルート生成APIの立ち寄り先をスポットへ変換する。
  * APIのキーはwaypointsだが、中身は「ユーザーが足を止める場所」のため
  * 用語辞書に従いspotとして扱う（経路上の座標点はgeometryが持つ）。
@@ -99,9 +116,9 @@ const toSpots = (items) => {
  *
  * ルート生成APIのレスポンス（route_title / summary / geometry を持つ形）と、
  * 既存のgetRoute APIのレスポンス（routeName / distance を持つ形）の両方を受け付ける。
- * getRoute側は経路の座標を持たないため、geometryはnullになる。
+ * getRoute側は経路の座標を持たないため、geometryはnull、legsは空配列になる。
  * @param {object} payload APIから受け取った値
- * @returns {{routeName: string, description: string, distanceKm: number, durationMinutes: number, spots: object[], geometry: object|null}} 画面で扱うルート情報
+ * @returns {{routeName: string, description: string, distanceKm: number, durationMinutes: number, spots: object[], geometry: object|null, legs: object[]}} 画面で扱うルート情報
  * @throws {Error} 応答がオブジェクトでない場合
  */
 export const toRoute = (payload) => {
@@ -126,6 +143,8 @@ export const toRoute = (payload) => {
       : (body.duration ?? 0),
     spots: toSpots(body.waypoints ?? body.spots),
     geometry: toLineGeometry(body.geometry),
+    // 区間ごとの線。案内画面で区間ごとに描き分けるために使う
+    legs: toLegs(body.legs),
     // おまかせで選ばれた条件。おまかせを使っていない項目はnull
     selectedGenres: Array.isArray(body.selected_genres)
       ? body.selected_genres.map((genre) => ({

@@ -22,6 +22,7 @@ import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
+import { toRouteLegSections } from '@/utils/routeLegs';
 
 /**
  * @description ルート案内を表示する画面。
@@ -150,6 +151,7 @@ const {
   nextSpot,
   distanceToNextM,
   visitedSpotIds,
+  visitedCount,
   isCompleted,
   canReturnToPreviousSpot,
   advanceToNextSpot,
@@ -159,6 +161,19 @@ const {
   currentLocation,
   geometry
 });
+
+/**
+ * 区間の描き分け。次の目的地へ向かう区間を強調し、全スポット到達後は帰り道を強調する。
+ * 到達数は進める・戻すボタンでだけ変わるため、その操作に合わせて切り替わる。
+ * 区間を確かめられない場合（保存済みのルート等）は null で、経路を1色で描く
+ */
+const legSections = computed(() =>
+  toRouteLegSections({
+    legs: routeStore.currentRoute?.legs,
+    spotCount: spots.value.length,
+    visitedCount: visitedCount.value
+  })
+);
 
 // 地図の現在地マーカーだけを経路へ吸着させる。
 // 距離の計算（useRouteProgress / useWalkRecord）には吸着前の currentLocation を渡す
@@ -645,6 +660,7 @@ const handleConfirmEnd = () => {
       :show-other-reviews="showOtherReviews"
       :visited-spot-ids="visitedSpotIds"
       :selected-review-spot-id="selectedReviewSpotId"
+      :leg-sections="legSections"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
     />

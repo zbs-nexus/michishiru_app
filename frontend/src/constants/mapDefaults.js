@@ -34,6 +34,30 @@ export const ROUTE_LINE_OUTLINE_COLOR = '#FFFFFF';
 /** ルートを示す線の縁取りを含めた太さ（ピクセル） */
 export const ROUTE_LINE_OUTLINE_WIDTH_PX = 9;
 
+/**
+ * 案内中の歩き終えた区間の色（--route-walked-leg と同色）。
+ * 灰色の破線にして、これからの区間（青）と見分ける。変更時は両方直す。
+ */
+export const ROUTE_WALKED_LEG_COLOR = '#9AA0A6';
+
+/** 案内中の歩き終えた区間の太さ（ピクセル） */
+export const ROUTE_WALKED_LEG_WIDTH_PX = 4;
+
+/** 案内中の歩き終えた区間の破線（線の太さを単位とする、線の長さと間隔） */
+export const ROUTE_WALKED_LEG_DASH_ARRAY = [2, 1.5];
+
+/**
+ * 案内中の今の区間の色（--route-current-leg = --accent-green と同色）。
+ * トースト（次の目的地のバナー）の左枠と同じ緑にする。変更時は両方直す。
+ */
+export const ROUTE_CURRENT_LEG_COLOR = '#3F7A5C';
+
+/** 案内中の今の区間の太さ（ピクセル） */
+export const ROUTE_CURRENT_LEG_WIDTH_PX = 7;
+
+/** 案内中の今の区間の白い縁取りを含めた太さ（ピクセル）。色は ROUTE_LINE_OUTLINE_COLOR */
+export const ROUTE_CURRENT_LEG_CASING_WIDTH_PX = 12;
+
 /** 現在地マーカーの外円のサイズ（ピクセル） */
 export const CURRENT_LOCATION_MARKER_SIZE_PX = 24;
 
