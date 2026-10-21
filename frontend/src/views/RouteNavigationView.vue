@@ -5,6 +5,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
@@ -18,6 +19,7 @@ import { useReviewSpots } from '@/composables/useReviewSpots';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
+import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
 
@@ -28,6 +30,8 @@ import { useWalkStore } from '@/stores/walkStore';
  * 終了時は確認モーダルを挟んでから結果画面へ進む。
  */
 const router = useRouter();
+// 案内中もマスコットのレベルを出すため読むだけ。実績の取り直しはホームと結果画面で行う
+const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
 
@@ -579,7 +583,23 @@ const handleConfirmEnd = () => {
       :spot-name="nextSpot?.name ?? null"
       :distance-to-next-m="distanceToNextM"
       :is-completed="isCompleted"
-    />
+      :mascot-level="mascotStore.mascotLevel"
+    >
+      <!--
+        バナーは role="status" の読み上げ範囲のため、バーは装飾として渡す。
+        距離が変わるたびに経験値まで読み直されるのを防ぐ。
+      -->
+      <template
+        v-if="mascotStore.hasExperience"
+        #experience
+      >
+        <MascotExperienceBar
+          :level-progress="mascotStore.levelProgress"
+          size="small"
+          is-decorative
+        />
+      </template>
+    </RouteNextSpotBanner>
 
     <!--
       誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。

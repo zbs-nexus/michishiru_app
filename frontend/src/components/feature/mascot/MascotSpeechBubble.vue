@@ -53,11 +53,19 @@ const isAlert = computed(() => props.variant === 'alert');
     class="mascot-speech"
     :class="[`is-${placement}`, { 'is-alert': isAlert }]"
   >
-    <MascotAvatar
-      :level="level"
-      :size="size"
-      :has-level-label="hasLevelLabel"
-    />
+    <!--
+      マスコットと、その下に差し込む経験値バーをまとめた入れ物。
+      スロットが空のときは余白も出ないため、バーを渡さない呼び出し元の見た目は変わらない。
+    -->
+    <div class="mascot-side">
+      <MascotAvatar
+        :level="level"
+        :size="size"
+        :has-level-label="hasLevelLabel"
+      />
+
+      <slot name="experience" />
+    </div>
 
     <!-- 文言が入れ替わるため読み上げの対象にする。注意のときだけ割り込ませる -->
     <div
@@ -73,6 +81,18 @@ const isAlert = computed(() => props.variant === 'alert');
 <style scoped>
 .mascot-speech {
   display: flex;
+}
+
+/*
+ * マスコットの側。立ち絵の下に経験値バーを縦に積む。
+ * 幅は立ち絵に合わせるため指定せず、バー側が100%で追従する。
+ */
+.mascot-side {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 /* 横並び。マスコットを左、吹き出しを右に置く */
