@@ -56,13 +56,10 @@ onMounted(() => {
 
 /**
  * マスコットが話す文言。
- * 読み込み中・失敗・入力待ちの3つの状態を、この画面の案内役がそのまま話す。
+ * 読み込み中の案内は出さない（マスコット自体を取得完了まで出さないため）。
+ * 取得が終わった後の「失敗」「入力待ち」の2状態だけを、この画面の案内役が話す。
  */
 const mascotMessage = computed(() => {
-  if (isLoadingOptions.value) {
-    return '地図をひろげているよ。少し待っていてね';
-  }
-
   if (!hasConditionOptions.value) {
     return optionsErrorMessage.value ?? '条件をよみこめなかったみたい。もう一度ためしてね';
   }
@@ -72,7 +69,7 @@ const mascotMessage = computed(() => {
 
 /** 吹き出しの種類。条件を出せないときだけ注意として見せる */
 const mascotMessageVariant = computed(() =>
-  !isLoadingOptions.value && !hasConditionOptions.value ? 'alert' : 'normal'
+  hasConditionOptions.value ? 'normal' : 'alert'
 );
 
 /**
@@ -127,21 +124,11 @@ const handleSignOut = async () => {
 </script>
 
 <template>
+  <!-- ロード画面はレベル名だけ添える（経験値バーは渡さない） -->
   <RouteLoadingOverlay
     v-if="isCreating"
     :mascot-level="mascotStore.mascotLevel"
-  >
-    <template
-      v-if="mascotStore.hasExperience"
-      #experience
-    >
-      <MascotExperienceBar
-        :level-progress="mascotStore.levelProgress"
-        :total-experience-points="mascotStore.totalExperiencePoints"
-        size="large"
-      />
-    </template>
-  </RouteLoadingOverlay>
+  />
 
   <!--
     is-home は、この画面だけの見た目（見出しの扱い・下部の余白）を
@@ -179,14 +166,22 @@ const handleSignOut = async () => {
       />
     </div>
 
-    <!-- 読み込み中・失敗・入力待ちの案内は、この画面の案内役が吹き出しで話す -->
+    <!--
+      失敗・入力待ちの案内は、この画面の案内役が吹き出しで話す。
+      読み込み中（条件マスタの取得中・実績の取得中）は何も出さず、両方が終わってから
+      一度に出す。これにより「読み込み中」の中間表示そのものが消え、取得前のLv.1（卵）が
+      ちらつくこともない。実績は失敗しても isExperienceLoaded が真になり、Lv.1 で進む。
+      has-level-label で `Lv.5 まちの案内人` のようにレベルと名前を添える。
+    -->
     <MascotSpeechBubble
+      v-if="mascotStore.isExperienceLoaded && !isLoadingOptions"
       class="home-mascot"
       :message="mascotMessage"
       :variant="mascotMessageVariant"
       :level="mascotStore.mascotLevel"
       placement="side"
       size="medium"
+      has-level-label
     >
       <!-- 実績を取得できたときだけ経験値バーを出す（失敗時はLv.1でバー無し） -->
       <template

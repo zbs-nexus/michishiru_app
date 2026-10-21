@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
-import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
+import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
@@ -62,8 +62,16 @@ const showRandomSelectionMessage = () => {
   }
 };
 
-// ホーム画面から作成して遷移してきたときに知らせる
-onMounted(showRandomSelectionMessage);
+onMounted(() => {
+  // ホーム画面から作成して遷移してきたときに知らせる
+  showRandomSelectionMessage();
+
+  // 通常はホームで取得済みだが、この画面へ直接来た場合（リロード等）に備えて
+  // 取得できていなければ起こす。loadExperience は何度呼んでも同じ結果になる
+  if (!mascotStore.isExperienceLoaded) {
+    mascotStore.loadExperience();
+  }
+});
 
 /**
  * @description 提案を確定して案内画面へ進む。
@@ -110,18 +118,7 @@ const handleBackToHome = () => {
   <RouteLoadingOverlay
     v-if="isCreating"
     :mascot-level="mascotStore.mascotLevel"
-  >
-    <template
-      v-if="mascotStore.hasExperience"
-      #experience
-    >
-      <MascotExperienceBar
-        :level-progress="mascotStore.levelProgress"
-        :total-experience-points="mascotStore.totalExperiencePoints"
-        size="large"
-      />
-    </template>
-  </RouteLoadingOverlay>
+  />
 
   <DefaultLayout
     v-else-if="routeStore.currentRoute"
@@ -138,6 +135,22 @@ const handleBackToHome = () => {
       <h2 class="page-title">
         おすすめルート
       </h2>
+
+      <!--
+        提案の案内役。ホームで取得したレベルに応じた姿で出す。
+        この画面は地図と紹介文に高さを譲りたいので size は small にし、
+        経験値バーは出さずレベル名だけ添える（情報を絞る）。
+        ホームを経由せず直接来た場合に取得前の卵が出ないよう isExperienceLoaded で守る。
+      -->
+      <MascotSpeechBubble
+        v-if="mascotStore.isExperienceLoaded"
+        class="suggestion-mascot"
+        message="こんなルートはどう？ 気に入ったら決定してね！"
+        :level="mascotStore.mascotLevel"
+        placement="side"
+        size="small"
+        has-level-label
+      />
 
       <RouteMapPreview
         :geometry="routeStore.currentRoute.geometry"
@@ -191,6 +204,11 @@ const handleBackToHome = () => {
 .suggestion-content {
   display: flex;
   flex-direction: column;
+}
+
+/* 案内役と地図の間を空ける。高さが限られる画面なので最小限にとどめる */
+.suggestion-mascot {
+  margin-bottom: calc(6px + var(--fit) * 8);
 }
 
 /*
