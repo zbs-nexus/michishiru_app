@@ -41,8 +41,13 @@
   --route-walked-leg: #9AA0A6;
   /* 今の区間。トースト（次の目的地のバナー）の左枠と同じ緑。ROUTE_CURRENT_LEG_COLOR と同値にする */
   --route-current-leg: var(--accent-green);
-  /* 他の人の口コミのピンの紫。ルートで巡る口コミの場所の番号の丸にも使う */
+  /* 他の人の口コミのピンの紫。ルートで巡る他の人の口コミの場所の番号の丸にも使う */
   --review-purple: #8E44AD;
+  /*
+   * 自分の口コミのピンのオレンジ。ルートで巡る自分の口コミの場所の番号の丸にも使う。
+   * 明るい色のため、白い文字を重ねるとコントラストが足りない（約2.2:1）。文字を重ねるときは墨（--text-dark）にする
+   */
+  --review-orange: #F39C12;
   /* 羊皮紙。画面の地の色 */
   --bg-light: #FBF4E4;
   --bg-deep: #F1E3C8;
@@ -914,7 +919,9 @@ textarea {
 
 /*
  * ルートで巡る口コミの場所のスポットマーカー。
- * 形・番号・大きさは通常のスポットと同じ丸のまま、色だけを口コミのピンと同じ紫にする。
+ * 形・番号・大きさは通常のスポットと同じ丸のまま、色だけを口コミのピンと同じ色にする。
+ *   紫（is-review）               他の人の口コミの場所（--review-purple）
+ *   オレンジ（is-review is-mine）  自分が口コミ投稿済みの場所（--review-orange）
  * 押すと口コミを開くためボタン要素で作るので、ボタンの既定の余白と書体を打ち消す。
  */
 .spot-marker.is-review {
@@ -924,8 +931,18 @@ textarea {
 }
 
 /*
- * 到達済みは通常のスポットと同じ足跡のスタンプにする（紫を残さない）。
- * .spot-marker.is-review が後に書かれて背景を上書きするため、ここで指定し直す。
+ * 自分が口コミ投稿済みの場所はオレンジ。
+ * 白い番号ではコントラストが足りない（約2.2:1）ため、番号の文字だけ墨（--text-dark、約6:1）にする。
+ * 到達済みの指定（.spot-marker.is-review.is-visited）と詳細度が同じため、必ずそれより前に置く。
+ */
+.spot-marker.is-review.is-mine {
+  background: var(--review-orange);
+  color: var(--text-dark);
+}
+
+/*
+ * 到達済みは通常のスポットと同じ足跡のスタンプにする（紫・オレンジを残さない）。
+ * .spot-marker.is-review（と is-mine）が先に背景を塗るため、ここで指定し直す。
  */
 .spot-marker.is-review.is-visited {
   background: url('../images/spot-visited-stamp.png') center / cover no-repeat;
@@ -934,12 +951,20 @@ textarea {
 /*
  * 選択中（口コミを開いている場所）。
  * 中心を座標に合わせているため大きさは変えず、外側に輪を重ねて目立たせ、前面へ出す。
+ * 輪の色は丸と同じ意味の色にする（他の人の口コミは紫、自分の口コミはオレンジ）。
  */
 .spot-marker.is-review.is-selected {
   z-index: 1;
   box-shadow:
     0 0 0 2px var(--white),
     0 0 0 5px var(--review-purple),
+    var(--shadow-marker);
+}
+
+.spot-marker.is-review.is-mine.is-selected {
+  box-shadow:
+    0 0 0 2px var(--white),
+    0 0 0 5px var(--review-orange),
     var(--shadow-marker);
 }
 
@@ -1019,6 +1044,7 @@ textarea {
  *   オレンジ（review-pin-mine）  自分が口コミ投稿済みの場所
  *   紫（review-pin-other）      他の人の口コミ投稿の場所
  * ルートのスポット（青）・開始地点（緑）とも色で見分ける。
+ * ルートのスポットのうち口コミの場所（.spot-marker.is-review）も、同じ意味で紫・オレンジに塗り分ける。
  */
 
 /*
@@ -1150,7 +1176,7 @@ textarea {
 
 /* 自分が口コミ投稿済みの場所はオレンジ */
 .review-pin-mine .review-pin-head {
-  background: #F39C12;
+  background: var(--review-orange);
 }
 
 /* 他の人の口コミ投稿の場所は紫 */

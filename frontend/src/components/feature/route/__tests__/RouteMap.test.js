@@ -6,7 +6,8 @@ import { nextTick } from 'vue';
 
 /**
  * @description 地図のスポットマーカーのテスト。
- * ルートで巡る口コミの場所は口コミのピンと同じ形で描き、押すと口コミを開くこと、
+ * ルートで巡る口コミの場所は口コミのピンと同じ色の番号の丸で描き（他の人の口コミは紫、
+ * 自分の口コミはオレンジの is-mine）、押すと口コミを開くこと、
  * 同じ場所の口コミのピンは重ねて描かないことを確かめる。
  *
  * jsdom では地図を描けないため、MapLibre を差し替え、作られたマーカーの要素を記録する。
@@ -265,11 +266,11 @@ describe('RouteMap（ルートで巡る口コミの場所）', () => {
     expect(createdMarkers.find((marker) => marker.element === normalSpotElements()[0]).hasPopup).toBe(true);
   });
 
-  test('紫と押せることは見た目だけでは伝わらないため、読み上げで補う', () => {
+  test('紫（他の人の口コミの場所）と押せることは見た目だけでは伝わらないため、読み上げで補う', () => {
     mountAndLoad();
 
     expect(routeReviewSpotMarkers()[0].element.getAttribute('aria-label')).toBe(
-      '1番目のスポット（口コミの場所）：口コミの場所の口コミを見る'
+      '1番目のスポット（他の人の口コミの場所）：口コミの場所の口コミを見る'
     );
   });
 
@@ -326,7 +327,7 @@ describe('RouteMap（ルートで巡る口コミの場所）', () => {
     expect(element.classList.contains('is-visited')).toBe(true);
     expect(element.textContent).toBe('');
     expect(element.getAttribute('aria-label')).toBe(
-      '1番目のスポット（到達済み・口コミの場所）：口コミの場所の口コミを見る'
+      '1番目のスポット（到達済み・他の人の口コミの場所）：口コミの場所の口コミを見る'
     );
     // 通常のスポットは影響を受けない
     expect(normalSpotElements()[0].classList.contains('is-visited')).toBe(false);
@@ -365,6 +366,133 @@ describe('RouteMap（ルートで巡る口コミの場所）', () => {
     expect(layerReviewPinElements().map((element) => element.className)).toEqual([
       'review-pin review-pin-mine',
       'review-pin review-pin-other'
+    ]);
+  });
+});
+
+describe('RouteMap（自分の口コミの場所の番号の丸）', () => {
+  /** 自分の口コミの場所・他の人の口コミの場所・通常のスポットを1つずつ巡るルート */
+  const spotsWithMyReview = [
+    {
+      spotId: 'spot-mine',
+      name: '自分の口コミの場所',
+      lng: 139.7046,
+      lat: 35.6872,
+      isReviewSpot: true,
+      isMyReviewSpot: true,
+      reviewSpotId: 'review-mine',
+      reviewPosition: { lng: 139.7045, lat: 35.6873 }
+    },
+    {
+      spotId: 'spot-other',
+      name: '他の人の口コミの場所',
+      lng: 139.706,
+      lat: 35.688,
+      isReviewSpot: true,
+      isMyReviewSpot: false,
+      reviewSpotId: 'review-other',
+      reviewPosition: { lng: 139.7061, lat: 35.6881 }
+    },
+    {
+      spotId: 'spot-normal',
+      name: '公園',
+      lng: 139.703,
+      lat: 35.686,
+      isReviewSpot: false,
+      isMyReviewSpot: false,
+      reviewSpotId: null,
+      reviewPosition: null
+    }
+  ];
+
+  beforeEach(() => {
+    createdMarkers.length = 0;
+    createdSources.clear();
+    addedLayers.length = 0;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('自分の口コミの場所はオレンジの目印（is-mine）を足し、他の人の口コミの場所は紫のまま', () => {
+    mountAndLoad({ spots: spotsWithMyReview });
+
+    const [myMarker, otherMarker, normalMarker] = spotMarkerElements();
+
+    expect(myMarker.className).toBe('spot-marker is-review is-mine');
+    expect(otherMarker.className).toBe('spot-marker is-review');
+    expect(normalMarker.className).toBe('spot-marker');
+    // 番号は色に関わらず巡る順のまま
+    expect([myMarker, otherMarker, normalMarker].map((marker) => marker.textContent)).toEqual([
+      '1',
+      '2',
+      '3'
+    ]);
+  });
+
+  test('オレンジと紫の意味も色だけでは伝わらないため、誰の口コミの場所かを読み上げで補う', () => {
+    mountAndLoad({ spots: spotsWithMyReview });
+
+    const [myMarker, otherMarker, normalMarker] = spotMarkerElements();
+
+    expect(myMarker.getAttribute('aria-label')).toBe(
+      '1番目のスポット（自分の口コミの場所）：自分の口コミの場所の口コミを見る'
+    );
+    expect(otherMarker.getAttribute('aria-label')).toBe(
+      '2番目のスポット（他の人の口コミの場所）：他の人の口コミの場所の口コミを見る'
+    );
+    expect(normalMarker.getAttribute('aria-label')).toBe('3番目のスポット');
+  });
+
+  test('自分の口コミの場所も、押すと口コミの場所のIDと元の座標を通知する', () => {
+    const wrapper = mountAndLoad({ spots: spotsWithMyReview });
+
+    spotMarkerElements()[0].click();
+
+    expect(wrapper.emitted('selectReviewSpot')).toEqual([
+      [{ spotId: 'review-mine', position: { lng: 139.7045, lat: 35.6873 } }]
+    ]);
+  });
+
+  test('到達済み・選択中になっても、自分の口コミの場所の目印と読み上げは保つ', async () => {
+    const wrapper = mountAndLoad({ spots: spotsWithMyReview });
+
+    await wrapper.setProps({ visitedSpotIds: ['spot-mine'], selectedReviewSpotId: 'review-mine' });
+    await nextTick();
+
+    const [myMarker] = spotMarkerElements();
+
+    expect(myMarker.classList.contains('is-mine')).toBe(true);
+    expect(myMarker.classList.contains('is-visited')).toBe(true);
+    expect(myMarker.classList.contains('is-selected')).toBe(true);
+    expect(myMarker.textContent).toBe('');
+    expect(myMarker.getAttribute('aria-label')).toBe(
+      '1番目のスポット（到達済み・自分の口コミの場所）：自分の口コミの場所の口コミを見る'
+    );
+  });
+
+  test('口コミの場所でない・口コミを開けないスポットは、isMyReviewSpot が真でもオレンジにしない', () => {
+    mountAndLoad({
+      spots: [
+        { ...spotsWithMyReview[2], isMyReviewSpot: true },
+        // 口コミの場所のIDを持たない（古い応答など）。押しても開けないため青の番号の丸で描く
+        {
+          spotId: 'spot-old',
+          name: '古い応答',
+          lng: 139.704,
+          lat: 35.687,
+          isReviewSpot: true,
+          isMyReviewSpot: true,
+          reviewSpotId: null,
+          reviewPosition: null
+        }
+      ]
+    });
+
+    expect(spotMarkerElements().map((element) => element.className)).toEqual([
+      'spot-marker',
+      'spot-marker'
     ]);
   });
 });
@@ -568,10 +696,37 @@ describe('global.css（巡る口コミの場所の番号の丸）', () => {
     expect(block).toMatch(/font-family:\s*inherit/);
   });
 
-  test('到達済みは紫を残さず、通常のスポットと同じ足跡のスタンプにする', () => {
+  test('到達済みは紫・オレンジを残さず、通常のスポットと同じ足跡のスタンプにする', () => {
     expect(blockOf('.spot-marker.is-review.is-visited')).toMatch(
       /background:\s*url\('\.\.\/images\/spot-visited-stamp\.png'\)/
     );
+  });
+
+  test('自分の口コミの場所はオレンジにし、白では読めない番号だけ墨にする（形・大きさは通常のスポットのまま）', () => {
+    const block = blockOf('.spot-marker.is-review.is-mine');
+
+    expect(block).toMatch(/background:\s*var\(--review-orange\)/);
+    // オレンジ（#F39C12）の上の白い文字はコントラスト約2.2:1で読めないため、墨（約6:1）にする
+    expect(block).toMatch(/(^|[\s;])color:\s*var\(--text-dark\)/);
+    expect(block).not.toMatch(
+      /(^|[\s;])(width|height|border|border-radius|font-size|font-weight)\s*:/
+    );
+  });
+
+  test('到達済みの指定は自分の口コミの場所の色より後ろに置く（詳細度が同じため、後ろが勝つ）', () => {
+    const myReviewIndex = css.indexOf('\n.spot-marker.is-review.is-mine {');
+    const visitedIndex = css.indexOf('\n.spot-marker.is-review.is-visited {');
+
+    expect(myReviewIndex).toBeGreaterThan(-1);
+    expect(visitedIndex).toBeGreaterThan(myReviewIndex);
+  });
+
+  test('自分の口コミの場所を選択中は、輪も丸と同じオレンジにする（大きさは変えない）', () => {
+    const block = blockOf('.spot-marker.is-review.is-mine.is-selected');
+
+    expect(block).toMatch(/box-shadow:[^;]*var\(--review-orange\)/);
+    expect(block).not.toMatch(/var\(--review-purple\)/);
+    expect(block).not.toMatch(/(^|[\s;])(width|height)\s*:/);
   });
 
   test('選択中は大きさを変えず（中心が座標のため）、輪と前面への移動で目立たせる', () => {
@@ -589,6 +744,10 @@ describe('global.css（巡る口コミの場所の番号の丸）', () => {
     expect(blockOf('.review-pin-other .review-pin-head')).toMatch(
       /background:\s*var\(--review-purple\)/
     );
-    expect(blockOf('.review-pin-mine .review-pin-head')).toMatch(/background:\s*#F39C12/);
+    // オレンジはルートの自分の口コミの場所と同じ変数にまとめた（値は従来の #F39C12 のまま）
+    expect(blockOf('.review-pin-mine .review-pin-head')).toMatch(
+      /background:\s*var\(--review-orange\)/
+    );
+    expect(css).toMatch(/--review-orange:\s*#F39C12;/);
   });
 });

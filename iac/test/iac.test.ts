@@ -125,7 +125,7 @@ describe('MichishiruStack (バックエンド有効)', () => {
 
     // 口コミテーブルは CDK 管理のため ARN は Fn::GetAtt で参照される
     expect(policyJson).toContain('ReviewTable');
-    // GSI-SpotList を引けるよう、索引への権限も付いている
+    // GSI-SpotList（口コミの場所）と GSI-UserReview（自分の口コミ）を引けるよう、索引への権限も付いている
     expect(policyJson).toContain('/index/*');
 
     template.hasResourceProperties('AWS::Lambda::Function', {

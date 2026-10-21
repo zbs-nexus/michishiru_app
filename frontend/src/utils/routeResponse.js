@@ -128,8 +128,11 @@ const toSpots = (items) => {
     lng: Number.isFinite(item.lng) ? item.lng : null,
     spotType: item.spotType ?? item.type ?? null,
     icon: item.icon ?? null,
-    // 口コミが付いた場所か。地図で口コミのピンとして描く（古い応答には無いため false 扱い）
+    // 口コミが付いた場所か。地図で口コミの番号の丸として描く（古い応答には無いため false 扱い）
     isReviewSpot: item.isReviewSpot === true,
+    // 自分が口コミ投稿済みの場所か。口コミの場所のうち、自分の口コミはオレンジ・他の人の口コミは紫にする。
+    // 口コミの場所でないのに真になる値は受け取らない（古い応答には無いため false 扱い）
+    isMyReviewSpot: item.isReviewSpot === true && item.isMyReviewSpot === true,
     // 口コミの場所のIDと元の座標（口コミのピンの位置）。ピンを押して口コミを開くときに使う。
     // 口コミの場所でない、または古い応答で持たない場合は null
     ...toReviewSpotLink(item)

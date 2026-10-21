@@ -10,7 +10,10 @@ import {
   querySpotCategoryIdsByGenreNumber
 } from './repositories/spotCategoryRepository.js';
 import { listConditions } from './repositories/conditionRepository.js';
-import { listReviewSpots } from './repositories/reviewSpotRepository.js';
+import {
+  listReviewSpots,
+  queryReviewedSpotIdsByUserId
+} from './repositories/reviewSpotRepository.js';
 import {
   BEDROCK_RETRY_TEMPERATURE,
   BEDROCK_TEMPERATURE,
@@ -55,7 +58,8 @@ const defaultRepositories = {
   generateRoutePlan,
   calculateWalkingRoute,
   listConditions,
-  listReviewSpots
+  listReviewSpots,
+  queryReviewedSpotIdsByUserId
 };
 
 /**
@@ -75,36 +79,75 @@ const distanceBetweenM = (from, to) =>
   calculateDistanceM(toLngLat(from), toLngLat(to)) ?? Number.POSITIVE_INFINITY;
 
 /**
- * @description 検索条件のジャンルに合い、現在地から選択された距離以内にある
- * 口コミの場所を、近い順に集める。
- *
- * ジャンルは口コミの投稿時に選んだ genreId と、検索条件のジャンルID（おまかせなら選ばれた全件）を
- * 突き合わせる。どちらも検索条件マスタの genreId なので同じ値で比べられる。
- * ジャンルを持たない口コミの場所は、条件に合うか判断できないため候補にしない。
- *
+ * @description 口コミが付いた場所を取得する。
  * 口コミの場所はルートの質を上げる付加的な候補のため、取得に失敗しても
  * ルート作成は止めず、口コミの場所なしで続行する。
- * @param {object} params パラメータ
- * @param {{lat: number, lng: number}} params.currentLocation 現在地
- * @param {number} params.radiusM 候補にする範囲（m）。選択された距離
- * @param {string[]} params.genreIds 検索条件のジャンルID（英語。例: nature）
  * @param {object} repositories データ取得に使うリポジトリ
- * @returns {Promise<Array<{reviewSpotId: string, name: string, position: number[], ratingAverage: number, ratingCount: number, isReviewSpot: true}>>} 評価の高い順の口コミの場所
+ * @returns {Promise<object[]>} 口コミの場所。取得に失敗した場合は空配列
  */
-const collectReviewCandidateSpots = async (
-  { currentLocation, radiusM, genreIds },
-  repositories
-) => {
-  let reviewSpots = [];
-
+const fetchReviewSpots = async (repositories) => {
   try {
-    reviewSpots = await repositories.listReviewSpots();
+    return await repositories.listReviewSpots();
   } catch (error) {
     logWarn('口コミの場所を取得できなかったため、口コミの場所なしで続行します', {
       errorMessage: error.message
     });
     return [];
   }
+};
+
+/**
+ * @description 呼び出し元のユーザーが口コミを投稿済みの場所のIDを集める。
+ *
+ * 地図で自分の口コミの場所をオレンジ、他の人の口コミの場所を紫に描き分けるためだけに使う。
+ * ユーザーが分からない場合や取得に失敗した場合もルート作成は止めず、
+ * 口コミの場所をすべて他の人の口コミの場所として扱う。
+ * @param {string|null} userId 呼び出し元のユーザーID（Cognito の sub）。分からなければnull
+ * @param {object} repositories データ取得に使うリポジトリ
+ * @returns {Promise<Set<string>>} 口コミを投稿済みの場所のID
+ */
+const collectMyReviewedSpotIds = async (userId, repositories) => {
+  if (userId === null) {
+    return new Set();
+  }
+
+  try {
+    return new Set(await repositories.queryReviewedSpotIdsByUserId(userId));
+  } catch (error) {
+    logWarn('自分の口コミを取得できなかったため、口コミの場所をすべて他の人の口コミとして扱います', {
+      errorMessage: error.message
+    });
+    return new Set();
+  }
+};
+
+/**
+ * @description 検索条件のジャンルに合い、現在地から選択された距離以内にある
+ * 口コミの場所を、評価の高い順に集める。
+ *
+ * ジャンルは口コミの投稿時に選んだ genreId と、検索条件のジャンルID（おまかせなら選ばれた全件）を
+ * 突き合わせる。どちらも検索条件マスタの genreId なので同じ値で比べられる。
+ * ジャンルを持たない口コミの場所は、条件に合うか判断できないため候補にしない。
+ *
+ * 各候補には、呼び出し元のユーザーが口コミを投稿済みの場所かどうかの目印も付ける
+ * （地図のオレンジのピンと同じ判定）。
+ * @param {object} params パラメータ
+ * @param {{lat: number, lng: number}} params.currentLocation 現在地
+ * @param {number} params.radiusM 候補にする範囲（m）。選択された距離
+ * @param {string[]} params.genreIds 検索条件のジャンルID（英語。例: nature）
+ * @param {string|null} params.userId 呼び出し元のユーザーID（Cognito の sub）。分からなければnull
+ * @param {object} repositories データ取得に使うリポジトリ
+ * @returns {Promise<Array<{reviewSpotId: string, name: string, position: number[], ratingAverage: number, ratingCount: number, isReviewSpot: true, isMyReviewSpot: boolean}>>} 評価の高い順の口コミの場所
+ */
+const collectReviewCandidateSpots = async (
+  { currentLocation, radiusM, genreIds, userId },
+  repositories
+) => {
+  // 口コミの場所と自分の口コミは互いに依存しないため並行して引く
+  const [reviewSpots, myReviewedSpotIds] = await Promise.all([
+    fetchReviewSpots(repositories),
+    collectMyReviewedSpotIds(userId, repositories)
+  ]);
 
   const origin = [currentLocation.lng, currentLocation.lat];
   const targetGenreIds = new Set(genreIds.filter((genreId) => typeof genreId === 'string'));
@@ -134,7 +177,8 @@ const collectReviewCandidateSpots = async (
       position: spot.position,
       ratingAverage: spot.ratingAverage ?? 0,
       ratingCount: spot.ratingCount ?? 0,
-      isReviewSpot: true
+      isReviewSpot: true,
+      isMyReviewSpot: myReviewedSpotIds.has(spot.spotId)
     }));
 };
 
@@ -287,6 +331,31 @@ const limitReviewSpots = (spots) => {
   }
 
   return limited;
+};
+
+/**
+ * @description ルートの口コミの場所に、自分が口コミ投稿済みかどうかの目印を付ける。
+ * 地図では自分の口コミの場所をオレンジ、他の人の口コミの場所を紫に描き分ける
+ * （口コミのピンの色と同じ意味）。口コミの場所でないスポットは常に偽にする。
+ *
+ * 判定は口コミの場所のID（reviewSpotId）で行う。押したときに開く口コミと同じIDのため、
+ * 色と開く口コミが食い違わない。
+ * 差し込み（ensureReviewSpot）で入れ替わった後の最終のスポットに対して1度だけ行う。
+ * @param {object[]} spots ルートのスポット
+ * @param {object[]} reviewCandidates 口コミの場所の候補（自分の口コミかどうかの目印つき）
+ * @returns {object[]} 目印を付けたスポット
+ */
+const markMyReviewSpots = (spots, reviewCandidates) => {
+  const myReviewSpotIds = new Set(
+    reviewCandidates
+      .filter((candidate) => candidate.isMyReviewSpot === true)
+      .map((candidate) => candidate.reviewSpotId)
+  );
+
+  return spots.map((spot) => ({
+    ...spot,
+    isMyReviewSpot: spot.isReviewSpot === true && myReviewSpotIds.has(spot.reviewSpotId)
+  }));
 };
 
 /**
@@ -785,12 +854,21 @@ const collectCandidateSpotsWithRetry = async (
  * @param {boolean} [conditions.isGenreRandom] ジャンルをおまかせで選ぶか
  * @param {boolean} [conditions.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
+ * @param {string|null} [conditions.userId] 呼び出し元のユーザーID（Cognito の sub）。
+ *   自分が口コミ投稿済みの場所を見分けるために使う。分からなければ null（すべて他の人の口コミの場所として扱う）
  * @param {object} [repositories] 外部サービスへのアクセス（テスト時に差し替える）
  * @returns {Promise<{routeTitle: string, conceptStory: string, totalDistanceM: number, totalDurationS: number, spots: object[], coordinates: number[][], legs: Array<{coordinates: number[][]}>, selectedGenreId?: string, selectedGenreName?: string, selectedDistanceKm?: number}>} 作成したルート
  * @throws {ApplicationError} マスタやスポットが見つからない、または外部サービスが失敗した場合
  */
 export const createRoute = async (
-  { genreId, targetDistanceKm, currentLocation, isGenreRandom = false, isDistanceRandom = false },
+  {
+    genreId,
+    targetDistanceKm,
+    currentLocation,
+    isGenreRandom = false,
+    isDistanceRandom = false,
+    userId = null
+  },
   repositories = defaultRepositories
 ) => {
   // おまかせの項目は、検索条件マスタからランダムに選ぶ
@@ -830,7 +908,8 @@ export const createRoute = async (
         currentLocation,
         radiusM: selectedDistanceKm * METERS_PER_KM,
         // 周辺検索と同じジャンル（おまかせなら選ばれたすべて）に合う口コミの場所だけを候補にする
-        genreIds: selectedGenres.map((genre) => genre.genreId)
+        genreIds: selectedGenres.map((genre) => genre.genreId),
+        userId
       },
       repositories
     )
@@ -1012,6 +1091,9 @@ export const createRoute = async (
     repositories
   ));
 
+  // 口コミの場所が自分の口コミか他の人の口コミかは、差し込みを終えた最終のスポットで決める
+  spots = markMyReviewSpots(spots, reviewCandidates);
+
   // おまかせ機能で選択した値をレスポンスに含める
   const response = {
     routeTitle,
@@ -1026,8 +1108,9 @@ export const createRoute = async (
         name: spot.name,
         lng: snappedPosition[0],
         lat: snappedPosition[1],
-        // 地図で口コミのピンとして描くための目印
+        // 地図で口コミの場所を描き分けるための目印（他の人の口コミは紫、自分の口コミはオレンジ）
         isReviewSpot: spot.isReviewSpot === true,
+        isMyReviewSpot: spot.isMyReviewSpot === true,
         // 口コミの場所なら、ピンを押したときに口コミを開くためのIDと元の座標を付ける。
         // 元の座標は口コミのピンの位置で、口コミの解決（半径40m）にもこちらを使う
         // （経路へ寄せた座標は最大150mずれるため、解決できないことがある）

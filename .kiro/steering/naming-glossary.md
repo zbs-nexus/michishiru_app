@@ -58,7 +58,8 @@ inclusion: always
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
 | 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から選択された距離以内にある口コミが付いた場所（平均評価の高い順）。ルートの候補に混ぜる |
-| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では紫の番号の丸で描き、押すと口コミを開く（`spot-marker is-review`）。その場所の口コミのピンは重ねて描かない |
+| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では番号の丸で描き、押すと口コミを開く（`spot-marker is-review`）。他の人の口コミの場所は紫（`--review-purple`）、自分の口コミの場所はオレンジ（isMyReviewSpot）。その場所の口コミのピンは重ねて描かない |
+| 自分の口コミの場所か | isMyReviewSpot | ルートの口コミの場所（isReviewSpot が真）のうち、自分が口コミ投稿済みの場所か。地図では番号の丸の色をオレンジ（`--review-orange`）に描き分ける（`spot-marker is-review is-mine`）。判定は地図のオレンジのピン（myReviews）と同じく自分の口コミ（`GSI-UserReview`）を reviewSpotId と突き合わせて行い、ルート作成時点で決める。口コミの場所でないスポットでは常に偽 |
 | 巡る口コミの場所のID | reviewSpotId | ルートのスポットのもとになった口コミの場所の spotId。ピンを押して口コミを開くために使う。口コミの場所でなければ null |
 | 巡る口コミの場所の元の座標 | reviewPosition | 口コミのピンの位置 `{ lng, lat }`。経路へ寄せた座標（lng / lat）とは別で、口コミの解決（半径40m）にはこちらを使う。API では reviewLng / reviewLat |
 | チェーン店か | isChain | Places の候補がチェーン店か（`BusinessChains` を持つ）。選ぶ優先順位を下げる |
@@ -211,6 +212,8 @@ inclusion: always
 
 選択中のピンは色を変えず、大きくして（`--pin-size`）縁・影を強め前面へ出す（`is-selected`）。
 色は意味に固定しているため、選択という別の意味に色を使わない。
+
+ルートのスポットのうち口コミの場所も、同じ色の意味で塗り分ける（紫 = `spot-marker is-review` / オレンジ = `spot-marker is-review is-mine`）。色の値はピンと同じ変数（`--review-purple` / `--review-orange`）を使う。選択中は大きさを変えず、丸と同じ色の輪を重ねて前面へ出す（`is-selected`）。
 
 ### マスコット
 
@@ -442,3 +445,4 @@ inclusion: always
 | 2026/10/14 | 散歩結果画面のレベルアップ演出の追加に伴い「マスコット」へ MascotLevelUpCelebration / celebrationLevels / levelBeforeWalk / isCelebrationVisible / useMascotLevelUp を追加 |
 | 2026/10/21 | レベルアップの判定を案内画面の終了処理へ移し検知ロジックを mascotStore へ集約したことに伴い「マスコット」へ pendingLevelUpLevels / refreshAndDetectLevelUp / clearPendingLevelUp / isFinishing を追加。levelBeforeWalk を mascotStore 内のローカル変数へ、isCelebrationVisible を WalkResultView.vue の状態へ説明変更。useMascotLevelUp は役割が mascotStore へ移ったため削除 |
 | 2026/10/21 | 案内画面の次の目的地の名前を省略せず全文出し、前後のボタンと重ならないよう上部の操作を縦に積んだことに伴い「地図」へ mapControlsTopPx / controlsTopPx を追加 |
+| 2026/10/21 | ルートの口コミの場所を自分の口コミ（オレンジ）と他の人の口コミ（紫）に描き分けたことに伴い「ルートとスポット」へ isMyReviewSpot を追加。isReviewSpot の説明と、口コミのピンの色の表の注記（ルートのスポットも同じ色の意味）を更新 |
