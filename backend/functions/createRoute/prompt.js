@@ -1,4 +1,4 @@
-import { METERS_PER_KM } from './constants.js';
+import { METERS_PER_KM, REVIEW_SPOT_RATIO } from './constants.js';
 
 /**
  * @description Bedrockへ渡すプロンプトを組み立てる。
@@ -7,6 +7,13 @@ import { METERS_PER_KM } from './constants.js';
  * 候補リストにないスポットを生成させないこと（ハルシネーション防止）が要点のため、
  * 制約をルールとして明記し、出力形式もJSONに固定する。
  */
+
+/**
+ * 口コミの場所の割合をプロンプトに書く形（0.4 → 「4割」）。
+ * Service層が外す上限（REVIEW_SPOT_RATIO）と指示がずれないよう、同じ定数から作る。
+ * 0.3 × 10 のような小数の誤差を避けるため四捨五入する。
+ */
+const REVIEW_SPOT_RATIO_LABEL = `${Math.round(REVIEW_SPOT_RATIO * 10)}割`;
 
 /**
  * @description 前回生成の距離を踏まえた調整指示を組み立てる。
@@ -59,8 +66,9 @@ export const buildRoutePlanPrompt = ({
 4. 徒歩で立ち寄れる場所（公園・神社・広場・店舗など）を選んでください。管理事務所・オフィス・
    立入制限区域など、一般の歩行者が敷地内へ自由に入れない施設は選ばないでください。
 5. 出力は指定された【JSONフォーマット】のみとし、マークダウン (\`\`\`json など) や前置き・後書きの文章は一切含めないでください。
-6. "isReviewSpot": true の候補は、利用者の口コミが付いた場所です。選ぶスポットのうち2割程度
-   （最低1か所）を口コミの場所にしてください。ただし合計距離を目標距離に収めることを最優先し、
+6. "isReviewSpot": true の候補は、利用者の口コミが付いた場所です。選ぶスポットのうち${REVIEW_SPOT_RATIO_LABEL}程度を目安に、
+   最低1か所、多くても${REVIEW_SPOT_RATIO_LABEL}までを口コミの場所にしてください。口コミの場所の中では "ratingAverage"（5段階の平均評価）が
+   高いものを優先して選んでください。ただし合計距離を目標距離に収めることを最優先し、
    口コミの場所を入れると目標距離から外れる場合は入れなくて構いません。
 7. "isChain": true の候補はチェーン店です。優先順位を下げ、ほかに条件に合う候補があるときは選ばないでください。
 

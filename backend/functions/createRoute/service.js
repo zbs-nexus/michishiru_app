@@ -29,8 +29,10 @@ import {
   MAX_SEARCH_CATEGORIES,
   MAX_SPOT_COUNT,
   METERS_PER_KM,
+  MIN_REVIEW_SPOT_LIMIT,
   MIN_SPOT_COUNT,
   REVIEW_SPOT_DUPLICATE_RADIUS_M,
+  REVIEW_SPOT_RATIO,
   SEARCH_RADIUS_RANGE_M,
   SEARCH_RADIUS_RATIO,
   STRANDED_DISTANCE_THRESHOLD_M
@@ -121,7 +123,7 @@ const collectMyReviewedSpotIds = async (userId, repositories) => {
 
 /**
  * @description 検索条件のジャンルに合い、現在地から選択された距離以内にある
- * 口コミの場所を、近い順に集める。
+ * 口コミの場所を、評価の高い順に集める。
  *
  * ジャンルは口コミの投稿時に選んだ genreId と、検索条件のジャンルID（おまかせなら選ばれた全件）を
  * 突き合わせる。どちらも検索条件マスタの genreId なので同じ値で比べられる。
@@ -135,7 +137,7 @@ const collectMyReviewedSpotIds = async (userId, repositories) => {
  * @param {string[]} params.genreIds 検索条件のジャンルID（英語。例: nature）
  * @param {string|null} params.userId 呼び出し元のユーザーID（Cognito の sub）。分からなければnull
  * @param {object} repositories データ取得に使うリポジトリ
- * @returns {Promise<Array<{name: string, position: number[], isReviewSpot: true, isMyReviewSpot: boolean}>>} 近い順の口コミの場所
+ * @returns {Promise<Array<{reviewSpotId: string, name: string, position: number[], ratingAverage: number, ratingCount: number, isReviewSpot: true, isMyReviewSpot: boolean}>>} 評価の高い順の口コミの場所
  */
 const collectReviewCandidateSpots = async (
   { currentLocation, radiusM, genreIds, userId },
@@ -161,10 +163,20 @@ const collectReviewCandidateSpots = async (
     )
     .map((spot) => ({ spot, distanceM: distanceBetweenM(origin, spot.position) }))
     .filter(({ distanceM }) => distanceM <= radiusM)
-    .sort((a, b) => a.distanceM - b.distanceM)
+    // 評価の高い場所を優先する。平均が同じなら口コミの多い（評価の信頼できる）場所、
+    // それも同じなら現在地に近い場所を先にする
+    .sort(
+      (a, b) =>
+        (b.spot.ratingAverage ?? 0) - (a.spot.ratingAverage ?? 0) ||
+        (b.spot.ratingCount ?? 0) - (a.spot.ratingCount ?? 0) ||
+        a.distanceM - b.distanceM
+    )
     .map(({ spot }) => ({
+      reviewSpotId: spot.spotId,
       name: spot.name,
       position: spot.position,
+      ratingAverage: spot.ratingAverage ?? 0,
+      ratingCount: spot.ratingCount ?? 0,
       isReviewSpot: true,
       isMyReviewSpot: myReviewedSpotIds.has(spot.spotId)
     }));
@@ -173,13 +185,14 @@ const collectReviewCandidateSpots = async (
 /**
  * @description Bedrockへ渡す候補を組み立てる。
  *
- * - 口コミの場所は近い順に上限件数まで先頭に入れ、候補から漏れないようにする
+ * - 口コミの場所は評価の高い順に上限件数まで先頭に入れ、候補から漏れないようにする
+ *   （Bedrockにも平均評価を渡し、高いものを優先させる）
  * - 口コミの場所と同じ名前、または同じ場所（半径内）にある Places の候補は外す
  *   （同じ場所が2回選ばれるのを防ぐ）
  * - チェーン店は優先順位を下げるため後ろへ回す。上限件数で切ると先に落ちる
  * - プロンプトには選定に必要な目印（口コミ・チェーン）だけを、該当するときに付ける
  * @param {object[]} placeCandidates Places の候補（重複除去済み）
- * @param {object[]} reviewCandidates 口コミの場所の候補（近い順）
+ * @param {object[]} reviewCandidates 口コミの場所の候補（評価の高い順）
  * @returns {object[]} プロンプトへ渡す候補
  */
 const buildPromptCandidateSpots = (placeCandidates, reviewCandidates) => {
@@ -206,49 +219,118 @@ const buildPromptCandidateSpots = (placeCandidates, reviewCandidates) => {
     .map((spot) => ({
       name: spot.name,
       position: spot.position,
-      ...(spot.isReviewSpot === true ? { isReviewSpot: true } : {}),
+      // 口コミの場所は平均評価も渡し、高いものを優先させる（小数第1位で十分）
+      ...(spot.isReviewSpot === true
+        ? { isReviewSpot: true, ratingAverage: Number(spot.ratingAverage.toFixed(1)) }
+        : {}),
       ...(spot.isChain === true ? { isChain: true } : {})
     }));
 };
 
 /**
  * @description Bedrockが選んだスポットに、口コミの場所かどうかの目印を付け直す。
- * Bedrockの出力は名前と座標だけなので、候補の名前から引き直す。
+ *
+ * Bedrockの出力は名前と座標だけなので、プロンプトへ渡した口コミの場所の名前から引き直し、
+ * 口コミの場所のIDと元の座標（口コミのピンの位置）を付ける。
+ * プロンプトに入れなかった口コミの場所は、同名のPlacesの候補と取り違えないよう対象にしない。
  * @param {object[]} spots Bedrockが選んだスポット
  * @param {object[]} promptCandidateSpots プロンプトへ渡した候補
+ * @param {object[]} reviewCandidates 口コミの場所の候補
  * @returns {object[]} 目印を付けたスポット
  */
-const markReviewSpots = (spots, promptCandidateSpots) => {
-  const candidateByName = new Map(promptCandidateSpots.map((spot) => [spot.name, spot]));
+const markReviewSpots = (spots, promptCandidateSpots, reviewCandidates) => {
+  const promptReviewNames = new Set(
+    promptCandidateSpots.filter((spot) => spot.isReviewSpot === true).map((spot) => spot.name)
+  );
+  const reviewByName = new Map(
+    reviewCandidates
+      .filter((candidate) => promptReviewNames.has(candidate.name))
+      .map((candidate) => [candidate.name, candidate])
+  );
 
-  return spots.map((spot) => ({
-    ...spot,
-    isReviewSpot: candidateByName.get(spot.name)?.isReviewSpot === true
-  }));
+  return spots.map((spot) => {
+    const review = reviewByName.get(spot.name);
+
+    return review === undefined
+      ? { ...spot, isReviewSpot: false }
+      : {
+        ...spot,
+        isReviewSpot: true,
+        reviewSpotId: review.reviewSpotId,
+        reviewPosition: review.position,
+        // 上限を超えたときに評価の低い場所から外すために持つ（応答には載せない）
+        ratingAverage: review.ratingAverage
+      };
+  });
 };
 
 /**
- * @description ルートのスポットに対応する口コミの場所の候補を探す。
- *
- * Bedrock の出力は名前と座標だけのため、名前で引き直す。口コミの場所の名前は利用者が付けるため、
- * 離れた別の場所が同じ名前を持つことがある。その場合は座標が最も近い候補とみなす。
- * @param {{name: string, position: number[]}} spot ルートのスポット
- * @param {object[]} reviewCandidates 口コミの場所の候補
- * @returns {object|null} 対応する候補。同じ名前の候補が無ければnull
+ * @description スポット数に対して認める口コミの場所の上限を求める。
+ * スポット数 × REVIEW_SPOT_RATIO を四捨五入し、最低 MIN_REVIEW_SPOT_LIMIT か所は認める。
+ * @param {number} spotCount スポット数
+ * @returns {number} 口コミの場所の上限
  */
-const findReviewCandidate = (spot, reviewCandidates) => {
-  const sameNameCandidates = reviewCandidates.filter((candidate) => candidate.name === spot.name);
+const resolveMaxReviewSpotCount = (spotCount) =>
+  Math.max(MIN_REVIEW_SPOT_LIMIT, Math.round(spotCount * REVIEW_SPOT_RATIO));
 
-  if (sameNameCandidates.length <= 1) {
-    return sameNameCandidates[0] ?? null;
+/**
+ * @description 口コミの場所の数を数える
+ * @param {object[]} spots スポット
+ * @returns {number} 口コミの場所の数
+ */
+const countReviewSpots = (spots) => spots.filter((spot) => spot.isReviewSpot === true).length;
+
+/**
+ * @description 評価が最も低い口コミの場所の位置を返す。評価が同じなら後ろのものを選ぶ
+ * （巡る順の前のほうを残す）。
+ * @param {object[]} spots スポット
+ * @returns {number} 位置。口コミの場所が無ければ -1
+ */
+const findLowestRatedReviewIndex = (spots) => {
+  let lowestIndex = -1;
+
+  spots.forEach((spot, index) => {
+    if (spot.isReviewSpot !== true) {
+      return;
+    }
+
+    if (
+      lowestIndex === -1 ||
+      (spot.ratingAverage ?? 0) <= (spots[lowestIndex].ratingAverage ?? 0)
+    ) {
+      lowestIndex = index;
+    }
+  });
+
+  return lowestIndex;
+};
+
+/**
+ * @description 口コミの場所が上限（スポット数の4割を四捨五入・最低1か所）を超えていれば、
+ * 評価の低い口コミの場所から外す。
+ *
+ * Bedrockへの指示だけでは割合が守られず、4か所中3か所が口コミの場所になることがあるため、
+ * コードで上限をかける。外すとスポット数が減って上限も下がるため、収まるまで繰り返す。
+ * @param {object[]} spots スポット
+ * @returns {object[]} 上限に収めたスポット（収まっていればそのまま）
+ */
+const limitReviewSpots = (spots) => {
+  let limited = spots;
+
+  while (countReviewSpots(limited) > resolveMaxReviewSpotCount(limited.length)) {
+    const removeIndex = findLowestRatedReviewIndex(limited);
+    limited = limited.filter((_, index) => index !== removeIndex);
   }
 
-  return sameNameCandidates.reduce((nearest, candidate) =>
-    distanceBetweenM(spot.position, candidate.position) <
-    distanceBetweenM(spot.position, nearest.position)
-      ? candidate
-      : nearest
-  );
+  if (limited.length !== spots.length) {
+    logInfo('口コミの場所が上限を超えたため、評価の低い場所から外しました', {
+      beforeSpotCount: spots.length,
+      afterSpotCount: limited.length,
+      reviewSpotCount: countReviewSpots(limited)
+    });
+  }
+
+  return limited;
 };
 
 /**
@@ -256,34 +338,51 @@ const findReviewCandidate = (spot, reviewCandidates) => {
  * 地図では自分の口コミの場所をオレンジ、他の人の口コミの場所を紫に描き分ける
  * （口コミのピンの色と同じ意味）。口コミの場所でないスポットは常に偽にする。
  *
+ * 判定は口コミの場所のID（reviewSpotId）で行う。押したときに開く口コミと同じIDのため、
+ * 色と開く口コミが食い違わない。
  * 差し込み（ensureReviewSpot）で入れ替わった後の最終のスポットに対して1度だけ行う。
  * @param {object[]} spots ルートのスポット
  * @param {object[]} reviewCandidates 口コミの場所の候補（自分の口コミかどうかの目印つき）
  * @returns {object[]} 目印を付けたスポット
  */
-const markMyReviewSpots = (spots, reviewCandidates) =>
-  spots.map((spot) => ({
+const markMyReviewSpots = (spots, reviewCandidates) => {
+  const myReviewSpotIds = new Set(
+    reviewCandidates
+      .filter((candidate) => candidate.isMyReviewSpot === true)
+      .map((candidate) => candidate.reviewSpotId)
+  );
+
+  return spots.map((spot) => ({
     ...spot,
-    isMyReviewSpot:
-      spot.isReviewSpot === true &&
-      findReviewCandidate(spot, reviewCandidates)?.isMyReviewSpot === true
+    isMyReviewSpot: spot.isReviewSpot === true && myReviewSpotIds.has(spot.reviewSpotId)
   }));
+};
 
 /**
  * @description 距離超過の調整で外すスポットを決め、外した一覧を返す。
  * 口コミの場所はできるだけ残すため、最後尾から見て口コミでないスポットを外す。
- * すべて口コミの場所なら最後尾を外す（距離を優先する）。
+ * ただし、口コミでないスポットを外すと口コミの場所が上限（スポット数の4割を四捨五入・最低1か所）を
+ * 超える場合や、口コミでないスポットが無い場合は、評価の低い口コミの場所を外す。
  * @param {object[]} spots 現在のスポット
  * @returns {object[]} 1か所外したスポット
  */
 const removeOneSpotForDistance = (spots) => {
-  for (let index = spots.length - 1; index >= 0; index -= 1) {
-    if (spots[index].isReviewSpot !== true) {
-      return spots.filter((_, position) => position !== index);
+  const isOverLimitAfterRemoval =
+    countReviewSpots(spots) > resolveMaxReviewSpotCount(spots.length - 1);
+
+  if (!isOverLimitAfterRemoval) {
+    for (let index = spots.length - 1; index >= 0; index -= 1) {
+      if (spots[index].isReviewSpot !== true) {
+        return spots.filter((_, position) => position !== index);
+      }
     }
   }
 
-  return spots.slice(0, -1);
+  const removeIndex = findLowestRatedReviewIndex(spots);
+
+  return removeIndex === -1
+    ? spots.slice(0, -1)
+    : spots.filter((_, position) => position !== removeIndex);
 };
 
 /**
@@ -317,12 +416,12 @@ const findBestInsertion = (spots, origin, position) => {
  *
  * 総距離が条件に沿うことを優先し、差し込んで許容範囲を外れる場合や、
  * 口コミの場所が徒歩で到達できない（経路から大きく外れる）場合は採用しない。
- * 試すのは遠回りが小さい順に、差し込み → 近くの口コミでないスポットとの入れ替え。
+ * 試すのは評価の高い順（同じなら遠回りが小さい順）に、差し込み → 近くの口コミでないスポットとの入れ替え。
  * 経路計算に失敗した場合も、元のルートをそのまま返す（任意の改善のため）。
  * @param {object} params パラメータ
  * @param {object[]} params.spots 現在のスポット
  * @param {object} params.route 現在の経路
- * @param {object[]} params.reviewCandidates 口コミの場所の候補（近い順）
+ * @param {object[]} params.reviewCandidates 口コミの場所の候補（評価の高い順）
  * @param {{lat: number, lng: number}} params.currentLocation 現在地
  * @param {number} params.targetDistanceKm 目標距離（km）
  * @param {object} repositories データ取得に使うリポジトリ
@@ -339,14 +438,25 @@ const ensureReviewSpot = async (
   const origin = [currentLocation.lng, currentLocation.lat];
   const spotNames = new Set(spots.map((spot) => spot.name));
 
-  // 遠回りが小さい口コミの場所から試す
+  // 評価の高い口コミの場所から試す。評価が同じなら遠回りが小さい場所を先にする
   const rankedCandidates = reviewCandidates
     .filter((candidate) => !spotNames.has(candidate.name))
     .map((candidate) => ({
-      candidate,
+      // ルートのスポットと同じ形にし、口コミの場所のIDと元の座標を持たせる
+      candidate: {
+        name: candidate.name,
+        position: candidate.position,
+        isReviewSpot: true,
+        reviewSpotId: candidate.reviewSpotId,
+        reviewPosition: candidate.position
+      },
+      ratingAverage: candidate.ratingAverage,
       insertion: findBestInsertion(spots, origin, candidate.position)
     }))
-    .sort((a, b) => a.insertion.detourM - b.insertion.detourM);
+    .sort(
+      (a, b) =>
+        b.ratingAverage - a.ratingAverage || a.insertion.detourM - b.insertion.detourM
+    );
 
   // 試す並び：差し込み → 入れ替え（最寄りの口コミでないスポットと）
   const attempts = rankedCandidates.flatMap(({ candidate, insertion }) => {
@@ -855,7 +965,10 @@ export const createRoute = async (
       retryCount
     });
 
-    spots = markReviewSpots(plan.spots, promptCandidateSpots);
+    // 口コミの場所が上限（スポット数の4割を四捨五入・最低1か所）を超えていれば、評価の低い場所から外す
+    spots = limitReviewSpots(
+      markReviewSpots(plan.spots, promptCandidateSpots, reviewCandidates)
+    );
     route = await repositories.calculateWalkingRoute({ currentLocation, spots });
 
     // 次の再生成に備えて、今回の総距離を控える
@@ -863,9 +976,12 @@ export const createRoute = async (
 
     // 経路から大きく外れたスポット（徒歩到達困難）を除外して再計算する。
     // 除外すると最小スポット数を下回る場合はそのまま残す。
-    const reachableSpots = spots.filter(
-      (_, index) =>
-        (route.spotStrayDistancesM[index] ?? 0) <= STRANDED_DISTANCE_THRESHOLD_M
+    // 除外でスポット数が減ると口コミの場所の割合が上がるため、ここでも上限に収める
+    const reachableSpots = limitReviewSpots(
+      spots.filter(
+        (_, index) =>
+          (route.spotStrayDistancesM[index] ?? 0) <= STRANDED_DISTANCE_THRESHOLD_M
+      )
     );
 
     if (reachableSpots.length !== spots.length && reachableSpots.length >= MIN_SPOT_COUNT) {
@@ -994,7 +1110,17 @@ export const createRoute = async (
         lat: snappedPosition[1],
         // 地図で口コミの場所を描き分けるための目印（他の人の口コミは紫、自分の口コミはオレンジ）
         isReviewSpot: spot.isReviewSpot === true,
-        isMyReviewSpot: spot.isMyReviewSpot === true
+        isMyReviewSpot: spot.isMyReviewSpot === true,
+        // 口コミの場所なら、ピンを押したときに口コミを開くためのIDと元の座標を付ける。
+        // 元の座標は口コミのピンの位置で、口コミの解決（半径40m）にもこちらを使う
+        // （経路へ寄せた座標は最大150mずれるため、解決できないことがある）
+        ...(spot.isReviewSpot === true
+          ? {
+            reviewSpotId: spot.reviewSpotId,
+            reviewLng: spot.reviewPosition[0],
+            reviewLat: spot.reviewPosition[1]
+          }
+          : {})
       };
     }),
     coordinates: route.coordinates,

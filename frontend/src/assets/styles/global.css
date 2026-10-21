@@ -41,10 +41,10 @@
   --route-walked-leg: #9AA0A6;
   /* 今の区間。トースト（次の目的地のバナー）の左枠と同じ緑。ROUTE_CURRENT_LEG_COLOR と同値にする */
   --route-current-leg: var(--accent-green);
-  /* 他の人の口コミの場所を示す紫。口コミのピン（紫）とルートの口コミのスポットで同じ値を使う */
+  /* 他の人の口コミのピンの紫。ルートで巡る他の人の口コミの場所の番号の丸にも使う */
   --review-purple: #8E44AD;
   /*
-   * 自分が口コミ投稿済みの場所を示すオレンジ。口コミのピン（オレンジ）とルートの口コミのスポットで同じ値を使う。
+   * 自分の口コミのピンのオレンジ。ルートで巡る自分の口コミの場所の番号の丸にも使う。
    * 明るい色のため、白い文字を重ねるとコントラストが足りない（約2.2:1）。文字を重ねるときは墨（--text-dark）にする
    */
   --review-orange: #F39C12;
@@ -205,6 +205,21 @@ textarea {
 }
 
 /*
+ * 操作用のUI部品でダブルタップしても画面が拡大しないようにする。
+ * 口コミの切り替えなどを素早く2回押す誤操作で、画面が勝手に拡大して戻しにくくなるため。
+ * 止めるのはダブルタップ拡大だけで、ピンチ拡大は意図的に許可する（manipulation はパンとピンチを残す）。
+ * 視力が弱い人が拡大できなくなるのを避けるため、index.html の viewport にも
+ * user-scalable=no や maximum-scale は書かない（ページ全体の拡大が止まり、iOS はそもそも無視する）。
+ * 地図の canvas コンテナの中には付けない。地図の拡大縮小は MapLibre が自分で扱い、
+ * touch-action を設定するため上書きしない。スワイプ用の touch-action: none を持つ要素は
+ * 特異度を低く（:where）しているので、個別の指定が常に勝ち、変わらない。
+ * 非ボタンの重なり部品（トーストなど）には、各コンポーネントで同じ指定を足している。
+ */
+:where(button, a, label, summary, select, input, textarea, [role="button"]):not(.maplibregl-canvas-container *) {
+  touch-action: manipulation;
+}
+
+/*
  * MapLibre GL は自分のスタイルシートで地図コンテナへ
  * `font: 12px/20px Helvetica Neue, Arial, ...` を当てる。
  * 地図の中へ挿入する要素（スポットの番号・開始地点の目印・帰属表示）は
@@ -268,6 +283,13 @@ textarea {
  * 画面の本文。フッターを除いた残りの高さを受け持つ。
  * スクロールは最後の手段で、横向きや文字の拡大などで収まりきらない場合に限り、
  * 文書ではなくこの中だけをスクロールさせる（フッターの操作は常に見えたままにする）。
+ *
+ * --fit で各部品を縮めても収まらない端末（画面が低い・ツールバーが出ている・
+ * 文字を拡大している等）では、最後の逃げ道としてこの中がスクロールする。
+ * そのときにスクロールバーの帯は出さない。帯が出ると羊皮紙の地に灰色の筋が入り
+ * デザインが乱れるうえ、ホーム画面だけ帯が出て他画面と不揃いに見えるため。
+ * スクロールの機能そのものは残す（帯だけ消す）。消すと溢れた本文（作成ボタン等）が
+ * 見切れて操作できなくなり、「収まらないときは中だけスクロール」の意図を壊すため。
  */
 .content {
   flex: 1;
@@ -277,6 +299,15 @@ textarea {
   padding: calc(8px + var(--fit) * 12) 20px;
   position: relative;
   z-index: 1;
+  /* Firefox: スクロールバーの帯を消す（スクロールは効いたまま） */
+  scrollbar-width: none;
+  /* 旧Edge/IE: 同上 */
+  -ms-overflow-style: none;
+}
+
+/* WebKit/Chromium（Chrome・Safari・新Edge）: スクロールバーの帯を消す */
+.content::-webkit-scrollbar {
+  display: none;
 }
 
 /*
@@ -887,14 +918,15 @@ textarea {
 }
 
 /*
- * 口コミが付いた場所のスポットマーカー。
- * 形・番号の文字・大きさ（26px）は通常のスポットと同じ丸のままにし、色だけを変える。
- * 口コミのピンと同じ色で「誰の口コミの場所か」を示す。
+ * ルートで巡る口コミの場所のスポットマーカー。
+ * 形・番号・大きさは通常のスポットと同じ丸のまま、色だけを口コミのピンと同じ色にする。
  *   紫（is-review）               他の人の口コミの場所（--review-purple）
  *   オレンジ（is-review is-mine）  自分が口コミ投稿済みの場所（--review-orange）
- * 到達済み（is-visited）は背景をスタンプ画像に差し替えるため、こちらの色より後で上書きされる。
+ * 押すと口コミを開くためボタン要素で作るので、ボタンの既定の余白と書体を打ち消す。
  */
 .spot-marker.is-review {
+  padding: 0;
+  font-family: inherit;
   background: var(--review-purple);
 }
 
@@ -908,9 +940,32 @@ textarea {
   color: var(--text-dark);
 }
 
-/* 到達済みは口コミの場所も通常と同じ足跡のスタンプにする（紫・オレンジを残さない） */
+/*
+ * 到達済みは通常のスポットと同じ足跡のスタンプにする（紫・オレンジを残さない）。
+ * .spot-marker.is-review（と is-mine）が先に背景を塗るため、ここで指定し直す。
+ */
 .spot-marker.is-review.is-visited {
   background: url('../images/spot-visited-stamp.png') center / cover no-repeat;
+}
+
+/*
+ * 選択中（口コミを開いている場所）。
+ * 中心を座標に合わせているため大きさは変えず、外側に輪を重ねて目立たせ、前面へ出す。
+ * 輪の色は丸と同じ意味の色にする（他の人の口コミは紫、自分の口コミはオレンジ）。
+ */
+.spot-marker.is-review.is-selected {
+  z-index: 1;
+  box-shadow:
+    0 0 0 2px var(--white),
+    0 0 0 5px var(--review-purple),
+    var(--shadow-marker);
+}
+
+.spot-marker.is-review.is-mine.is-selected {
+  box-shadow:
+    0 0 0 2px var(--white),
+    0 0 0 5px var(--review-orange),
+    var(--shadow-marker);
 }
 
 /*
@@ -1129,11 +1184,14 @@ textarea {
   background: var(--review-purple);
 }
 
+
+
 /*
  * 下部アクション。
  * 画面の下端に敷く紙。上辺に金の罫線を引いて、地図と操作の境目を示す。
  */
 .bottom-actions {
+  touch-action: manipulation; /* 理由は共通ルールのコメント */
   padding: calc(10px + var(--fit) * 10) 20px calc(12px + var(--fit) * 16);
   background: var(--surface);
   border-top: 2px solid var(--border-ink);
@@ -1208,6 +1266,7 @@ textarea {
 
 /* ポップアップ */
 .popup {
+  touch-action: manipulation; /* 理由は上の共通ルールのコメント */
   position: fixed;
   inset: 0;
   background: rgba(40,30,55,0.55);

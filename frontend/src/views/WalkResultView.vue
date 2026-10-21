@@ -1,14 +1,12 @@
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
-import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
+import MascotLevelUpCelebration from '@/components/feature/mascot/MascotLevelUpCelebration.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import WalkResultStats from '@/components/feature/walk/WalkResultStats.vue';
-import { useToastMessage } from '@/composables/useToastMessage';
-import { useWalkResultSave } from '@/composables/useWalkResultSave';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
@@ -19,24 +17,36 @@ import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
  * ルート作成時の予測値は使わない。
  * 労いの言葉はマスコットが吹き出しで話す。
  *
- * 実績のサーバーへの保存もこの画面で起こす。案内画面で起こすと、`router.push` の
- * 直後に案内画面が破棄され、保存の成否を結果画面から読めなくなる。
- * この画面で起こせば、保存の起点と結果の表示先が同じコンポーネントに収まる。
- * 案内画面側は `endWalk()` → `push` だけなので、保存を一切待たない。
+ * 実績の保存・取り直し・レベルアップ判定は、この画面へ来る前（案内画面の終了処理）で
+ * すべて済ませている。遷移してきた時点で経験値もレベルも確定しているため、
+ * この画面は保存の成否を気にせず、確定した値を表示するだけでよい。
+ * レベルアップがあった場合は、結果の本体を隠したままお祝い演出を先に見せ、
+ * 閉じてから結果を見せる（結果が一瞬ちらつくのを防ぐ）。
  */
 const router = useRouter();
 const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
-const {
-  message: toastMessage,
-  showMessage,
-  hideMessage
-} = useToastMessage();
-// 保存中であることは画面に出さないため isSaving は受け取らない。
-// 実績は既に確定していて利用者の操作を待たせる必要がなく、
-// スピナーを出すとかえって失敗したように見える
-const { saveErrorMessage, saveCurrentWalkResult } = useWalkResultSave();
+
+/**
+ * お祝い演出を表示中かどうか。
+ * 遷移前に積まれたレベルアップ（pendingLevelUpLevels）があれば、最初から表示する。
+ * 演出を出している間は結果の本体を隠し、「演出 → 結果」の順に見せる。
+ */
+const isCelebrationVisible = ref(mascotStore.pendingLevelUpLevels.length > 0);
+
+/** 演出で順に見せるレベルの一覧（経由レベルを含む昇順）。遷移前に積まれたものを読む */
+const celebrationLevels = computed(() => mascotStore.pendingLevelUpLevels);
+
+/**
+ * @description お祝い演出を閉じる。最後の段で閉じたときに呼ばれる。
+ * 積んだレベルアップを消して、次に結果画面へ来たとき再演されないようにする。
+ * @returns {void}
+ */
+const closeCelebration = () => {
+  isCelebrationVisible.value = false;
+  mascotStore.clearPendingLevelUp();
+};
 
 /**
  * 計測状態に応じた注記。注記が不要な場合はnull。
@@ -53,20 +63,6 @@ const measurementNote = computed(() => {
   }
 
   return null;
-});
-
-// 描画された時点のストアには確定した実績が入っている（endWalk は遷移前に呼ばれる）。
-// 「ホームに戻る」の resetWalk() より前に送る内容を確定させるため、ここで起こす
-onMounted(async () => {
-  const isSucceeded = await saveCurrentWalkResult();
-
-  if (!isSucceeded) {
-    showMessage(saveErrorMessage.value ?? '実績を保存できませんでした');
-  }
-
-  // 保存の後に取り直すことで、今終えた散歩の分を含めたレベルと経験値が見える。
-  // 保存に失敗した場合でも呼ぶ（値は前のままだが、取り直しても害はない）
-  await mascotStore.loadExperience();
 });
 
 /**
@@ -100,13 +96,22 @@ const handleReturnHome = () => {
       <div class="paper-map-bg" />
     </template>
 
-    <BaseToast
-      v-if="toastMessage"
-      :message="toastMessage"
-      @close="hideMessage"
+    <!--
+      レベルアップ演出。今回の散歩でレベルが上がったときだけ、結果の本体より手前に出す。
+      遷移前に判定済みのため最初から表示でき、結果が一瞬ちらつかない。
+      閉じると（最後の段で close）結果の本体だけが残る。
+    -->
+    <MascotLevelUpCelebration
+      v-if="isCelebrationVisible"
+      :levels="celebrationLevels"
+      @close="closeCelebration"
     />
 
-    <div class="result-content">
+    <!-- 演出中は結果の本体を隠し、閉じてから見せる（演出 → 結果の順にする） -->
+    <div
+      v-if="!isCelebrationVisible"
+      class="result-content"
+    >
       <div class="result-body">
         <MascotSpeechBubble
           class="result-mascot"
@@ -122,7 +127,7 @@ const handleReturnHome = () => {
             {{ mascotSubMessage }}
           </p>
 
-          <!-- 今終えた散歩の分を含めた経験値を出す（保存の直後に取り直している） -->
+          <!-- 今終えた散歩の分を含めた経験値を出す（遷移前に取り直し済み） -->
           <template
             v-if="mascotStore.hasExperience"
             #experience

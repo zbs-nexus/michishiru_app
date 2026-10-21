@@ -57,9 +57,11 @@ inclusion: always
 | スポット | spot | ユーザーが立ち寄る場所（公園・神社・カフェ等） |
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
-| 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から選択された距離以内にある口コミが付いた場所（近い順）。ルートの候補に混ぜる |
-| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では丸のまま色を描き分ける（`spot-marker is-review`）。他の人の口コミの場所は紫（`--review-purple`）、自分の口コミの場所はオレンジ（isMyReviewSpot） |
-| 自分の口コミの場所か | isMyReviewSpot | ルートの口コミの場所（isReviewSpot が真）のうち、自分が口コミ投稿済みの場所か。地図では丸のまま色をオレンジ（`--review-orange`）に描き分ける（`spot-marker is-review is-mine`）。判定は地図のオレンジのピン（myReviews）と同じく自分の口コミ（`GSI-UserReview`）で行い、ルート作成時点で決める。口コミの場所でないスポットでは常に偽 |
+| 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から選択された距離以内にある口コミが付いた場所（平均評価の高い順）。ルートの候補に混ぜる |
+| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では番号の丸で描き、押すと口コミを開く（`spot-marker is-review`）。他の人の口コミの場所は紫（`--review-purple`）、自分の口コミの場所はオレンジ（isMyReviewSpot）。その場所の口コミのピンは重ねて描かない |
+| 自分の口コミの場所か | isMyReviewSpot | ルートの口コミの場所（isReviewSpot が真）のうち、自分が口コミ投稿済みの場所か。地図では番号の丸の色をオレンジ（`--review-orange`）に描き分ける（`spot-marker is-review is-mine`）。判定は地図のオレンジのピン（myReviews）と同じく自分の口コミ（`GSI-UserReview`）を reviewSpotId と突き合わせて行い、ルート作成時点で決める。口コミの場所でないスポットでは常に偽 |
+| 巡る口コミの場所のID | reviewSpotId | ルートのスポットのもとになった口コミの場所の spotId。ピンを押して口コミを開くために使う。口コミの場所でなければ null |
+| 巡る口コミの場所の元の座標 | reviewPosition | 口コミのピンの位置 `{ lng, lat }`。経路へ寄せた座標（lng / lat）とは別で、口コミの解決（半径40m）にはこちらを使う。API では reviewLng / reviewLat |
 | チェーン店か | isChain | Places の候補がチェーン店か（`BusinessChains` を持つ）。選ぶ優先順位を下げる |
 | スポットのカテゴリ | spotCategory | スポット検索に渡す種別（Places のカテゴリ） |
 | スポットのカテゴリID | spotCategoryId | `spotCategory` を識別する値。カテゴリマスタが持つ |
@@ -211,7 +213,7 @@ inclusion: always
 選択中のピンは色を変えず、大きくして（`--pin-size`）縁・影を強め前面へ出す（`is-selected`）。
 色は意味に固定しているため、選択という別の意味に色を使わない。
 
-ルートのスポットのうち口コミの場所も、同じ色の意味で塗り分ける（紫 = `spot-marker is-review` / オレンジ = `spot-marker is-review is-mine`）。色の値はピンと同じ変数（`--review-purple` / `--review-orange`）を使う。
+ルートのスポットのうち口コミの場所も、同じ色の意味で塗り分ける（紫 = `spot-marker is-review` / オレンジ = `spot-marker is-review is-mine`）。色の値はピンと同じ変数（`--review-purple` / `--review-orange`）を使う。選択中は大きさを変えず、丸と同じ色の輪を重ねて前面へ出す（`is-selected`）。
 
 ### マスコット
 
@@ -249,6 +251,14 @@ inclusion: always
 | 上限レベルかどうか | isMaxLevel | Lv.10 に達しているか |
 | 実績を取得できたかどうか | hasExperience | 取得に失敗した場合は false。バーを出さず Lv.1 で続ける |
 | 経験値バー | MascotExperienceBar | レベル内の進捗を示すバー（コンポーネント名） |
+| レベルアップ演出 | MascotLevelUpCelebration | 散歩結果画面で、今回の散歩でレベルが上がったときに全画面で祝う演出（コンポーネント名） |
+| 見せるレベルの一覧 | celebrationLevels | レベルアップ演出で順に見せるレベルの昇順の配列（経由レベルを含む。例: `[4, 5]`）。開始レベルの次から到達レベルまでが入る |
+| 保留中のレベルアップ | pendingLevelUpLevels | 直近の散歩で上がったレベルの一覧（経由レベルを含む昇順）。案内画面の終了処理で判定して積み、結果画面が読んでお祝い演出に見せる。画面をまたいで受け渡すため `mascotStore` に持つ。空ならレベルアップなし |
+| 取り直してレベルアップを判定する | refreshAndDetectLevelUp | 散歩を終えた後、実績の保存が終わってから呼ぶ `mascotStore` のアクション。実績を取り直し、取り直す前後のレベルを比べてレベルアップを `pendingLevelUpLevels` へ積む。検知をこのアクションに閉じ込めることで、ホーム・提案画面での `loadExperience()` では誤発火しない |
+| 保留中のレベルアップを消す | clearPendingLevelUp | 結果画面で演出を閉じたときに呼ぶ `mascotStore` のアクション。`pendingLevelUpLevels` を空にし、次に結果画面へ来たとき同じ演出が再演されないようにする |
+| 散歩前のレベル | levelBeforeWalk | `refreshAndDetectLevelUp` が実績を取り直す前に控える、今回の散歩を含める前のレベル。これと取り直した後のレベルを比べてレベルアップを判定する。実績未取得なら `null`（比較できないため演出を出さない）。`mascotStore` 内のローカル変数 |
+| 演出を表示中かどうか | isCelebrationVisible | レベルアップ演出を表示中かどうか。`WalkResultView.vue` の状態。遷移前に積まれた `pendingLevelUpLevels` があれば最初から真にし、演出 → 結果の順に見せる |
+| 記録中かどうか | isFinishing | 終了ボタンを押してから結果画面へ進むまで、保存・取り直し・判定の通信を待つ間だけ真にする状態。その間は「記録中…」を全画面で出し、終了の二度押しを塞ぐ。`RouteNavigationView.vue` の状態 |
 
 `variant` は `BaseToast` でも同名で使っているが、値は別（トーストは `error` / `omakase`）。どちらもその部品の「見た目の種類」を指す語として使う。
 
@@ -268,6 +278,7 @@ inclusion: always
 | 座標列 | coordinates | `geometry` が持つ `[経度, 緯度]` の配列。経路上の座標点（= `waypoint`）の集まり |
 | 表示範囲 | bounds | 地図に収める矩形。`[[南西の経度, 緯度], [北東の経度, 緯度]]` |
 | 地図スタイル | mapStyle | 地図の見た目とタイル配信元の定義 |
+| ズームボタンの上端 | mapControlsTopPx / controlsTopPx | 案内画面で地図のズームボタンを置く上端（ピクセル）。前後のボタンの段の下端＋余白。目的地の名前でバナーが伸びるため測って追従させる。View では `mapControlsTopPx`、`RouteNavigationMap` の props では `controlsTopPx` |
 
 ### 環境とデプロイ
 
@@ -431,4 +442,7 @@ inclusion: always
 | 2026/10/21 | 案内中に前の目的地へ戻すボタンの追加に伴い「ルートとスポット」へ returnToPreviousSpot / canReturnToPreviousSpot を追加。visitedSpotIds の「到達後は未到達へ戻さない」を、returnToPreviousSpot でのみ戻す旨へ変更 |
 | 2026/10/21 | 口コミの場所を巡るルートの生成とチェーン店の優先度の引き下げに伴い「ルートとスポット」へ reviewCandidates / isReviewSpot / isChain を追加 |
 | 2026/10/21 | 案内中の経路の区間ごとの描き分けに伴い「ルートとスポット」へ leg / legs / legCoordinates / currentLegIndex / legSections / walkedLegs / currentLeg / upcomingLegs を追加 |
+| 2026/10/14 | 散歩結果画面のレベルアップ演出の追加に伴い「マスコット」へ MascotLevelUpCelebration / celebrationLevels / levelBeforeWalk / isCelebrationVisible / useMascotLevelUp を追加 |
+| 2026/10/21 | レベルアップの判定を案内画面の終了処理へ移し検知ロジックを mascotStore へ集約したことに伴い「マスコット」へ pendingLevelUpLevels / refreshAndDetectLevelUp / clearPendingLevelUp / isFinishing を追加。levelBeforeWalk を mascotStore 内のローカル変数へ、isCelebrationVisible を WalkResultView.vue の状態へ説明変更。useMascotLevelUp は役割が mascotStore へ移ったため削除 |
+| 2026/10/21 | 案内画面の次の目的地の名前を省略せず全文出し、前後のボタンと重ならないよう上部の操作を縦に積んだことに伴い「地図」へ mapControlsTopPx / controlsTopPx を追加 |
 | 2026/10/21 | ルートの口コミの場所を自分の口コミ（オレンジ）と他の人の口コミ（紫）に描き分けたことに伴い「ルートとスポット」へ isMyReviewSpot を追加。isReviewSpot の説明と、口コミのピンの色の表の注記（ルートのスポットも同じ色の意味）を更新 |

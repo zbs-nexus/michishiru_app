@@ -19,13 +19,21 @@ const baseConditions = {
 };
 
 describe('buildRoutePlanPrompt', () => {
-  it('口コミの場所を2割程度・最低1か所含めるよう指示し、距離を優先させる', () => {
+  it('口コミの場所を4割程度を目安に、最低1か所・多くても4割まで含めるよう指示し、距離を優先させる', () => {
     const prompt = buildRoutePlanPrompt(baseConditions);
 
     assert.match(prompt, /"isReviewSpot": true の候補は、利用者の口コミが付いた場所です/);
-    assert.match(prompt, /2割程度/);
-    assert.match(prompt, /最低1か所/);
+    assert.match(prompt, /4割程度を目安に/);
+    assert.match(prompt, /最低1か所、多くても4割までを口コミの場所にしてください/);
+    // 以前の指示（2割）が残っていない
+    assert.doesNotMatch(prompt, /2割/);
     assert.match(prompt, /合計距離を目標距離に収めることを最優先/);
+  });
+
+  it('口コミの場所の中では平均評価の高いものを優先するよう指示する', () => {
+    const prompt = buildRoutePlanPrompt(baseConditions);
+
+    assert.match(prompt, /"ratingAverage"（5段階の平均評価）が\s*高いものを優先して選んでください/);
   });
 
   it('チェーン店の優先順位を下げるよう指示する', () => {

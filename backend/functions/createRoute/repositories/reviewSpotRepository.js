@@ -100,7 +100,7 @@ const sendWithRetry = async (command, failureMessage) => {
  * 場所メタ行は `sk = 'SPOT'` で揃っているため、GSI-SpotList（PK=sk）を使うと
  * Scan を使わずに Query 1回で引ける。現在地からの距離による絞り込みはService層が行う。
  * GSI-GeoCell（40m四方のセル）で数kmの範囲を引くと数千回の Query が必要になるため使わない。
- * @returns {Promise<Array<{spotId: string, name: string, genreId: string|null, position: number[], ratingAverage: number}>>} 口コミの場所の一覧
+ * @returns {Promise<Array<{spotId: string, name: string, genreId: string|null, position: number[], ratingAverage: number, ratingCount: number}>>} 口コミの場所の一覧
  * @throws {ApplicationError} データストアへのアクセスに失敗した場合
  */
 export const listReviewSpots = async () => {
@@ -123,7 +123,8 @@ export const listReviewSpots = async () => {
     const ratingSum = Number(item.ratingSum ?? 0);
 
     return {
-      // 自分が口コミ投稿済みの場所かを、口コミ行の spotId と突き合わせて見分けるために使う
+      // 地図で口コミのピンとして描き、押したときに口コミを開くために返す。
+      // 自分が口コミ投稿済みの場所かを、口コミ行の spotId と突き合わせて見分けるのにも使う
       spotId: item.spotId,
       name: item.spotName,
       // 投稿時に選んだジャンル（検索条件マスタの genreId）。検索条件との突き合わせに使う
@@ -131,7 +132,9 @@ export const listReviewSpots = async () => {
       // Places の候補と同じ [経度, 緯度] の形に揃える
       position: [Number(item.position?.lng), Number(item.position?.lat)],
       // 平均評価は保存せず、合計と件数から都度算出する（getSpot と同じ扱い）
-      ratingAverage: ratingCount === 0 ? 0 : ratingSum / ratingCount
+      ratingAverage: ratingCount === 0 ? 0 : ratingSum / ratingCount,
+      // 平均評価が同じときに、口コミの多い場所を優先するために返す
+      ratingCount
     };
   });
 };

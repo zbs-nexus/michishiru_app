@@ -90,7 +90,8 @@ describe('listReviewSpots', () => {
         name: '中央公園の東屋',
         genreId: 'nature',
         position: [139.70451, 35.68721],
-        ratingAverage: 4.5
+        ratingAverage: 4.5,
+        ratingCount: 2
       }
     ]);
   });

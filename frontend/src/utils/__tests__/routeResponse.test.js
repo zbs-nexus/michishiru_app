@@ -67,9 +67,70 @@ describe('toRoute（口コミの場所の目印）', () => {
       spotType: null,
       icon: null,
       isReviewSpot: true,
-      isMyReviewSpot: false
+      isMyReviewSpot: false,
+      // IDと元の座標を返さない応答では、口コミを開けないため null にする
+      reviewSpotId: null,
+      reviewPosition: null
     });
     expect(route.distanceKm).toBe(3);
+  });
+});
+
+describe('toRoute（口コミの場所を開くための情報）', () => {
+  test('口コミの場所のIDと元の座標を、口コミを開くための情報として渡す', () => {
+    const route = toRoute(
+      buildPayload([
+        {
+          name: '口コミの場所',
+          lng: 139.7046,
+          lat: 35.6872,
+          isReviewSpot: true,
+          reviewSpotId: 'review-1',
+          reviewLng: 139.7045,
+          reviewLat: 35.6873
+        }
+      ])
+    );
+
+    expect(route.spots[0].reviewSpotId).toBe('review-1');
+    expect(route.spots[0].reviewPosition).toEqual({ lng: 139.7045, lat: 35.6873 });
+    // 案内に使う座標（経路へ寄せた座標）は別のまま
+    expect(route.spots[0].lng).toBe(139.7046);
+  });
+
+  test('IDか座標のどれかが欠けていれば、すべて null にする（半端な情報で開かせない）', () => {
+    const route = toRoute(
+      buildPayload([
+        { name: 'IDなし', lng: 139.7, lat: 35.6, isReviewSpot: true, reviewLng: 139.7, reviewLat: 35.6 },
+        { name: '空のID', lng: 139.7, lat: 35.6, isReviewSpot: true, reviewSpotId: '', reviewLng: 139.7, reviewLat: 35.6 },
+        { name: '経度なし', lng: 139.7, lat: 35.6, isReviewSpot: true, reviewSpotId: 'r', reviewLat: 35.6 },
+        { name: '緯度が文字', lng: 139.7, lat: 35.6, isReviewSpot: true, reviewSpotId: 'r', reviewLng: 139.7, reviewLat: '35.6' }
+      ])
+    );
+
+    route.spots.forEach((spot) => {
+      expect(spot.reviewSpotId).toBeNull();
+      expect(spot.reviewPosition).toBeNull();
+    });
+  });
+
+  test('口コミの場所でないスポットは、IDが付いていても口コミを開く情報にしない', () => {
+    const route = toRoute(
+      buildPayload([
+        {
+          name: '公園',
+          lng: 139.703,
+          lat: 35.686,
+          isReviewSpot: false,
+          reviewSpotId: 'review-1',
+          reviewLng: 139.703,
+          reviewLat: 35.686
+        }
+      ])
+    );
+
+    expect(route.spots[0].reviewSpotId).toBeNull();
+    expect(route.spots[0].reviewPosition).toBeNull();
   });
 });
 
