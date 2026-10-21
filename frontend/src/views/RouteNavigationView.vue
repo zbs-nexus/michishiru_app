@@ -765,7 +765,8 @@ const handleConfirmEnd = () => {
 
 /*
  * 「前の目的地」ボタン。次の目的地バナーの左下に置き、左端をバナーの左端に揃える。
- * 主操作の「次の目的地へ」と区別するため、白地に紫の文字・枠線にする。
+ * 枠・影・大きさは「次の目的地へ」と同じにする。
+ * 主操作の「次の目的地へ」と区別するため、面だけ羊皮紙の色に紫の文字にする。
  */
 .previous-spot-btn {
   position: fixed;
@@ -780,15 +781,16 @@ const handleConfirmEnd = () => {
   font-size: 12px;
   font-weight: 600;
   color: var(--primary-color);
-  background: var(--white);
-  border: 1px solid var(--primary-color);
-  border-radius: 999px;
+  background: var(--surface);
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }
 
 .previous-spot-btn:active {
-  background: var(--bg-light);
+  background: var(--bg-deep);
 }
 
 /*
