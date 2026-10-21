@@ -94,6 +94,28 @@ const toLegs = (items) => {
  * @returns {object[]} スポットの一覧
  */
 const toSpots = (items) => {
+  /**
+   * @description 口コミの場所を開くための情報を取り出す。
+   * IDと座標が揃っていないと口コミを開けないため、どれか欠けていればすべて null にする。
+   * @param {object} item APIが返した立ち寄り先
+   * @returns {{reviewSpotId: string|null, reviewPosition: {lng: number, lat: number}|null}} 口コミの場所の情報
+   */
+  const toReviewSpotLink = (item) => {
+    const isLinkable =
+      item.isReviewSpot === true &&
+      typeof item.reviewSpotId === 'string' &&
+      item.reviewSpotId !== '' &&
+      Number.isFinite(item.reviewLng) &&
+      Number.isFinite(item.reviewLat);
+
+    return isLinkable
+      ? {
+        reviewSpotId: item.reviewSpotId,
+        reviewPosition: { lng: item.reviewLng, lat: item.reviewLat }
+      }
+      : { reviewSpotId: null, reviewPosition: null };
+  };
+
   if (!Array.isArray(items)) {
     return [];
   }
@@ -106,8 +128,11 @@ const toSpots = (items) => {
     lng: Number.isFinite(item.lng) ? item.lng : null,
     spotType: item.spotType ?? item.type ?? null,
     icon: item.icon ?? null,
-    // 口コミが付いた場所か。地図で星の形に描き分ける（古い応答には無いため false 扱い）
-    isReviewSpot: item.isReviewSpot === true
+    // 口コミが付いた場所か。地図で口コミのピンとして描く（古い応答には無いため false 扱い）
+    isReviewSpot: item.isReviewSpot === true,
+    // 口コミの場所のIDと元の座標（口コミのピンの位置）。ピンを押して口コミを開くときに使う。
+    // 口コミの場所でない、または古い応答で持たない場合は null
+    ...toReviewSpotLink(item)
   }));
 };
 
