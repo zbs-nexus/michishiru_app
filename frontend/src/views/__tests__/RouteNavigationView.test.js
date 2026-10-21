@@ -3,6 +3,9 @@ import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
+import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
+import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
+import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
 
 /**
@@ -95,6 +98,37 @@ const recoverTracking = () => receivePosition();
  * @returns {object} マウントした wrapper
  */
 const mountNavigationView = () => mount(RouteNavigationView, { shallow: true });
+
+/** 案内に使う3スポット。巡る順に並べる */
+const NAVIGATION_SPOTS = [
+  { spotId: 'spot-1', name: 'A', lat: 35.69, lng: 139.7 },
+  { spotId: 'spot-2', name: 'B', lat: 35.691, lng: 139.701 },
+  { spotId: 'spot-3', name: 'C', lat: 35.692, lng: 139.702 }
+];
+
+/**
+ * @description ルートを用意して案内画面を shallow で描画する。
+ * shallow のままでは DefaultLayout のスロットが描画されず画面内のボタンを押せないため、
+ * スロットだけを描画するスタブに差し替える
+ * @param {object[]} [legs] 区間ごとの線。既定は区間なし（従来の応答）
+ * @returns {object} マウントした wrapper
+ */
+const mountNavigationViewWithRoute = (legs) => {
+  useRouteStore().setCurrentRoute({
+    spots: NAVIGATION_SPOTS,
+    geometry: null,
+    ...(legs === undefined ? {} : { legs })
+  });
+
+  return mount(RouteNavigationView, {
+    shallow: true,
+    global: {
+      stubs: {
+        DefaultLayout: { template: '<div><slot /><slot name="footer" /></div>' }
+      }
+    }
+  });
+};
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -271,5 +305,209 @@ describe('RouteNavigationView の画面の切り替えによる欠落の記録',
 
     // 購読が残っていると、案内していない間の画面の切り替えで欠落が記録される
     expect(walkStore.hasMeasurementGap).toBe(false);
+  });
+});
+
+describe('RouteNavigationView の前の目的地に戻るボタン', () => {
+  test('開始直後（1スポット目）は戻るボタンを出さない', () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    expect(wrapper.find('.previous-spot-btn').exists()).toBe(false);
+    expect(wrapper.find('.next-spot-btn').exists()).toBe(true);
+  });
+
+  test('進めると戻るボタンが出て、押すと1つ前の目的地に戻り足跡の元データも消える', async () => {
+    const walkStore = useWalkStore();
+    const wrapper = mountNavigationViewWithRoute();
+
+    await wrapper.find('.next-spot-btn').trigger('click');
+
+    expect(wrapper.find('.previous-spot-btn').exists()).toBe(true);
+    expect(walkStore.visitedSpotIds).toEqual(['spot-1']);
+    expect(wrapper.findComponent(RouteNextSpotBanner).props('spotName')).toBe('B');
+
+    await wrapper.find('.previous-spot-btn').trigger('click');
+
+    expect(wrapper.find('.previous-spot-btn').exists()).toBe(false);
+    expect(walkStore.visitedSpotIds).toEqual([]);
+    expect(wrapper.findComponent(RouteNextSpotBanner).props('spotName')).toBe('A');
+  });
+
+  test('すべて巡った後も戻るボタンを出し、押すと最後のスポットの案内に戻る', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    for (let count = 0; count < NAVIGATION_SPOTS.length; count += 1) {
+      await wrapper.find('.next-spot-btn').trigger('click');
+    }
+
+    expect(wrapper.find('.next-spot-btn').exists()).toBe(false);
+    expect(wrapper.find('.previous-spot-btn').exists()).toBe(true);
+
+    await wrapper.find('.previous-spot-btn').trigger('click');
+
+    expect(wrapper.find('.next-spot-btn').exists()).toBe(true);
+    expect(wrapper.findComponent(RouteNextSpotBanner).props('spotName')).toBe('C');
+  });
+
+  test('1本にまとめた口コミの切り替えが、それぞれの表示状態を持つ', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+    const mineToggle = wrapper.find('.review-toggle-mine');
+    const otherToggle = wrapper.find('.review-toggle-other');
+
+    expect(mineToggle.attributes('aria-pressed')).toBe('true');
+    expect(otherToggle.attributes('aria-pressed')).toBe('true');
+
+    await mineToggle.trigger('click');
+
+    expect(mineToggle.attributes('aria-pressed')).toBe('false');
+    expect(mineToggle.classes()).not.toContain('is-on');
+    expect(otherToggle.attributes('aria-pressed')).toBe('true');
+  });
+});
+
+describe('RouteNavigationView の区間の描き分け', () => {
+  /** 4区間（開始→A、A→B、B→C、C→開始） */
+  const NAVIGATION_LEGS = [0, 1, 2, 3].map((index) => ({
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.7 + index * 0.001, 35.69],
+        [139.7 + (index + 1) * 0.001, 35.69]
+      ]
+    }
+  }));
+
+  /** 各区間の線 */
+  const legGeometries = NAVIGATION_LEGS.map((leg) => leg.geometry);
+
+  /**
+   * @description 地図へ渡した区間の描き分けを取り出す
+   * @param {object} wrapper マウントした wrapper
+   * @returns {object|null} 区間の描き分け
+   */
+  const legSectionsOf = (wrapper) =>
+    wrapper.findComponent(RouteNavigationMap).props('legSections');
+
+  test('開始直後は開始地点→1スポット目が今の区間で、歩き終えた区間は無い', () => {
+    const wrapper = mountNavigationViewWithRoute(NAVIGATION_LEGS);
+
+    expect(legSectionsOf(wrapper)).toEqual({
+      walkedLegs: [],
+      currentLeg: legGeometries[0],
+      upcomingLegs: [legGeometries[1], legGeometries[2], legGeometries[3]]
+    });
+  });
+
+  test('次の目的地へ進めると今の区間が切り替わり、戻すと元に戻る', async () => {
+    const wrapper = mountNavigationViewWithRoute(NAVIGATION_LEGS);
+
+    await wrapper.find('.next-spot-btn').trigger('click');
+
+    expect(legSectionsOf(wrapper).currentLeg).toEqual(legGeometries[1]);
+    expect(legSectionsOf(wrapper).walkedLegs).toEqual([legGeometries[0]]);
+
+    await wrapper.find('.previous-spot-btn').trigger('click');
+
+    expect(legSectionsOf(wrapper).currentLeg).toEqual(legGeometries[0]);
+    expect(legSectionsOf(wrapper).walkedLegs).toEqual([]);
+  });
+
+  test('すべて巡ると最終スポット→開始地点の帰り道が今の区間になる', async () => {
+    const wrapper = mountNavigationViewWithRoute(NAVIGATION_LEGS);
+
+    for (let count = 0; count < NAVIGATION_SPOTS.length; count += 1) {
+      await wrapper.find('.next-spot-btn').trigger('click');
+    }
+
+    expect(legSectionsOf(wrapper)).toEqual({
+      walkedLegs: [legGeometries[0], legGeometries[1], legGeometries[2]],
+      currentLeg: legGeometries[3],
+      upcomingLegs: []
+    });
+  });
+
+  test('区間を持たないルートでは描き分けず、経路を1色で描く（null を渡す）', () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    expect(legSectionsOf(wrapper)).toBeNull();
+  });
+});
+
+describe('RouteNavigationView の画面上部の並び', () => {
+  test('バナー・前後のボタン・口コミの表示切り替えを1つの入れ物に上から順に積む', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    // 前の目的地も出るよう、1つ進めておく
+    await wrapper.find('.next-spot-btn').trigger('click');
+
+    const top = wrapper.find('.navigation-top');
+    const bannerEl = wrapper.findComponent(RouteNextSpotBanner).element;
+    const rowEl = wrapper.find('.spot-step-row').element;
+    const togglesEl = wrapper.find('.review-toggles').element;
+
+    // 固定の top で個別に置くと、名前でバナーが伸びたときに重なるため、同じ入れ物で積む
+    expect([...top.element.children]).toEqual([bannerEl, rowEl, togglesEl]);
+
+    // 前後のボタンは同じ段に並べる（前が左、次が右）
+    const rowButtons = [...rowEl.querySelectorAll('button')].map((button) => button.className);
+    expect(rowButtons).toEqual(['previous-spot-btn', 'next-spot-btn']);
+  });
+
+  test('地図のズームボタンは、前後のボタンの段の下端＋余白に置く', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ bottom: 150.2 });
+
+    const wrapper = mountNavigationViewWithRoute();
+    // 描画後に測るため、測った値が地図へ渡るのは次の描画
+    await nextTick();
+
+    // 151（切り上げ）+ 余白8
+    expect(wrapper.findComponent(RouteNavigationMap).props('controlsTopPx')).toBe(159);
+  });
+
+  test('バナーの高さが変わったら、ズームボタンの位置を測り直し、画面を離れたら見張りをやめる', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 130 });
+    const observed = [];
+    const disconnect = vi.fn();
+    let resizeCallback = null;
+
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback) {
+          resizeCallback = callback;
+        }
+
+        observe(element) {
+          observed.push(element);
+        }
+
+        disconnect() {
+          disconnect();
+        }
+      }
+    );
+
+    try {
+      const wrapper = mountNavigationViewWithRoute();
+      const map = () => wrapper.findComponent(RouteNavigationMap);
+      await nextTick();
+
+      expect(observed).toEqual([wrapper.findComponent(RouteNextSpotBanner).element]);
+      expect(map().props('controlsTopPx')).toBe(138);
+
+      // 長い名前でバナーが伸び、段が下がった
+      rectSpy.mockReturnValue({ bottom: 170 });
+      resizeCallback();
+      await nextTick();
+
+      expect(map().props('controlsTopPx')).toBe(178);
+
+      wrapper.unmount();
+      expect(disconnect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

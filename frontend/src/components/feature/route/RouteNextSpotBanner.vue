@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue';
 import MascotAvatar from '@/components/feature/mascot/MascotAvatar.vue';
+import { DEFAULT_MASCOT_LEVEL } from '@/constants/mascotLevels';
 
 /**
  * @description 案内中に、次の目的地を画面上部へ表示する。
@@ -9,8 +10,18 @@ import MascotAvatar from '@/components/feature/mascot/MascotAvatar.vue';
  * 歩きながら一瞥して読めることを優先し、見出しと距離を上段、
  * 目的地の名前を下段に置いて名前を大きく見せる。
  * 案内役のマスコットを左に添え、この帯が案内役の言葉に見えるようにする。
+ *
+ * 経験値バーは `experience` スロットでマスコットの下へ差し込む。
+ * この帯全体が role="status" / aria-live="polite" の中にあるため、
+ * バーは `size="small"` かつ `is-decorative` で渡すこと。
+ * そうしないと距離が変わるたびに経験値まで読み直される。
  */
 const props = defineProps({
+  /** マスコットのレベル。実績を取得できていない場合は既定（Lv.1）のまま */
+  mascotLevel: {
+    type: Number,
+    default: DEFAULT_MASCOT_LEVEL
+  },
   /** 次の目的地の名前。未取得の場合はnull */
   spotName: {
     type: String,
@@ -70,10 +81,16 @@ const distanceLabel = computed(() => {
       読み上げ範囲の中にあるため装飾として置く。
       距離が変わるたびにマスコットの説明が読み直されるのを防ぐ。
     -->
-    <MascotAvatar
-      size="small"
-      is-decorative
-    />
+    <div class="banner-mascot">
+      <MascotAvatar
+        :level="mascotLevel"
+        size="small"
+        is-decorative
+      />
+
+      <!-- 経験値バーは親が渡したときだけ立ち絵の下に出る -->
+      <slot name="experience" />
+    </div>
 
     <div class="banner-body">
       <p
@@ -110,26 +127,40 @@ const distanceLabel = computed(() => {
 /*
  * 屋外で歩きながら見るため、地図の上でも文字が沈まないよう
  * 背景は不透明にし、影を強めて地図から浮かせる。
- * 画面幅が広い場合もアプリの表示幅に合わせて中央へ寄せる。
+ * 置き場所（画面上部への固定・幅）は親が決め、この帯は親の幅いっぱいに広がる。
+ * 親が下にボタンを積むため、目的地の名前で帯が伸びても重ならない。
  * 左にマスコット、右に文言を置き、案内役が話している帯として見せる。
  */
 .next-spot-banner {
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
   display: flex;
   align-items: center;
   gap: 12px;
-  width: calc(100% - 24px);
-  max-width: 406px;
+  box-sizing: border-box;
+  width: 100%;
   padding: 10px 16px 10px 12px;
-  border-radius: 16px;
-  border: 2px solid var(--border-gold);
-  border-left: 5px solid var(--accent-green);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
-  box-shadow: 0 4px 16px rgba(58, 46, 32, 0.28);
+  background-clip: padding-box;
+  /*
+   * 左端の緑の帯で案内中であることを示す。
+   * border-image は辺ごとに色を変えられないため、border-left ではなく
+   * 内側の影（inset）で帯を引く。
+   */
+  box-shadow: inset 5px 0 0 var(--accent-green), var(--shadow-raised);
+}
+
+/*
+ * マスコットの側。立ち絵の下に経験値バーを積む。
+ * 幅は立ち絵に合わせるため指定せず、バー側が100%で追従する。
+ */
+.banner-mascot {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
 }
 
 /* 文言の側。マスコットの右に縦並びで置く */
@@ -164,17 +195,17 @@ const distanceLabel = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
-/* 目的地の名前。長い場合は2行まで表示する */
+/*
+ * 目的地の名前。どこへ向かうかを取り違えないよう、長くても省略せず全文を折り返して出す。
+ * 区切りの無い長い英数字（店名のローマ字など）も枠からはみ出さないよう、どこでも折り返す。
+ */
 .banner-name {
-  display: -webkit-box;
-  overflow: hidden;
   margin: 0;
   font-size: 19px;
   font-weight: 700;
   line-height: 1.35;
   color: var(--text-dark);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .banner-message {

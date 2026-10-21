@@ -57,6 +57,12 @@ inclusion: always
 | スポット | spot | ユーザーが立ち寄る場所（公園・神社・カフェ等） |
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
+| 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から選択された距離以内にある口コミが付いた場所（平均評価の高い順）。ルートの候補に混ぜる |
+| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では番号の丸で描き、押すと口コミを開く（`spot-marker is-review`）。他の人の口コミの場所は紫（`--review-purple`）、自分の口コミの場所はオレンジ（isMyReviewSpot）。その場所の口コミのピンは重ねて描かない |
+| 自分の口コミの場所か | isMyReviewSpot | ルートの口コミの場所（isReviewSpot が真）のうち、自分が口コミ投稿済みの場所か。地図では番号の丸の色をオレンジ（`--review-orange`）に描き分ける（`spot-marker is-review is-mine`）。判定は地図のオレンジのピン（myReviews）と同じく自分の口コミ（`GSI-UserReview`）を reviewSpotId と突き合わせて行い、ルート作成時点で決める。口コミの場所でないスポットでは常に偽 |
+| 巡る口コミの場所のID | reviewSpotId | ルートのスポットのもとになった口コミの場所の spotId。ピンを押して口コミを開くために使う。口コミの場所でなければ null |
+| 巡る口コミの場所の元の座標 | reviewPosition | 口コミのピンの位置 `{ lng, lat }`。経路へ寄せた座標（lng / lat）とは別で、口コミの解決（半径40m）にはこちらを使う。API では reviewLng / reviewLat |
+| チェーン店か | isChain | Places の候補がチェーン店か（`BusinessChains` を持つ）。選ぶ優先順位を下げる |
 | スポットのカテゴリ | spotCategory | スポット検索に渡す種別（Places のカテゴリ） |
 | スポットのカテゴリID | spotCategoryId | `spotCategory` を識別する値。カテゴリマスタが持つ |
 | スポット数 | spotCount | 立ち寄ったスポットの個数 |
@@ -69,9 +75,11 @@ inclusion: always
 | 所要時間 | duration | ルートの移動時間 |
 | 次の目的地 | nextSpot | 案内中にこれから向かうスポット |
 | 次の目的地までの距離 | distanceToNextM | 現在地から次の目的地までの直線距離（メートル） |
-| 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
+| 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達した順に並ぶ。未到達へ戻すのは returnToPreviousSpot（末尾の1件ずつ）のみ |
 | 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
-| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。`useRouteProgress.js` の関数 |
+| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。`useRouteProgress.js` の関数。誤って進めた場合は returnToPreviousSpot で戻す |
+| 前の目的地へ戻す | returnToPreviousSpot | 直前に到達済みにしたスポットを未到達へ戻し、次の目的地をそのスポットに戻すこと。足跡も消える。すべて巡った後も使える。`useRouteProgress.js` の関数 |
+| 前の目的地へ戻せるかどうか | canReturnToPreviousSpot | 到達済みのスポットが1件以上あるか。偽（1スポット目）のときは戻るボタンを出さない。`useRouteProgress.js` の computed |
 | 距離表示の丸め単位 | DISTANCE_ROUNDING_UNIT_M | 距離表示を丸める単位（メートル）。`RouteNextSpotBanner.vue` の定数 |
 | 採用する測位精度の上限 | MAX_ACCEPTABLE_ACCURACY_M | この値より精度が悪い測位は現在地に採用しない（メートル）。`useLocationTracking.js` の定数 |
 | 経路に沿った距離 | alongRouteDistanceM | 直線距離ではなく、経路の折れ線をたどった距離（メートル） |
@@ -93,6 +101,14 @@ inclusion: always
 | 計測状態 | measurementStatus | 実績をどこまで計測できたか。complete / partial / unavailable の3値 |
 | 計測の欠落があったかどうか | hasMeasurementGap | 画面を切られた・測位が途切れたことを検知したか |
 | 計測の欠落とみなす継続時間 | MEASUREMENT_GAP_THRESHOLD_MS | 測位の中断・画面の非表示がこの時間を超えたら欠落として扱う（ミリ秒）。`RouteNavigationView.vue` の定数 |
+| 区間 | leg | ルートを開始地点・スポットで区切った1区間。Routes の Legs に対応。legs[i] はスポット i へ向かう区間、最後は最終スポットから開始地点への帰り道 |
+| 区間の一覧 | legs | 巡る順に並んだ区間。数はスポット数+1。確かめられない場合は空 |
+| 区間ごとの座標列 | legCoordinates | routesRepository が返す区間ごとの座標列の配列 |
+| 今の区間の番号 | currentLegIndex | 到達済みのスポット数（visitedCount）と同じ値。全スポット到達後は帰り道の番号になる |
+| 区間の描き分け | legSections | walkedLegs / currentLeg / upcomingLegs にまとめたもの。toRouteLegSections（`utils/routeLegs.js`）が作る。null は1色で描く |
+| 歩き終えた区間 | walkedLegs | 灰色の破線で描く |
+| 今の区間 | currentLeg | 緑の太線＋白の縁取りで最前面に描く |
+| これからの区間 | upcomingLegs | 従来の経路の色で描く |
 | 最後に距離を積めた時刻 | lastDistanceAddedAt | 距離を加算できた最後の時刻。記録のみで、現時点では計測状態の判定には使っていない |
 
 ### 検索条件
@@ -197,6 +213,8 @@ inclusion: always
 選択中のピンは色を変えず、大きくして（`--pin-size`）縁・影を強め前面へ出す（`is-selected`）。
 色は意味に固定しているため、選択という別の意味に色を使わない。
 
+ルートのスポットのうち口コミの場所も、同じ色の意味で塗り分ける（紫 = `spot-marker is-review` / オレンジ = `spot-marker is-review is-mine`）。色の値はピンと同じ変数（`--review-purple` / `--review-orange`）を使う。選択中は大きさを変えず、丸と同じ色の輪を重ねて前面へ出す（`is-selected`）。
+
 ### マスコット
 
 アプリの案内役として各画面に登場するフクロウのキャラクター。画面に表示しているコメントを吹き出しで話させる。
@@ -218,8 +236,33 @@ inclusion: always
 | マスコットの表示サイズ | size | `small` / `medium` / `large` |
 | 装飾としての表示か | isDecorative | 真のとき代替テキストを空にし支援技術から隠す（読み上げの重複を防ぐ） |
 | レベル表示を出すか | hasLevelLabel | 真のとき `Lv.1 ミチのタマゴ` の表示を添える |
+| 経験値 | experiencePoints | 実績から求めるマスコットの成長の度合い |
+| 累計経験値 | totalExperiencePoints | 全実績から求めた経験値の合計 |
+| 次のレベルまでの必要経験値 | experienceToNextLevel | 現在のレベルから次へ上がるのに要する経験値。Lv.10 では持たない（`null`） |
+| 現在レベル内で獲得した経験値 | experienceInCurrentLevel | 累計経験値から現在レベルの到達しきい値を引いた値 |
+| レベル内進捗の割合 | levelProgressRatio | 0〜1。バーの塗りに使う |
+| レベルの進捗 | levelProgress | 現在レベル・レベル内の経験値・必要経験値・割合・上限かをまとめたもの |
+| レベル到達しきい値 | MASCOT_LEVEL_THRESHOLDS | 各レベルに到達する累計経験値。必要経験値の表から足し上げて導出する |
+| 各レベルの必要経験値 | MASCOT_LEVEL_REQUIREMENTS | Lv.1→2 から Lv.9→10 までの9段。経験値表の唯一の定義元 |
+| 投稿件数 | reviewCount | 利用者が投稿した口コミの件数（その場所に付いた件数の `ratingCount` とは別） |
+| 投稿1件あたりの経験値 | EXPERIENCE_PER_REVIEW | 100 |
+| 1kmあたりの経験値 | EXPERIENCE_PER_KM | 100 |
+| 1分あたりの経験値 | EXPERIENCE_PER_MINUTE | 10 |
+| 上限レベルかどうか | isMaxLevel | Lv.10 に達しているか |
+| 実績を取得できたかどうか | hasExperience | 取得に失敗した場合は false。バーを出さず Lv.1 で続ける |
+| 経験値バー | MascotExperienceBar | レベル内の進捗を示すバー（コンポーネント名） |
+| レベルアップ演出 | MascotLevelUpCelebration | 散歩結果画面で、今回の散歩でレベルが上がったときに全画面で祝う演出（コンポーネント名） |
+| 見せるレベルの一覧 | celebrationLevels | レベルアップ演出で順に見せるレベルの昇順の配列（経由レベルを含む。例: `[4, 5]`）。開始レベルの次から到達レベルまでが入る |
+| 保留中のレベルアップ | pendingLevelUpLevels | 直近の散歩で上がったレベルの一覧（経由レベルを含む昇順）。案内画面の終了処理で判定して積み、結果画面が読んでお祝い演出に見せる。画面をまたいで受け渡すため `mascotStore` に持つ。空ならレベルアップなし |
+| 取り直してレベルアップを判定する | refreshAndDetectLevelUp | 散歩を終えた後、実績の保存が終わってから呼ぶ `mascotStore` のアクション。実績を取り直し、取り直す前後のレベルを比べてレベルアップを `pendingLevelUpLevels` へ積む。検知をこのアクションに閉じ込めることで、ホーム・提案画面での `loadExperience()` では誤発火しない |
+| 保留中のレベルアップを消す | clearPendingLevelUp | 結果画面で演出を閉じたときに呼ぶ `mascotStore` のアクション。`pendingLevelUpLevels` を空にし、次に結果画面へ来たとき同じ演出が再演されないようにする |
+| 散歩前のレベル | levelBeforeWalk | `refreshAndDetectLevelUp` が実績を取り直す前に控える、今回の散歩を含める前のレベル。これと取り直した後のレベルを比べてレベルアップを判定する。実績未取得なら `null`（比較できないため演出を出さない）。`mascotStore` 内のローカル変数 |
+| 演出を表示中かどうか | isCelebrationVisible | レベルアップ演出を表示中かどうか。`WalkResultView.vue` の状態。遷移前に積まれた `pendingLevelUpLevels` があれば最初から真にし、演出 → 結果の順に見せる |
+| 記録中かどうか | isFinishing | 終了ボタンを押してから結果画面へ進むまで、保存・取り直し・判定の通信を待つ間だけ真にする状態。その間は「記録中…」を全画面で出し、終了の二度押しを塞ぐ。`RouteNavigationView.vue` の状態 |
 
 `variant` は `BaseToast` でも同名で使っているが、値は別（トーストは `error` / `omakase`）。どちらもその部品の「見た目の種類」を指す語として使う。
+
+`reviewCount` は口コミ節の `ratingCount` と混ざりやすい。`reviewCount` は「その利用者が投稿した件数」、`ratingCount` は「その場所に付いた件数」で、数える対象が別。
 
 ### 地図
 
@@ -235,6 +278,7 @@ inclusion: always
 | 座標列 | coordinates | `geometry` が持つ `[経度, 緯度]` の配列。経路上の座標点（= `waypoint`）の集まり |
 | 表示範囲 | bounds | 地図に収める矩形。`[[南西の経度, 緯度], [北東の経度, 緯度]]` |
 | 地図スタイル | mapStyle | 地図の見た目とタイル配信元の定義 |
+| ズームボタンの上端 | mapControlsTopPx / controlsTopPx | 案内画面で地図のズームボタンを置く上端（ピクセル）。前後のボタンの段の下端＋余白。目的地の名前でバナーが伸びるため測って追従させる。View では `mapControlsTopPx`、`RouteNavigationMap` の props では `controlsTopPx` |
 
 ### 環境とデプロイ
 
@@ -391,6 +435,14 @@ inclusion: always
 | 2026/10/14 | 写真の全画面表示（複数枚の送り）に伴い ReviewPhotoViewer / viewerPhotoUrls / viewerStartIndex / viewerIndex を追加。`SWIPE_THRESHOLD_PX` はフォームの高さ切り替えと写真の送りの2か所で使う（どちらもスワイプの判定量） |
 | 2026/10/14 | 口コミフォームを開く経路を長押しとピン選択で分けたことに伴い showReviewFormAt を追加。長押しは解決を待たず入力欄を出し、ピン選択は解決後に描く |
 | 2026/10/14 | 案内中に手動で次の目的地へ進めるボタンの追加に伴い「ルートとスポット」へ advanceToNextSpot / VISITED_STAMP_LABEL を追加 |
+| 2026/10/14 | マスコットの経験値レベルアップに伴い「マスコット」へ experiencePoints / totalExperiencePoints / experienceToNextLevel / experienceInCurrentLevel / levelProgressRatio / levelProgress / MASCOT_LEVEL_THRESHOLDS / MASCOT_LEVEL_REQUIREMENTS / reviewCount / EXPERIENCE_PER_REVIEW / EXPERIENCE_PER_KM / EXPERIENCE_PER_MINUTE / isMaxLevel / hasExperience / MascotExperienceBar を追加。`reviewCount` と `ratingCount` の違いを明記 |
 | 2026/10/14 | 次の目的地の切り替えをボタン操作のみにし、現在地からの到達判定を廃止したことに伴い ARRIVAL_THRESHOLD_M を削除 |
 | 2026/10/14 | 到達済みのスタンプを「済」の文字から足跡の画像（`assets/images/spot-visited-stamp.png`）に変更したことに伴い VISITED_STAMP_LABEL を削除 |
 | 2026/10/14 | ビル群での現在地のずれ対策（速さによる飛びの除外・経路への吸着表示）に伴い「ルートとスポット」へ displayLocation / isSnappedToRoute / MAX_SNAP_DEVIATION_M / MAX_WALKING_SPEED_MPS / jumpCandidate / MAX_CONSECUTIVE_JUMP_COUNT を追加 |
+| 2026/10/21 | 案内中に前の目的地へ戻すボタンの追加に伴い「ルートとスポット」へ returnToPreviousSpot / canReturnToPreviousSpot を追加。visitedSpotIds の「到達後は未到達へ戻さない」を、returnToPreviousSpot でのみ戻す旨へ変更 |
+| 2026/10/21 | 口コミの場所を巡るルートの生成とチェーン店の優先度の引き下げに伴い「ルートとスポット」へ reviewCandidates / isReviewSpot / isChain を追加 |
+| 2026/10/21 | 案内中の経路の区間ごとの描き分けに伴い「ルートとスポット」へ leg / legs / legCoordinates / currentLegIndex / legSections / walkedLegs / currentLeg / upcomingLegs を追加 |
+| 2026/10/14 | 散歩結果画面のレベルアップ演出の追加に伴い「マスコット」へ MascotLevelUpCelebration / celebrationLevels / levelBeforeWalk / isCelebrationVisible / useMascotLevelUp を追加 |
+| 2026/10/21 | レベルアップの判定を案内画面の終了処理へ移し検知ロジックを mascotStore へ集約したことに伴い「マスコット」へ pendingLevelUpLevels / refreshAndDetectLevelUp / clearPendingLevelUp / isFinishing を追加。levelBeforeWalk を mascotStore 内のローカル変数へ、isCelebrationVisible を WalkResultView.vue の状態へ説明変更。useMascotLevelUp は役割が mascotStore へ移ったため削除 |
+| 2026/10/21 | 案内画面の次の目的地の名前を省略せず全文出し、前後のボタンと重ならないよう上部の操作を縦に積んだことに伴い「地図」へ mapControlsTopPx / controlsTopPx を追加 |
+| 2026/10/21 | ルートの口コミの場所を自分の口コミ（オレンジ）と他の人の口コミ（紫）に描き分けたことに伴い「ルートとスポット」へ isMyReviewSpot を追加。isReviewSpot の説明と、口コミのピンの色の表の注記（ルートのスポットも同じ色の意味）を更新 |

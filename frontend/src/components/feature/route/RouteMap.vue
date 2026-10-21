@@ -17,10 +17,16 @@ import {
   MAP_FIT_PADDING_PX,
   MAP_STYLE,
   MAX_FIT_ZOOM_LEVEL,
+  ROUTE_CURRENT_LEG_CASING_WIDTH_PX,
+  ROUTE_CURRENT_LEG_COLOR,
+  ROUTE_CURRENT_LEG_WIDTH_PX,
   ROUTE_LINE_COLOR,
   ROUTE_LINE_OUTLINE_COLOR,
   ROUTE_LINE_OUTLINE_WIDTH_PX,
-  ROUTE_LINE_WIDTH_PX
+  ROUTE_LINE_WIDTH_PX,
+  ROUTE_WALKED_LEG_COLOR,
+  ROUTE_WALKED_LEG_DASH_ARRAY,
+  ROUTE_WALKED_LEG_WIDTH_PX
 } from '@/constants/mapDefaults';
 import { toCoordinateBounds } from '@/utils/geoBounds';
 import { useMapLongPress } from '@/composables/useMapLongPress';
@@ -123,6 +129,14 @@ const props = defineProps({
   selectedReviewSpotId: {
     type: String,
     default: null
+  },
+  /**
+   * 区間の描き分け（{ walkedLegs, currentLeg, upcomingLegs }。utils/routeLegs.js が作る）。
+   * 案内画面だけが渡す。null の場合は経路全体を1色で描く
+   */
+  legSections: {
+    type: Object,
+    default: null
   }
 });
 
@@ -136,6 +150,21 @@ const ROUTE_OUTLINE_LAYER_ID = 'route-line-outline';
 
 /** ルートの線を描くレイヤーのID */
 const ROUTE_LINE_LAYER_ID = 'route-line';
+
+/** 歩き終えた区間を保持するソースのID */
+const WALKED_LEGS_SOURCE_ID = 'route-walked-legs';
+
+/** 今の区間を保持するソースのID */
+const CURRENT_LEG_SOURCE_ID = 'route-current-leg';
+
+/** 歩き終えた区間（灰色の破線）を描くレイヤーのID */
+const WALKED_LEG_LAYER_ID = 'route-walked-leg-line';
+
+/** 今の区間の白い縁取りを描くレイヤーのID */
+const CURRENT_LEG_CASING_LAYER_ID = 'route-current-leg-casing';
+
+/** 今の区間（緑の太線）を描くレイヤーのID */
+const CURRENT_LEG_LAYER_ID = 'route-current-leg-line';
 
 /** 開始地点のマーカーに表示する文字（Start の頭文字） */
 const ORIGIN_MARKER_LABEL = 'S';
@@ -159,7 +188,7 @@ const hasNoGeometry = ref(false);
  */
 let map = null;
 let markers = [];
-/** スポットのマーカー要素と、表示の切り替えに必要な情報（spotId・巡る順） */
+/** スポットのマーカー要素と、表示の切り替えに必要な情報（スポット・巡る順・口コミの場所か） */
 let spotMarkerStates = [];
 let originMarker = null;
 let currentLocationMarker = null;
@@ -190,20 +219,37 @@ const { attach: attachLongPress } = useMapLongPress({
  * @param {object|null} geometry 経路の形
  * @returns {object} ソースへ渡すGeoJSON
  */
-const toRouteFeature = (geometry) => {
-  const rawGeometry = geometry === null ? null : toRaw(geometry);
+const toRouteFeature = (geometry) => ({
+  type: 'Feature',
+  properties: {},
+  geometry: { type: 'LineString', coordinates: toPlainCoordinates(geometry) }
+});
 
-  const coordinates = (rawGeometry?.coordinates ?? []).map((position) => [
+/**
+ * @description 経路の形から、素の数値の配列に作り直した座標列を取り出す。
+ * リアクティブなProxyのまま渡せない理由は toRouteFeature を参照。
+ * @param {object|null} geometry 経路の形
+ * @returns {number[][]} [経度, 緯度] の配列
+ */
+const toPlainCoordinates = (geometry) => {
+  const rawGeometry = geometry === null || geometry === undefined ? null : toRaw(geometry);
+
+  return (rawGeometry?.coordinates ?? []).map((position) => [
     Number(position[0]),
     Number(position[1])
   ]);
-
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates }
-  };
 };
+
+/**
+ * @description 複数の区間の線をGeoJSONのFeatureCollectionへ包む。
+ * 素の数値の配列へ作り直す理由は toRouteFeature と同じ。
+ * @param {object[]} geometries 区間の線の一覧
+ * @returns {object} ソースへ渡すGeoJSON
+ */
+const toLegFeatureCollection = (geometries) => ({
+  type: 'FeatureCollection',
+  features: geometries.map((geometry) => toRouteFeature(geometry))
+});
 
 /**
  * @description 経路の先頭の座標を取り出す。
@@ -550,23 +596,125 @@ const toReviewMarkers = (spots, modifierClass) =>
     });
 
 /**
+ * @description ルートで巡る口コミの場所のID（口コミのピンと重ねないために使う）
+ * @returns {Set<string>} 口コミの場所のID
+ */
+const toRouteReviewSpotIds = () =>
+  new Set(
+    props.spots
+      .filter((spot) => isRouteReviewSpot(spot))
+      .map((spot) => spot.reviewSpotId)
+  );
+
+/**
  * @description 投稿済みの口コミのピンを描き直す。
  * 自分の口コミはオレンジ、他の人の口コミは紫で出し、表示オフのぶんは作らない。
+ * ルートで巡る口コミの場所は、ルートのスポット（紫・オレンジの番号の丸）として描き、押すと口コミを開けるため、
+ * ここでは描かない（同じ場所にピンと番号の丸が重なるのを防ぐ）。
  * @returns {void}
  */
 const renderReviewMarkers = () => {
   reviewMarkers.forEach((marker) => marker.remove());
   reviewMarkers = [];
 
+  const routeReviewSpotIds = toRouteReviewSpotIds();
+  const excludeRouteSpots = (spots) =>
+    spots.filter((spot) => !routeReviewSpotIds.has(spot.spotId));
+
   if (props.showMyReviews) {
-    reviewMarkers.push(...toReviewMarkers(props.myReviewSpots, MY_REVIEW_PIN_CLASS));
+    reviewMarkers.push(
+      ...toReviewMarkers(excludeRouteSpots(props.myReviewSpots), MY_REVIEW_PIN_CLASS)
+    );
   }
 
   if (props.showOtherReviews) {
     reviewMarkers.push(
-      ...toReviewMarkers(props.otherReviewSpots, OTHER_REVIEW_PIN_CLASS)
+      ...toReviewMarkers(excludeRouteSpots(props.otherReviewSpots), OTHER_REVIEW_PIN_CLASS)
     );
   }
+};
+
+/**
+ * @description ルートのスポットが、押して口コミを開ける口コミの場所か。
+ * 口コミを開くにはIDと元の座標が要るため、どちらも揃っている場合だけ真とする
+ * （古い応答などで欠けている場合は、通常のスポットとして青の番号の丸で描く）。
+ * @param {object} spot ルートのスポット
+ * @returns {boolean} 口コミを開ける口コミの場所なら true
+ */
+const isRouteReviewSpot = (spot) =>
+  spot.isReviewSpot === true &&
+  typeof spot.reviewSpotId === 'string' &&
+  Number.isFinite(spot.reviewPosition?.lng) &&
+  Number.isFinite(spot.reviewPosition?.lat);
+
+/**
+ * @description ルートで巡る口コミの場所の種類を、読み上げに使う語にする。
+ * 色（他の人の口コミ＝紫 / 自分の口コミ＝オレンジ）だけでは意味が伝わらないため、読み上げで補う。
+ * @param {boolean} isMine 自分が口コミ投稿済みの場所か
+ * @returns {string} 読み上げに使う語
+ */
+const toReviewSpotLabel = (isMine) => (isMine ? '自分の口コミの場所' : '他の人の口コミの場所');
+
+/**
+ * @description ルートで巡る口コミの場所の番号の丸の表示（番号・到達済み・選択・色・読み上げ）を整える。
+ * 番号と到達済みのスタンプは通常のスポットと同じ規則で、色だけが変わる
+ * （他の人の口コミは紫の is-review、自分の口コミはオレンジの is-mine。色は CSS で塗る）。
+ * @param {HTMLElement} element 番号の丸の要素
+ * @param {object} spot ルートのスポット
+ * @param {number} order 巡る順序（1始まり）
+ * @param {boolean} isVisited 到達済みかどうか
+ * @returns {void}
+ */
+const applyRouteReviewSpotState = (element, spot, order, isVisited) => {
+  const isSelected = spot.reviewSpotId === props.selectedReviewSpotId;
+  const isMine = spot.isMyReviewSpot === true;
+
+  element.classList.toggle('is-visited', isVisited);
+  element.classList.toggle('is-selected', isSelected);
+  // 自分が口コミ投稿済みの場所はオレンジ、他の人の口コミの場所は紫（口コミのピンと同じ色の意味）
+  element.classList.toggle('is-mine', isMine);
+  // スタンプは背景画像で出すため、到達済みでは番号の文字を消す
+  element.textContent = isVisited ? '' : String(order);
+  element.setAttribute('aria-pressed', String(isSelected));
+
+  // 紫・オレンジの意味と、押すと口コミが開くことは見た目だけでは伝わらないため、読み上げで補う
+  element.setAttribute(
+    'aria-label',
+    `${order}番目のスポット（${isVisited ? '到達済み・' : ''}${toReviewSpotLabel(isMine)}）：${spot.name}の口コミを見る`
+  );
+};
+
+/**
+ * @description ルートで巡る口コミの場所を、紫（自分の口コミはオレンジ）の番号の丸で描くマーカーを作る。
+ * 形・番号・大きさ・位置（経路へ寄せた座標）は通常のスポットと同じにし、色だけを変える。
+ * 押すと口コミのピンと同じく口コミを開く。口コミの解決には元の座標（口コミのピンの位置）を渡す
+ * （経路へ寄せた座標は最大150mずれ、半径40mの解決で見つからないことがあるため）。
+ * @param {object} spot ルートのスポット
+ * @param {number} order 巡る順序（1始まり）
+ * @returns {{marker: object, element: HTMLElement}} マーカーと要素
+ */
+const createRouteReviewMarker = (spot, order) => {
+  // 押せることを支援技術へ伝えるためボタンにする（既定の見た目は CSS で打ち消す）
+  const element = document.createElement('button');
+  element.type = 'button';
+  element.className = 'spot-marker is-review';
+  applyRouteReviewSpotState(element, spot, order, props.visitedSpotIds.includes(spot.spotId));
+
+  element.addEventListener('click', (event) => {
+    // 地図のクリックや長押し判定に伝播させない
+    event.stopPropagation();
+    emit('selectReviewSpot', {
+      spotId: spot.reviewSpotId,
+      position: { lng: spot.reviewPosition.lng, lat: spot.reviewPosition.lat }
+    });
+  });
+
+  // 押すと口コミを開くため、名前のポップアップは付けない
+  const marker = new Marker({ element })
+    .setLngLat([spot.lng, spot.lat])
+    .addTo(map);
+
+  return { marker, element };
 };
 
 /**
@@ -608,16 +756,34 @@ const renderRouteLine = () => {
   // 1点だけでは線にならないため、実際に線を引ける座標数で判定する
   hasNoGeometry.value = routeFeature.geometry.coordinates.length < 2;
 
+  // 区間の描き分けがある場合、青い線はこれからの区間だけにする。
+  // 全体を青で描くと、歩き終えた区間（破線）の隙間から青が透けるため
+  const sections = props.legSections;
+  const routeData =
+    sections === null ? routeFeature : toLegFeatureCollection(sections.upcomingLegs);
+  const walkedData = toLegFeatureCollection(sections === null ? [] : sections.walkedLegs);
+  const currentData = toLegFeatureCollection(sections === null ? [] : [sections.currentLeg]);
+
   const source = map.getSource(ROUTE_SOURCE_ID);
 
   if (source) {
-    source.setData(routeFeature);
+    source.setData(routeData);
+    map.getSource(WALKED_LEGS_SOURCE_ID)?.setData(walkedData);
+    map.getSource(CURRENT_LEG_SOURCE_ID)?.setData(currentData);
     return;
   }
 
   map.addSource(ROUTE_SOURCE_ID, {
     type: 'geojson',
-    data: routeFeature
+    data: routeData
+  });
+  map.addSource(WALKED_LEGS_SOURCE_ID, {
+    type: 'geojson',
+    data: walkedData
+  });
+  map.addSource(CURRENT_LEG_SOURCE_ID, {
+    type: 'geojson',
+    data: currentData
   });
 
   // 縁取りを先に敷いてから本体を重ね、地図の背景に紛れないようにする
@@ -642,6 +808,42 @@ const renderRouteLine = () => {
       'line-width': ROUTE_LINE_WIDTH_PX
     }
   });
+
+  // 歩き終えた区間。端を丸めると短い破線が点に潰れるため butt にする
+  map.addLayer({
+    id: WALKED_LEG_LAYER_ID,
+    type: 'line',
+    source: WALKED_LEGS_SOURCE_ID,
+    layout: { 'line-cap': 'butt', 'line-join': 'round' },
+    paint: {
+      'line-color': ROUTE_WALKED_LEG_COLOR,
+      'line-width': ROUTE_WALKED_LEG_WIDTH_PX,
+      'line-dasharray': ROUTE_WALKED_LEG_DASH_ARRAY
+    }
+  });
+
+  // 今の区間は最後に重ね、ほかの区間と交差しても最前面に出す
+  map.addLayer({
+    id: CURRENT_LEG_CASING_LAYER_ID,
+    type: 'line',
+    source: CURRENT_LEG_SOURCE_ID,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ROUTE_LINE_OUTLINE_COLOR,
+      'line-width': ROUTE_CURRENT_LEG_CASING_WIDTH_PX
+    }
+  });
+
+  map.addLayer({
+    id: CURRENT_LEG_LAYER_ID,
+    type: 'line',
+    source: CURRENT_LEG_SOURCE_ID,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ROUTE_CURRENT_LEG_COLOR,
+      'line-width': ROUTE_CURRENT_LEG_WIDTH_PX
+    }
+  });
 };
 
 /**
@@ -655,12 +857,18 @@ const renderSpotMarkers = () => {
   markers = props.spots
     .filter((spot) => spot.lng !== null && spot.lat !== null)
     .map((spot, index) => {
-      const element = createSpotMarkerElement(
-        index + 1,
-        props.visitedSpotIds.includes(spot.spotId)
-      );
+      const order = index + 1;
 
-      spotMarkerStates.push({ spotId: spot.spotId, order: index + 1, element });
+      // 口コミの場所は紫（自分の口コミはオレンジ）の番号の丸で描き、押すと口コミを開く
+      if (isRouteReviewSpot(spot)) {
+        const { marker, element } = createRouteReviewMarker(spot, order);
+        spotMarkerStates.push({ spot, order, element, isReviewSpot: true });
+        return marker;
+      }
+
+      const element = createSpotMarkerElement(order, props.visitedSpotIds.includes(spot.spotId));
+
+      spotMarkerStates.push({ spot, order, element, isReviewSpot: false });
 
       return new Marker({ element })
         .setLngLat([spot.lng, spot.lat])
@@ -670,13 +878,20 @@ const renderSpotMarkers = () => {
 };
 
 /**
- * @description 到達状況に合わせて、スポットのマーカーの表示だけを切り替える。
+ * @description 到達状況・選択・自分の口コミかどうかに合わせて、スポットのマーカーの表示だけを切り替える。
  * 位置は動かさない（マーカーを作り直さず、要素の中身だけを差し替える）。
  * @returns {void}
  */
 const updateSpotMarkerStates = () => {
-  spotMarkerStates.forEach(({ spotId, order, element }) => {
-    applySpotMarkerState(element, order, props.visitedSpotIds.includes(spotId));
+  spotMarkerStates.forEach(({ spot, order, element, isReviewSpot }) => {
+    const isVisited = props.visitedSpotIds.includes(spot.spotId);
+
+    if (isReviewSpot) {
+      applyRouteReviewSpotState(element, spot, order, isVisited);
+      return;
+    }
+
+    applySpotMarkerState(element, order, isVisited);
   });
 };
 
@@ -704,6 +919,14 @@ onMounted(() => {
     attachLongPress(map);
   }
 
+  // 操作できない概略表示（提案画面）は、枠の大きさが変わってもルート全体が見えるよう収め直す。
+  // 提案画面の地図は画面の高さに合わせて伸び縮みするため、文字の読み込みや
+  // 端末の向きの変更で大きさが変わる。大きさの変化はライブラリが検知して resize を発行する。
+  // 操作できる地図で同じことをすると、利用者が動かした位置が戻されるため行わない
+  if (!props.isInteractive) {
+    map.on('resize', fitToRoute);
+  }
+
   // スタイルの読み込み完了前はソースを追加できないため、loadを待つ
   map.on('load', () => {
     renderRouteLine();
@@ -727,7 +950,22 @@ watch(
     renderRouteLine();
     renderOriginMarker();
     renderSpotMarkers();
+    // 巡る口コミの場所が変わると、口コミのピンから外す場所も変わるため描き直す
+    renderReviewMarkers();
     fitToRoute();
+  }
+);
+
+// 次の目的地が切り替わったら、区間の描き分けだけを描き直す。
+// 進めるたびに利用者が動かした地図の位置が戻らないよう、寄せ直し（fit）はしない
+watch(
+  () => props.legSections,
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    renderRouteLine();
   }
 );
 
@@ -795,6 +1033,8 @@ watch(
     }
 
     renderReviewMarkers();
+    // ルートで巡る口コミの場所の番号の丸も、選択の表示を合わせる
+    updateSpotMarkerStates();
   },
   { deep: true }
 );

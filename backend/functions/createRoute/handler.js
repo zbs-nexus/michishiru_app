@@ -1,6 +1,7 @@
 import { ERROR_CODES } from '../../shared/constants/errorCodes.js';
 import { resolveErrorResponse } from '../../shared/utils/errorHandler.js';
 import { logError, logInfo } from '../../shared/utils/logger.js';
+import { getAuthenticatedUserId } from '../../shared/utils/requestContext.js';
 import {
   buildErrorResponse,
   buildSuccessResponse
@@ -59,6 +60,11 @@ const toResponseBody = (route) => ({
     type: 'LineString',
     coordinates: route.coordinates
   },
+  // 区間ごとの線。巡る順で legs[i] はスポット i へ向かう区間、最後は出発地への帰り道。
+  // スポットとの対応を確かめられない場合は空配列
+  legs: route.legs.map((leg) => ({
+    geometry: { type: 'LineString', coordinates: leg.coordinates }
+  })),
   // おまかせで選んだ条件。おまかせを使っていない項目は含めない
   ...(route.selectedGenres && {
     selected_genres: route.selectedGenres.map((genre) => ({
@@ -105,7 +111,13 @@ export const handler = async (event) => {
   });
 
   try {
-    const route = await createRoute(validationResult.value);
+    const route = await createRoute({
+      ...validationResult.value,
+      // 自分が口コミ投稿済みの場所を見分けるために使う。クレームを持たないイベント
+      // （Lambda を直接呼び出す場合など）では取れないため、その場合は null のまま続ける
+      // （口コミの場所はすべて他の人の口コミの場所として描く）
+      userId: getAuthenticatedUserId(event)
+    });
 
     return buildSuccessResponse(toResponseBody(route));
   } catch (error) {

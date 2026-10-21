@@ -266,11 +266,23 @@ const extractSnappedSpotInfo = (route, spots) => {
 };
 
 /**
- * @description スポットを順に巡り、出発地へ戻る徒歩経路を計算する
+ * @description 応答から区間（leg）ごとの座標列を取り出す。
+ * Legs の順をそのまま保ち、件数や形の妥当性は判断しない（判定は Service の役割）。
+ * 応答が無い場合は空配列（直線で代替した全体の線には区間の情報が無いため）。
+ * @param {object|null} route Routesが返した経路
+ * @returns {number[][][]} 区間ごとの [経度, 緯度] の配列（間引き済み）
+ */
+const extractLegCoordinates = (route) =>
+  (route?.Legs ?? []).map((leg) => simplifyCoordinates(leg.Geometry?.LineString ?? []));
+
+/**
+ * @description スポットを順に巡り、出発地へ戻る徒歩経路を計算する。
+ * 経由点の最適化（OptimizeWaypointOrder）は使わないため、応答の Legs は
+ * 「出発地→スポット1、スポット1→スポット2、…、スポットN→出発地」の順に並ぶ。
  * @param {object} conditions 計算条件
  * @param {{lat: number, lng: number}} conditions.currentLocation 出発地かつ目的地となる現在地
  * @param {object[]} conditions.spots 経由するスポットの一覧
- * @returns {Promise<{coordinates: number[][], totalDistanceM: number, totalDurationS: number, spotSnappedPositions: number[][], spotStrayDistancesM: number[]}>} 経路の座標列・距離・所要時間と、各スポットのスナップ後座標・乖離距離
+ * @returns {Promise<{coordinates: number[][], legCoordinates: number[][][], totalDistanceM: number, totalDurationS: number, spotSnappedPositions: number[][], spotStrayDistancesM: number[]}>} 経路の座標列・区間ごとの座標列・距離・所要時間と、各スポットのスナップ後座標・乖離距離
  * @throws {ApplicationError} 外部サービスへのアクセスに失敗した場合
  */
 export const calculateWalkingRoute = async ({ currentLocation, spots }) => {
@@ -286,6 +298,7 @@ export const calculateWalkingRoute = async ({ currentLocation, spots }) => {
         Destination: originPosition,
         Waypoints: spots.map((spot) => ({ Position: spot.position })),
         TravelMode: 'Pedestrian',
+        // leg ごとに LineString（[経度, 緯度] の配列）を得るため Simple を指定する
         LegGeometryFormat: 'Simple'
       })
     );
@@ -311,6 +324,8 @@ export const calculateWalkingRoute = async ({ currentLocation, spots }) => {
   return {
     // 描画用の座標は形状を保ったまま間引いて、応答サイズと描画コストを抑える
     coordinates: simplifyCoordinates(coordinates),
+    // 案内画面で区間ごとに描き分けるための線。全体の線とは別に leg ごとに間引く
+    legCoordinates: extractLegCoordinates(route),
     totalDistanceM: metrics.totalDistanceM,
     totalDurationS: metrics.totalDurationS,
     spotSnappedPositions: snapped.positions,

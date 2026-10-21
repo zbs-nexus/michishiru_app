@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test \"functions/**/__tests__/**/*.test.js\"",
-    "seed": "node tools/seed.js"
+    "seed": "node tools/seed.js",
+    "seed:review-spots": "node tools/seedReviewSpots.js"
   },
   "keywords": [],
   "author": "",

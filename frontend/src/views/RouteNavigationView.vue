@@ -5,6 +5,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
@@ -16,10 +17,13 @@ import { useReviewPosting } from '@/composables/useReviewPosting';
 import { useMyReviews } from '@/composables/useMyReviews';
 import { useReviewSpots } from '@/composables/useReviewSpots';
 import { useToastMessage } from '@/composables/useToastMessage';
+import { useWalkResultSave } from '@/composables/useWalkResultSave';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
+import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
+import { toRouteLegSections } from '@/utils/routeLegs';
 
 /**
  * @description ルート案内を表示する画面。
@@ -28,6 +32,8 @@ import { useWalkStore } from '@/stores/walkStore';
  * 終了時は確認モーダルを挟んでから結果画面へ進む。
  */
 const router = useRouter();
+// 案内中もマスコットのレベルを出すため読むだけ。実績の取り直しはホームと結果画面で行う
+const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
 
@@ -61,6 +67,24 @@ const isReviewFormVisible = ref(false);
 
 /** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
 const bannerRef = ref(null);
+
+/** 前の目的地・次の目的地へのボタンの段。地図のズームボタンをこの下へ逃がすために測る */
+const spotStepRowRef = ref(null);
+
+/** 測れるまでの、地図のズームボタンの上端（ピクセル）。名前が1行のときの段の下端＋余白 */
+const DEFAULT_MAP_CONTROLS_TOP_PX = 124;
+
+/** ボタンの段の下端からズームボタンまでの余白（ピクセル） */
+const MAP_CONTROLS_GAP_PX = 8;
+
+/**
+ * 地図のズームボタンを置く上端（ピクセル）。
+ * 目的地の名前が長いとバナーが伸びてボタンの段も下がるため、段の下端を測って追従させる。
+ */
+const mapControlsTopPx = ref(DEFAULT_MAP_CONTROLS_TOP_PX);
+
+/** バナーの高さの変化を見張る。ResizeObserver が無い環境ではnullのまま */
+let bannerResizeObserver = null;
 
 /** 口コミ投稿フォームの要素。可視範囲の下端を測るために参照する */
 const reviewFormRef = ref(null);
@@ -136,6 +160,19 @@ const {
   hideMessage
 } = useToastMessage();
 
+// 実績の保存はこの画面で起こし、保存・取り直し・レベルアップ判定が
+// すべて終わってから結果画面へ進む。結果画面で起こすと遷移直後に
+// 結果が一瞬見えてからお祝い演出が重なり、ちらついて見えるため。
+// 保存に失敗したときの文言はトーストで知らせるため saveErrorMessage も受け取る
+const { saveCurrentWalkResult, saveErrorMessage } = useWalkResultSave();
+
+/**
+ * 終了ボタンを押してから結果画面へ進むまでの「記録中」の状態。
+ * 保存・取り直し・判定の通信を待つ間だけ真にし、その間は画面に「記録中…」を出して
+ * 終了の二度押しを防ぐ。
+ */
+const isFinishing = ref(false);
+
 /** 案内対象のスポット。巡る順に並んでいる */
 const spots = computed(() => routeStore.currentRoute?.spots ?? []);
 
@@ -146,13 +183,29 @@ const {
   nextSpot,
   distanceToNextM,
   visitedSpotIds,
+  visitedCount,
   isCompleted,
-  advanceToNextSpot
+  canReturnToPreviousSpot,
+  advanceToNextSpot,
+  returnToPreviousSpot
 } = useRouteProgress({
   spots,
   currentLocation,
   geometry
 });
+
+/**
+ * 区間の描き分け。次の目的地へ向かう区間を強調し、全スポット到達後は帰り道を強調する。
+ * 到達数は進める・戻すボタンでだけ変わるため、その操作に合わせて切り替わる。
+ * 区間を確かめられない場合（保存済みのルート等）は null で、経路を1色で描く
+ */
+const legSections = computed(() =>
+  toRouteLegSections({
+    legs: routeStore.currentRoute?.legs,
+    spotCount: spots.value.length,
+    visitedCount: visitedCount.value
+  })
+);
 
 // 地図の現在地マーカーだけを経路へ吸着させる。
 // 距離の計算（useRouteProgress / useWalkRecord）には吸着前の currentLocation を渡す
@@ -390,6 +443,41 @@ const measureVisibleCenterOffsetY = () => {
 };
 
 /**
+ * @description 前後のボタンの段の下端を測り、地図のズームボタンをその下へ置く。
+ * 段が描画されていない（測れない）ときは値を変えない。
+ * @returns {void}
+ */
+const measureMapControlsTop = () => {
+  const rowEl = spotStepRowRef.value;
+
+  if (!rowEl) {
+    return;
+  }
+
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準の下端をそのまま使える
+  mapControlsTopPx.value = Math.ceil(rowEl.getBoundingClientRect().bottom) + MAP_CONTROLS_GAP_PX;
+};
+
+// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、ズームボタンの位置を測り直す
+onMounted(() => {
+  measureMapControlsTop();
+
+  const bannerEl = bannerRef.value?.$el ?? null;
+
+  if (!bannerEl || typeof ResizeObserver === 'undefined') {
+    return;
+  }
+
+  bannerResizeObserver = new ResizeObserver(measureMapControlsTop);
+  bannerResizeObserver.observe(bannerEl);
+});
+
+onBeforeUnmount(() => {
+  bannerResizeObserver?.disconnect();
+  bannerResizeObserver = null;
+});
+
+/**
  * @description フォームの高さが変わったら、寄せ位置を測り直す。
  * 可視範囲が変わるため、そのままだと対象の場所がフォームに隠れる。
  * @returns {Promise<void>}
@@ -552,10 +640,31 @@ const handleCancelEnd = () => {
  * @description 案内を終了して結果画面へ進む
  * @returns {void}
  */
-const handleConfirmEnd = () => {
+const handleConfirmEnd = async () => {
+  if (isFinishing.value) {
+    return;
+  }
+
   isEndConfirmVisible.value = false;
-  // 結果画面が所要時間を読むため、遷移前に終了時刻を確定させる
+  isFinishing.value = true;
+
+  // 結果画面が所要時間を読むため、保存の前に終了時刻を確定させる
   walkStore.endWalk();
+
+  try {
+    const isSucceeded = await saveCurrentWalkResult();
+
+    if (!isSucceeded) {
+      showMessage(saveErrorMessage.value ?? '実績を保存できませんでした');
+    }
+
+    // 保存の後に取り直すことで、今終えた散歩の分を含む累計でレベルアップを判定する。
+    // 判定結果（経由レベルを含む一覧）はストアに積まれ、結果画面がそれを読む
+    await mascotStore.refreshAndDetectLevelUp();
+  } finally {
+    isFinishing.value = false;
+  }
+
   router.push({ name: 'walk-result' });
 };
 </script>
@@ -572,25 +681,106 @@ const handleConfirmEnd = () => {
       @close="hideMessage"
     />
 
-    <RouteNextSpotBanner
-      ref="bannerRef"
-      :spot-name="nextSpot?.name ?? null"
-      :distance-to-next-m="distanceToNextM"
-      :is-completed="isCompleted"
-    />
-
     <!--
-      次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
-      押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
+      画面上部の操作をまとめて縦に積む（バナー → 前後のボタン → 口コミの表示切り替え）。
+      目的地の名前が長くバナーが伸びても、下の段が押し下げられて重ならない。
     -->
-    <button
-      v-if="nextSpot"
-      class="next-spot-btn"
-      type="button"
-      @click="advanceToNextSpot"
-    >
-      次の目的地へ
-    </button>
+    <div class="navigation-top">
+      <RouteNextSpotBanner
+        ref="bannerRef"
+        :spot-name="nextSpot?.name ?? null"
+        :distance-to-next-m="distanceToNextM"
+        :is-completed="isCompleted"
+        :mascot-level="mascotStore.mascotLevel"
+      >
+        <!--
+          バナーは role="status" の読み上げ範囲のため、バーは装飾として渡す。
+          距離が変わるたびに経験値まで読み直されるのを防ぐ。
+        -->
+        <template
+          v-if="mascotStore.hasExperience"
+          #experience
+        >
+          <MascotExperienceBar
+            :level-progress="mascotStore.levelProgress"
+            size="small"
+            is-decorative
+          />
+        </template>
+      </RouteNextSpotBanner>
+
+      <!--
+        ボタンが片方だけでも段の高さを保ち、下の口コミの表示切り替えが跳ねないようにする
+      -->
+      <div
+        ref="spotStepRowRef"
+        class="spot-step-row"
+      >
+        <!--
+          誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
+          到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
+        -->
+        <button
+          v-if="canReturnToPreviousSpot"
+          class="previous-spot-btn"
+          type="button"
+          aria-label="前の目的地に戻る"
+          @click="returnToPreviousSpot"
+        >
+          ← 前の目的地
+        </button>
+
+        <!--
+          次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
+          押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
+        -->
+        <button
+          v-if="nextSpot"
+          class="next-spot-btn"
+          type="button"
+          @click="advanceToNextSpot"
+        >
+          次の目的地へ
+        </button>
+      </div>
+
+      <div
+        class="review-toggles"
+        role="group"
+        aria-label="口コミのピンの表示"
+      >
+        <span
+          class="review-toggles-label"
+          aria-hidden="true"
+        >
+          口コミ
+        </span>
+
+        <button
+          class="review-toggle review-toggle-mine"
+          :class="{ 'is-on': showMyReviews }"
+          type="button"
+          :aria-pressed="showMyReviews"
+          aria-label="自分の口コミ"
+          @click="toggleMyReviews"
+        >
+          <span class="review-toggle-dot" />
+          自分
+        </button>
+
+        <button
+          class="review-toggle review-toggle-other"
+          :class="{ 'is-on': showOtherReviews }"
+          type="button"
+          :aria-pressed="showOtherReviews"
+          aria-label="みんなの口コミ"
+          @click="toggleOtherReviews"
+        >
+          <span class="review-toggle-dot" />
+          みんな
+        </button>
+      </div>
+    </div>
 
     <RouteNavigationMap
       :geometry="routeStore.currentRoute.geometry"
@@ -609,33 +799,11 @@ const handleConfirmEnd = () => {
       :show-other-reviews="showOtherReviews"
       :visited-spot-ids="visitedSpotIds"
       :selected-review-spot-id="selectedReviewSpotId"
+      :leg-sections="legSections"
+      :controls-top-px="mapControlsTopPx"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
     />
-
-    <div class="review-toggles">
-      <button
-        class="review-toggle review-toggle-mine"
-        :class="{ 'is-on': showMyReviews }"
-        type="button"
-        :aria-pressed="showMyReviews"
-        @click="toggleMyReviews"
-      >
-        <span class="review-toggle-dot" />
-        自分の口コミ
-      </button>
-
-      <button
-        class="review-toggle review-toggle-other"
-        :class="{ 'is-on': showOtherReviews }"
-        type="button"
-        :aria-pressed="showOtherReviews"
-        @click="toggleOtherReviews"
-      >
-        <span class="review-toggle-dot" />
-        みんなの口コミ
-      </button>
-    </div>
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
@@ -669,6 +837,21 @@ const handleConfirmEnd = () => {
         @cancel="handleCancelEnd"
       />
     </template>
+
+    <!--
+      終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。
+      ロード画面（RouteLoadingOverlay）は流用せず、文字だけにする。
+      role="status" で処理中であることを読み上げさせ、終了の二度押しを塞ぐ。
+    -->
+    <div
+      v-if="isFinishing"
+      class="finishing-overlay"
+      role="status"
+    >
+      <p class="finishing-text">
+        記録中…
+      </p>
+    </div>
   </DefaultLayout>
 </template>
 
@@ -683,23 +866,91 @@ const handleConfirmEnd = () => {
 }
 
 /*
- * 「次の目的地へ」ボタン。次の目的地バナーの右下に置く。
- * バナーは幅 calc(100% - 24px)・最大406pxで中央寄せのため、
- * 右端をバナーの右端（狭い画面では12px、広い画面では中央から203px）に揃える。
- * 大きさは口コミの表示切り替えボタンと揃える。
+ * 終了後の保存・取り直し・判定を待つ間の「記録中…」の全画面表示。
+ * 羊皮紙色の膜で地図と操作部をすべて覆い、待っている間の操作（終了の二度押しや
+ * 地図の長押しなど）を物理的に塞ぐ。文字だけで、ロード画面の演出は流用しない。
+ * 画面上部の操作（z-index 45）より手前に出すため、それらより高くする。
+ */
+.finishing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 羊皮紙色の半透明の膜。下の地図をうっすら残しつつ操作は受け付けない */
+  background: rgba(241, 227, 200, 0.85);
+}
+
+.finishing-text {
+  font-family: var(--font-display);
+  font-size: calc(18px + var(--fit) * 4);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--primary-color);
+  text-shadow: var(--text-halo);
+}
+
+/*
+ * 画面上部の操作の入れ物。幅 calc(100% - 24px)・最大406pxで中央に寄せ、
+ * バナー・前後のボタン・口コミの表示切り替えを縦に積む。
+ * 以前はそれぞれを固定の top で置いていたため、目的地の名前でバナーが伸びると
+ * 下のボタンと重なっていた。積み上げにすると、伸びた分だけ下の段が下がる。
+ *
+ * 入れ物自体は地図の上に広がるため、空いている所では地図を操作できるよう
+ * pointer-events を切り、中の部品だけで受け付ける。
+ */
+.navigation-top {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: calc(100% - 24px);
+  max-width: 406px;
+  pointer-events: none;
+}
+
+.navigation-top > * {
+  pointer-events: auto;
+}
+
+/*
+ * 前の目的地（左）と次の目的地へ（右）の段。ボタンが無い所は地図を操作できるよう、
+ * 段自体は pointer-events を切る。高さはボタンに合わせて固定し、
+ * ボタンが片方・どちらも無いときも下の段の位置を変えない（跳ねて誤タップするのを防ぐ）。
+ */
+.navigation-top > .spot-step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  pointer-events: none;
+}
+
+/*
+ * 「次の目的地へ」ボタン。段の右端に置く（前の目的地が無いときも右に寄せたまま）。
+ * 大きさは前の目的地に戻るボタンと揃える。
  */
 .next-spot-btn {
-  position: fixed;
-  top: 84px;
-  right: max(12px, calc(50% - 203px));
-  z-index: 45;
+  margin-left: auto;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  box-sizing: border-box;
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--white);
   background: var(--primary-color);
-  border: none;
-  border-radius: 999px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }
@@ -709,37 +960,83 @@ const handleConfirmEnd = () => {
 }
 
 /*
- * 口コミピンの表示切り替えボタン（自分・他の人の2つ）。
- * 次の目的地バナー（top: 12px・中央）とズームコントロール（右上）に重ならないよう左上に置く。
+ * 「前の目的地」ボタン。段の左端に置き、左端をバナーの左端に揃える。
+ * 枠・影・大きさは「次の目的地へ」と同じにする。
+ * 主操作の「次の目的地へ」と区別するため、面だけ羊皮紙の色に紫の文字にする。
+ */
+.previous-spot-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-color);
+  background: var(--surface);
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+
+.previous-spot-btn:active {
+  background: var(--bg-deep);
+}
+
+/*
+ * 口コミピンの表示切り替え（自分・他の人の2つ）を1本のピルにまとめる。
+ * 前後のボタンの段の下・左端に置き、ズームコントロール（右）と重ならないようにする。
+ * 入れ物は幅いっぱいに広げるため、align-self で中身の幅に縮める。
  */
 .review-toggles {
-  position: fixed;
-  top: 84px;
-  left: 12px;
-  z-index: 45;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
+  align-self: flex-start;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 2px;
+  min-height: 32px;
+  box-sizing: border-box;
+  /* 上下の余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
+  padding: 0 0 0 10px;
+  /*
+   * 2つのトグルを1枚の札にまとめているため、ドット絵の枠はこの外枠にだけ付ける。
+   * 内側のトグルに付けると、枠（--pixel-frame-width × 2）の分だけ札の中で膨らむ。
+   */
+  background: var(--surface);
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  box-shadow: var(--shadow);
+}
+
+.review-toggles-label {
+  margin-right: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-gray);
 }
 
 .review-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 12px;
+  min-height: 32px;
+  padding: 4px 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-gray);
-  background: var(--white);
+  background: transparent;
   border: none;
-  border-radius: 999px;
-  box-shadow: var(--shadow);
   cursor: pointer;
 }
 
 .review-toggle.is-on {
   color: var(--text-dark);
+  background: var(--bg-light);
 }
 
 .review-toggle-dot {
@@ -751,10 +1048,10 @@ const handleConfirmEnd = () => {
 
 /* オン状態の丸をピンの色（自分=オレンジ / 他の人=紫）と対応づける */
 .review-toggle-mine.is-on .review-toggle-dot {
-  background: #F39C12;
+  background: var(--review-orange);
 }
 
 .review-toggle-other.is-on .review-toggle-dot {
-  background: #8E44AD;
+  background: var(--review-purple);
 }
 </style>

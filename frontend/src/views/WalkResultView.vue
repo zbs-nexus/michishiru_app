@@ -1,13 +1,13 @@
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
-import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
+import MascotLevelUpCelebration from '@/components/feature/mascot/MascotLevelUpCelebration.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import WalkResultStats from '@/components/feature/walk/WalkResultStats.vue';
-import { useToastMessage } from '@/composables/useToastMessage';
-import { useWalkResultSave } from '@/composables/useWalkResultSave';
+import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
 
@@ -17,23 +17,36 @@ import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
  * ルート作成時の予測値は使わない。
  * 労いの言葉はマスコットが吹き出しで話す。
  *
- * 実績のサーバーへの保存もこの画面で起こす。案内画面で起こすと、`router.push` の
- * 直後に案内画面が破棄され、保存の成否を結果画面から読めなくなる。
- * この画面で起こせば、保存の起点と結果の表示先が同じコンポーネントに収まる。
- * 案内画面側は `endWalk()` → `push` だけなので、保存を一切待たない。
+ * 実績の保存・取り直し・レベルアップ判定は、この画面へ来る前（案内画面の終了処理）で
+ * すべて済ませている。遷移してきた時点で経験値もレベルも確定しているため、
+ * この画面は保存の成否を気にせず、確定した値を表示するだけでよい。
+ * レベルアップがあった場合は、結果の本体を隠したままお祝い演出を先に見せ、
+ * 閉じてから結果を見せる（結果が一瞬ちらつくのを防ぐ）。
  */
 const router = useRouter();
+const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
-const {
-  message: toastMessage,
-  showMessage,
-  hideMessage
-} = useToastMessage();
-// 保存中であることは画面に出さないため isSaving は受け取らない。
-// 実績は既に確定していて利用者の操作を待たせる必要がなく、
-// スピナーを出すとかえって失敗したように見える
-const { saveErrorMessage, saveCurrentWalkResult } = useWalkResultSave();
+
+/**
+ * お祝い演出を表示中かどうか。
+ * 遷移前に積まれたレベルアップ（pendingLevelUpLevels）があれば、最初から表示する。
+ * 演出を出している間は結果の本体を隠し、「演出 → 結果」の順に見せる。
+ */
+const isCelebrationVisible = ref(mascotStore.pendingLevelUpLevels.length > 0);
+
+/** 演出で順に見せるレベルの一覧（経由レベルを含む昇順）。遷移前に積まれたものを読む */
+const celebrationLevels = computed(() => mascotStore.pendingLevelUpLevels);
+
+/**
+ * @description お祝い演出を閉じる。最後の段で閉じたときに呼ばれる。
+ * 積んだレベルアップを消して、次に結果画面へ来たとき再演されないようにする。
+ * @returns {void}
+ */
+const closeCelebration = () => {
+  isCelebrationVisible.value = false;
+  mascotStore.clearPendingLevelUp();
+};
 
 /**
  * 計測状態に応じた注記。注記が不要な場合はnull。
@@ -50,16 +63,6 @@ const measurementNote = computed(() => {
   }
 
   return null;
-});
-
-// 描画された時点のストアには確定した実績が入っている（endWalk は遷移前に呼ばれる）。
-// 「ホームに戻る」の resetWalk() より前に送る内容を確定させるため、ここで起こす
-onMounted(async () => {
-  const isSucceeded = await saveCurrentWalkResult();
-
-  if (!isSucceeded) {
-    showMessage(saveErrorMessage.value ?? '実績を保存できませんでした');
-  }
 });
 
 /**
@@ -89,63 +92,97 @@ const handleReturnHome = () => {
     class="is-result"
     :has-content-padding="false"
   >
-    <BaseToast
-      v-if="toastMessage"
-      :message="toastMessage"
-      @close="hideMessage"
+    <template #background>
+      <div class="paper-map-bg" />
+    </template>
+
+    <!--
+      レベルアップ演出。今回の散歩でレベルが上がったときだけ、結果の本体より手前に出す。
+      遷移前に判定済みのため最初から表示でき、結果が一瞬ちらつかない。
+      閉じると（最後の段で close）結果の本体だけが残る。
+    -->
+    <MascotLevelUpCelebration
+      v-if="isCelebrationVisible"
+      :levels="celebrationLevels"
+      @close="closeCelebration"
     />
 
-    <div class="result-content">
-      <div
-        class="confetti"
-        aria-hidden="true"
-      />
+    <!-- 演出中は結果の本体を隠し、閉じてから見せる（演出 → 結果の順にする） -->
+    <div
+      v-if="!isCelebrationVisible"
+      class="result-content"
+    >
+      <div class="result-body">
+        <MascotSpeechBubble
+          class="result-mascot"
+          :level="mascotStore.mascotLevel"
+          placement="stacked"
+          size="large"
+          has-level-label
+        >
+          <h2 class="result-title">
+            お疲れさまでした
+          </h2>
+          <p class="result-note">
+            {{ mascotSubMessage }}
+          </p>
 
-      <MascotSpeechBubble
-        class="result-mascot"
-        placement="stacked"
-        size="large"
-        has-level-label
-      >
-        <h2 class="result-title">
-          お疲れさまでした
-        </h2>
-        <p class="result-note">
-          {{ mascotSubMessage }}
+          <!-- 今終えた散歩の分を含めた経験値を出す（遷移前に取り直し済み） -->
+          <template
+            v-if="mascotStore.hasExperience"
+            #experience
+          >
+            <MascotExperienceBar
+              :level-progress="mascotStore.levelProgress"
+              :total-experience-points="mascotStore.totalExperiencePoints"
+              size="large"
+            />
+          </template>
+        </MascotSpeechBubble>
+
+        <WalkResultStats
+          :distance-km="walkStore.totalDistanceKm"
+          :spot-count="walkStore.spotCount"
+          :duration-minutes="walkStore.elapsedMinutes"
+        />
+
+        <p
+          v-if="measurementNote"
+          class="hint"
+          role="status"
+        >
+          {{ measurementNote }}
         </p>
-      </MascotSpeechBubble>
-
-      <WalkResultStats
-        :distance-km="walkStore.totalDistanceKm"
-        :spot-count="walkStore.spotCount"
-        :duration-minutes="walkStore.elapsedMinutes"
-      />
-
-      <p
-        v-if="measurementNote"
-        class="hint"
-        role="status"
-      >
-        {{ measurementNote }}
-      </p>
+      </div>
     </div>
 
+    <!--
+      ボタンは画面に固定せず、本文の下に置く。
+      固定すると本文がボタンの裏へ回り込むため、その分の余白を本文に足す必要があり、
+      低い端末では余白のせいで画面がスクロールしていた。
+    -->
     <template #footer>
-      <BaseButton
-        is-full-width
-        @click="handleReturnHome"
-      >
-        ホームに戻る
-      </BaseButton>
+      <div class="result-footer">
+        <BaseButton @click="handleReturnHome">
+          ホームに戻る
+        </BaseButton>
+      </div>
     </template>
   </DefaultLayout>
 </template>
 
 <style scoped>
-/* 実績の一覧との間を空ける。下部の固定ボタンとも重ならないようにする */
+/*
+ * 上下の余りを均等に分けて、本文を画面の中央へ寄せる。
+ * 収まりきらない場合は余りが0になり、上端から並ぶ（中央寄せで上端が切れるのを防ぐ）。
+ */
+.result-body {
+  margin: auto 0;
+}
+
+/* 実績の一覧との間を空ける */
 .result-mascot {
-  position: relative;
-  margin-bottom: 32px;
+  margin-bottom: calc(10px + var(--fit) * 22);
 }
 
 /*
@@ -154,11 +191,11 @@ const handleReturnHome = () => {
  */
 .result-title {
   font-family: var(--font-display);
-  font-size: 21px;
+  font-size: calc(18px + var(--fit) * 3);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--primary-color);
-  margin-bottom: 6px;
+  margin-bottom: calc(2px + var(--fit) * 4);
 }
 
 .result-note {
@@ -168,8 +205,13 @@ const handleReturnHome = () => {
   color: var(--text-gray);
 }
 
-/* 固定ボタンに最後の行が隠れないように空ける */
-.result-content {
-  padding-bottom: 110px;
+/*
+ * 背景の絵（.paper-map-bg、position: fixed）より手前に出すため、位置指定を持たせる。
+ * 消すと「ホームに戻る」が絵の下に隠れる（理由は global.css の .result-content を参照）。
+ */
+.result-footer {
+  position: relative;
+  z-index: 1;
+  padding: calc(4px + var(--fit) * 8) 20px calc(14px + var(--fit) * 14);
 }
 </style>
