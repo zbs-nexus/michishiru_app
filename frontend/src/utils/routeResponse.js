@@ -88,7 +88,9 @@ const toSpots = (items) => {
     lat: Number.isFinite(item.lat) ? item.lat : null,
     lng: Number.isFinite(item.lng) ? item.lng : null,
     spotType: item.spotType ?? item.type ?? null,
-    icon: item.icon ?? null
+    icon: item.icon ?? null,
+    // 口コミが付いた場所か。地図で星の形に描き分ける（古い応答には無いため false 扱い）
+    isReviewSpot: item.isReviewSpot === true
   }));
 };
 
