@@ -61,13 +61,15 @@ describe('listReviewSpots', () => {
     });
   });
 
-  it('場所メタ行を名前・[経度, 緯度]・平均評価へ変換する', async () => {
+  it('場所メタ行を名前・ジャンル・[経度, 緯度]・平均評価へ変換する', async () => {
     sendImplementation = async () => ({
       Items: [
         {
           spotId: 'spot-1',
           sk: 'SPOT',
           spotName: '中央公園の東屋',
+          genreId: 'nature',
+          genreName: '自然',
           position: { lng: 139.70451, lat: 35.68721 },
           ratingSum: 9,
           ratingCount: 2,
@@ -80,8 +82,29 @@ describe('listReviewSpots', () => {
 
     // 作成者のIDなど、ルート作成に不要な値は持ち出さない
     assert.deepEqual(spots, [
-      { name: '中央公園の東屋', position: [139.70451, 35.68721], ratingAverage: 4.5 }
+      {
+        name: '中央公園の東屋',
+        genreId: 'nature',
+        position: [139.70451, 35.68721],
+        ratingAverage: 4.5
+      }
     ]);
+  });
+
+  it('ジャンルを持たない（または文字列でない）場所メタ行は genreId を null にする', async () => {
+    sendImplementation = async () => ({
+      Items: [
+        { spotName: 'ジャンルなし', position: { lng: 139.7, lat: 35.6 } },
+        { spotName: '数値のジャンル', genreId: 2, position: { lng: 139.7, lat: 35.6 } }
+      ]
+    });
+
+    const spots = await listReviewSpots();
+
+    assert.deepEqual(
+      spots.map((spot) => spot.genreId),
+      [null, null]
+    );
   });
 
   it('評価件数が0のときは平均評価を0にする（0除算でNaNにしない）', async () => {

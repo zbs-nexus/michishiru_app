@@ -87,6 +87,11 @@ defineProps({
   selectedReviewSpotId: {
     type: String,
     default: null
+  },
+  /** 区間の描き分け（歩き終えた・今・これからの区間）。null の場合は経路を1色で描く */
+  legSections: {
+    type: Object,
+    default: null
   }
 });
 
@@ -112,6 +117,7 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :show-other-reviews="showOtherReviews"
         :visited-spot-ids="visitedSpotIds"
         :selected-review-spot-id="selectedReviewSpotId"
+        :leg-sections="legSections"
         @long-press-map="$emit('longPressMap', $event)"
         @select-review-spot="$emit('selectReviewSpot', $event)"
       />

@@ -29,6 +29,8 @@ const createSpot = (name) => ({ name, position: [139.703, 35.686] });
  * @param {string[]} [options.strandedSpotNames] 経路から大きく外れている（乖離大）とみなすスポット名
  * @param {object[]} [options.reviewSpots] 口コミの場所として返す一覧
  * @param {boolean} [options.isReviewSpotsFailing] 口コミの場所の取得を失敗させるか
+ * @param {number} [options.legCountOffset] 経路計算が返す区間の数を「スポット数+1」からずらす量
+ * @param {boolean} [options.hasShortLeg] 先頭の区間を1点だけにするか
  * @returns {{repositories: object, calls: object}} 差し替え用のリポジトリと呼び出し記録
  */
 const createRepositoryStub = ({
@@ -43,7 +45,9 @@ const createRepositoryStub = ({
   distancesM = [3000],
   strandedSpotNames = [],
   reviewSpots = [],
-  isReviewSpotsFailing = false
+  isReviewSpotsFailing = false,
+  legCountOffset = 0,
+  hasShortLeg = false
 } = {}) => {
   const calls = {
     calculateWalkingRoute: [],
@@ -95,6 +99,17 @@ const createRepositoryStub = ({
           [139.703, 35.686],
           [139.704, 35.687]
         ],
+        // 区間は2点の線。添字を経度に混ぜ、どの区間かを見分けられるようにする
+        legCoordinates: Array.from(
+          { length: spots.length + 1 + legCountOffset },
+          (_, index) =>
+            hasShortLeg && index === 0
+              ? [[139.7, 35.686]]
+              : [
+                  [139.7 + index * 0.001, 35.686],
+                  [139.7 + (index + 1) * 0.001, 35.686]
+                ]
+        ),
         totalDistanceM,
         totalDurationS: 600,
         // スナップ後座標は元座標と同一とし、乖離は strandedSpotNames のスポットだけ大きくする
@@ -300,6 +315,77 @@ describe('createRoute', () => {
     );
   });
 
+  describe('区間ごとの線', () => {
+    it('スポット数+1の区間を巡る順のまま返す', async () => {
+      const { repositories } = createRepositoryStub({ distancesM: [3000] });
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.equal(result.spots.length, 3);
+      assert.equal(result.legs.length, 4);
+      result.legs.forEach((leg, index) => {
+        assert.deepEqual(leg, {
+          coordinates: [
+            [139.7 + index * 0.001, 35.686],
+            [139.7 + (index + 1) * 0.001, 35.686]
+          ]
+        });
+      });
+    });
+
+    it('区間の数がスポット数+1と異なる場合は区間を返さない', async () => {
+      for (const legCountOffset of [-1, 1]) {
+        const { repositories } = createRepositoryStub({ distancesM: [3000], legCountOffset });
+
+        const result = await createRoute(conditions, repositories);
+
+        assert.deepEqual(result.legs, []);
+        // 全体の線は従来どおり返す
+        assert.equal(result.coordinates.length, 2);
+      }
+    });
+
+    it('2点未満の区間を含む場合は区間を返さない', async () => {
+      const { repositories } = createRepositoryStub({ distancesM: [3000], hasShortLeg: true });
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.deepEqual(result.legs, []);
+    });
+
+    it('区間の座標列を返さない経路計算でも、空の区間でルートを返す', async () => {
+      const { repositories } = createRepositoryStub({ distancesM: [3000] });
+      const calculate = repositories.calculateWalkingRoute;
+      repositories.calculateWalkingRoute = async (args) => {
+        const { legCoordinates: _legCoordinates, ...route } = await calculate(args);
+        return route;
+      };
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.deepEqual(result.legs, []);
+    });
+
+    it('スポットを削って再計算した場合も、最終のスポット数+1の区間を返す', async () => {
+      const { repositories } = createRepositoryStub({
+        plannedSpotsSequence: [
+          [
+            createSpot('スポット1'),
+            createSpot('スポット2'),
+            createSpot('スポット3'),
+            createSpot('スポット4')
+          ]
+        ],
+        distancesM: [6000, 5000, 3500]
+      });
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.equal(result.spots.length, 2);
+      assert.equal(result.legs.length, 3);
+    });
+  });
+
   describe('おまかせ', () => {
     /** おまかせで参照するマスタ（ジャンル3件・距離1〜10km・無効ジャンル1件） */
     const conditionItems = [
@@ -405,10 +491,20 @@ describe('createRoute', () => {
 
 describe('createRoute（口コミの場所とチェーン店）', () => {
   /** 現在地から約150mの口コミの場所（目標距離3kmの範囲内） */
-  const nearReviewSpot = { name: '口コミ近', position: [139.7045, 35.6872], ratingAverage: 4 };
+  const nearReviewSpot = {
+    name: '口コミ近',
+    genreId: 'nature',
+    position: [139.7045, 35.6872],
+    ratingAverage: 4
+  };
 
   /** 現在地から約4.6kmの口コミの場所（目標距離3kmの範囲外） */
-  const farReviewSpot = { name: '口コミ遠', position: [139.75, 35.7], ratingAverage: 5 };
+  const farReviewSpot = {
+    name: '口コミ遠',
+    genreId: 'nature',
+    position: [139.75, 35.7],
+    ratingAverage: 5
+  };
 
   /**
    * @description プロンプトに渡った候補を取り出す
@@ -554,7 +650,12 @@ describe('createRoute（口コミの場所とチェーン店）', () => {
 
 describe('createRoute（口コミの場所の境界ケース）', () => {
   /** 現在地から約150mの口コミの場所 */
-  const nearReviewSpot = { name: '口コミ近', position: [139.7045, 35.6872], ratingAverage: 4 };
+  const nearReviewSpot = {
+    name: '口コミ近',
+    genreId: 'nature',
+    position: [139.7045, 35.6872],
+    ratingAverage: 4
+  };
 
   /**
    * @description 現在地から少しずつ離れた口コミの場所を作る（すべて3km以内）
@@ -564,6 +665,7 @@ describe('createRoute（口コミの場所の境界ケース）', () => {
   const createReviewSpots = (count) =>
     Array.from({ length: count }, (_, index) => ({
       name: `口コミ${index + 1}`,
+      genreId: 'nature',
       position: [139.7036 + (index + 1) * 0.001, 35.6862],
       ratingAverage: 3
     }));
@@ -664,8 +766,8 @@ describe('createRoute（口コミの場所の境界ケース）', () => {
   it('名前が空・座標が不正な口コミの場所は候補にしない', async () => {
     const { repositories, calls } = createRepositoryStub({
       reviewSpots: [
-        { name: '', position: [139.7045, 35.6872] },
-        { name: '座標なし', position: [Number.NaN, Number.NaN] },
+        { name: '', genreId: 'nature', position: [139.7045, 35.6872] },
+        { name: '座標なし', genreId: 'nature', position: [Number.NaN, Number.NaN] },
         nearReviewSpot
       ]
     });
@@ -743,5 +845,113 @@ describe('createRoute（口コミの場所の境界ケース）', () => {
       ['チェーンX', 'チェーンY']
     );
     assert.equal(result.routeTitle, 'テストコース');
+  });
+});
+
+describe('createRoute（口コミの場所とジャンル）', () => {
+  /**
+   * @description 現在地から約150mの口コミの場所を作る
+   * @param {string} name 名前
+   * @param {string|null|undefined} genreId 投稿時に選んだジャンル
+   * @returns {object} 口コミの場所
+   */
+  const createReviewSpot = (name, genreId) => ({
+    name,
+    genreId,
+    position: [139.7045, 35.6872],
+    ratingAverage: 4
+  });
+
+  /**
+   * @description プロンプトに渡った口コミの場所の名前を取り出す
+   * @param {string} promptText プロンプト
+   * @returns {string[]} 口コミの場所の名前
+   */
+  const reviewNamesInPrompt = (promptText) =>
+    JSON.parse(promptText.match(/【候補スポットリスト】\n(.+)\n/)[1])
+      .filter((spot) => spot.isReviewSpot)
+      .map((spot) => spot.name);
+
+  it('検索条件のジャンルと同じジャンルの口コミの場所だけを候補にする', async () => {
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots: [
+        createReviewSpot('自然の口コミ', 'nature'),
+        createReviewSpot('グルメの口コミ', 'gourmet'),
+        createReviewSpot('歴史の口コミ', 'history')
+      ]
+    });
+
+    // conditions.genreId は nature
+    await createRoute(conditions, repositories);
+
+    assert.deepEqual(reviewNamesInPrompt(calls.prompts[0]), ['自然の口コミ']);
+  });
+
+  it('ジャンルが合う口コミの場所が無ければ、差し込みも行わない', async () => {
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots: [createReviewSpot('グルメの口コミ', 'gourmet')],
+      distancesM: [3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.deepEqual(reviewNamesInPrompt(calls.prompts[0]), []);
+    // 初回の経路計算のみ（差し込みを試していない）
+    assert.equal(calls.calculateWalkingRoute.length, 1);
+    assert.ok(result.spots.every((spot) => spot.isReviewSpot === false));
+  });
+
+  it('ジャンルを持たない口コミの場所は、条件に合うか判断できないため候補にしない', async () => {
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots: [
+        createReviewSpot('ジャンルなし', null),
+        createReviewSpot('ジャンル未設定', undefined),
+        createReviewSpot('自然の口コミ', 'nature')
+      ]
+    });
+
+    await createRoute(conditions, repositories);
+
+    assert.deepEqual(reviewNamesInPrompt(calls.prompts[0]), ['自然の口コミ']);
+  });
+
+  it('ジャンルのおまかせでは、選ばれたいずれかのジャンルに合う口コミの場所を候補にする', async () => {
+    const stub = createRepositoryStub({
+      reviewSpots: [
+        createReviewSpot('自然の口コミ', 'nature'),
+        createReviewSpot('街歩きの口コミ', 'city'),
+        createReviewSpot('グルメの口コミ', 'gourmet')
+      ]
+    });
+
+    // おまかせで選べるジャンルを nature と city の2つに限り、必ず両方が選ばれる状況を作る
+    stub.repositories.listConditions = async () => [
+      { pk: 'GENRE#ALL', genreId: 'nature', genreName: '自然', isActive: true },
+      { pk: 'GENRE#ALL', genreId: 'city', genreName: '街歩き', isActive: true }
+    ];
+    stub.repositories.queryGenreNumberByGenreId = async (genreId) => genreId;
+
+    for (let trial = 0; trial < 10; trial += 1) {
+      stub.calls.prompts.length = 0;
+
+      const result = await createRoute(
+        { targetDistanceKm: 3, currentLocation: conditions.currentLocation, isGenreRandom: true },
+        stub.repositories
+      );
+
+      const selectedIds = result.selectedGenres.map((genre) => genre.genreId);
+      const expectedNames = [
+        ['自然の口コミ', 'nature'],
+        ['街歩きの口コミ', 'city']
+      ]
+        .filter(([, genreId]) => selectedIds.includes(genreId))
+        .map(([name]) => name);
+
+      // 選ばれなかったジャンル・どれにも当たらないジャンル（gourmet）の口コミの場所は入らない
+      assert.deepEqual(
+        [...reviewNamesInPrompt(stub.calls.prompts[0])].sort(),
+        [...expectedNames].sort()
+      );
+    }
   });
 });

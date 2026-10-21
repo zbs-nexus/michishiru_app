@@ -57,8 +57,8 @@ inclusion: always
 | スポット | spot | ユーザーが立ち寄る場所（公園・神社・カフェ等） |
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
-| 口コミの場所の候補 | reviewCandidates | 現在地から選択された距離以内にある、口コミが付いた場所（近い順）。ルートの候補に混ぜる |
-| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図で星の形に描き分ける（`spot-marker is-review`） |
+| 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から選択された距離以内にある口コミが付いた場所（近い順）。ルートの候補に混ぜる |
+| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では丸のまま色を紫（`--review-purple`）に描き分ける（`spot-marker is-review`） |
 | チェーン店か | isChain | Places の候補がチェーン店か（`BusinessChains` を持つ）。選ぶ優先順位を下げる |
 | スポットのカテゴリ | spotCategory | スポット検索に渡す種別（Places のカテゴリ） |
 | スポットのカテゴリID | spotCategoryId | `spotCategory` を識別する値。カテゴリマスタが持つ |
@@ -98,6 +98,14 @@ inclusion: always
 | 計測状態 | measurementStatus | 実績をどこまで計測できたか。complete / partial / unavailable の3値 |
 | 計測の欠落があったかどうか | hasMeasurementGap | 画面を切られた・測位が途切れたことを検知したか |
 | 計測の欠落とみなす継続時間 | MEASUREMENT_GAP_THRESHOLD_MS | 測位の中断・画面の非表示がこの時間を超えたら欠落として扱う（ミリ秒）。`RouteNavigationView.vue` の定数 |
+| 区間 | leg | ルートを開始地点・スポットで区切った1区間。Routes の Legs に対応。legs[i] はスポット i へ向かう区間、最後は最終スポットから開始地点への帰り道 |
+| 区間の一覧 | legs | 巡る順に並んだ区間。数はスポット数+1。確かめられない場合は空 |
+| 区間ごとの座標列 | legCoordinates | routesRepository が返す区間ごとの座標列の配列 |
+| 今の区間の番号 | currentLegIndex | 到達済みのスポット数（visitedCount）と同じ値。全スポット到達後は帰り道の番号になる |
+| 区間の描き分け | legSections | walkedLegs / currentLeg / upcomingLegs にまとめたもの。toRouteLegSections（`utils/routeLegs.js`）が作る。null は1色で描く |
+| 歩き終えた区間 | walkedLegs | 灰色の破線で描く |
+| 今の区間 | currentLeg | 緑の太線＋白の縁取りで最前面に描く |
+| これからの区間 | upcomingLegs | 従来の経路の色で描く |
 | 最後に距離を積めた時刻 | lastDistanceAddedAt | 距離を加算できた最後の時刻。記録のみで、現時点では計測状態の判定には使っていない |
 
 ### 検索条件
@@ -419,3 +427,4 @@ inclusion: always
 | 2026/10/14 | ビル群での現在地のずれ対策（速さによる飛びの除外・経路への吸着表示）に伴い「ルートとスポット」へ displayLocation / isSnappedToRoute / MAX_SNAP_DEVIATION_M / MAX_WALKING_SPEED_MPS / jumpCandidate / MAX_CONSECUTIVE_JUMP_COUNT を追加 |
 | 2026/10/21 | 案内中に前の目的地へ戻すボタンの追加に伴い「ルートとスポット」へ returnToPreviousSpot / canReturnToPreviousSpot を追加。visitedSpotIds の「到達後は未到達へ戻さない」を、returnToPreviousSpot でのみ戻す旨へ変更 |
 | 2026/10/21 | 口コミの場所を巡るルートの生成とチェーン店の優先度の引き下げに伴い「ルートとスポット」へ reviewCandidates / isReviewSpot / isChain を追加 |
+| 2026/10/21 | 案内中の経路の区間ごとの描き分けに伴い「ルートとスポット」へ leg / legs / legCoordinates / currentLegIndex / legSections / walkedLegs / currentLeg / upcomingLegs を追加 |

@@ -4,6 +4,7 @@ import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
+import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
 
@@ -109,10 +110,15 @@ const NAVIGATION_SPOTS = [
  * @description ルートを用意して案内画面を shallow で描画する。
  * shallow のままでは DefaultLayout のスロットが描画されず画面内のボタンを押せないため、
  * スロットだけを描画するスタブに差し替える
+ * @param {object[]} [legs] 区間ごとの線。既定は区間なし（従来の応答）
  * @returns {object} マウントした wrapper
  */
-const mountNavigationViewWithRoute = () => {
-  useRouteStore().setCurrentRoute({ spots: NAVIGATION_SPOTS, geometry: null });
+const mountNavigationViewWithRoute = (legs) => {
+  useRouteStore().setCurrentRoute({
+    spots: NAVIGATION_SPOTS,
+    geometry: null,
+    ...(legs === undefined ? {} : { legs })
+  });
 
   return mount(RouteNavigationView, {
     shallow: true,
@@ -356,5 +362,73 @@ describe('RouteNavigationView の前の目的地に戻るボタン', () => {
     expect(mineToggle.attributes('aria-pressed')).toBe('false');
     expect(mineToggle.classes()).not.toContain('is-on');
     expect(otherToggle.attributes('aria-pressed')).toBe('true');
+  });
+});
+
+describe('RouteNavigationView の区間の描き分け', () => {
+  /** 4区間（開始→A、A→B、B→C、C→開始） */
+  const NAVIGATION_LEGS = [0, 1, 2, 3].map((index) => ({
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [139.7 + index * 0.001, 35.69],
+        [139.7 + (index + 1) * 0.001, 35.69]
+      ]
+    }
+  }));
+
+  /** 各区間の線 */
+  const legGeometries = NAVIGATION_LEGS.map((leg) => leg.geometry);
+
+  /**
+   * @description 地図へ渡した区間の描き分けを取り出す
+   * @param {object} wrapper マウントした wrapper
+   * @returns {object|null} 区間の描き分け
+   */
+  const legSectionsOf = (wrapper) =>
+    wrapper.findComponent(RouteNavigationMap).props('legSections');
+
+  test('開始直後は開始地点→1スポット目が今の区間で、歩き終えた区間は無い', () => {
+    const wrapper = mountNavigationViewWithRoute(NAVIGATION_LEGS);
+
+    expect(legSectionsOf(wrapper)).toEqual({
+      walkedLegs: [],
+      currentLeg: legGeometries[0],
+      upcomingLegs: [legGeometries[1], legGeometries[2], legGeometries[3]]
+    });
+  });
+
+  test('次の目的地へ進めると今の区間が切り替わり、戻すと元に戻る', async () => {
+    const wrapper = mountNavigationViewWithRoute(NAVIGATION_LEGS);
+
+    await wrapper.find('.next-spot-btn').trigger('click');
+
+    expect(legSectionsOf(wrapper).currentLeg).toEqual(legGeometries[1]);
+    expect(legSectionsOf(wrapper).walkedLegs).toEqual([legGeometries[0]]);
+
+    await wrapper.find('.previous-spot-btn').trigger('click');
+
+    expect(legSectionsOf(wrapper).currentLeg).toEqual(legGeometries[0]);
+    expect(legSectionsOf(wrapper).walkedLegs).toEqual([]);
+  });
+
+  test('すべて巡ると最終スポット→開始地点の帰り道が今の区間になる', async () => {
+    const wrapper = mountNavigationViewWithRoute(NAVIGATION_LEGS);
+
+    for (let count = 0; count < NAVIGATION_SPOTS.length; count += 1) {
+      await wrapper.find('.next-spot-btn').trigger('click');
+    }
+
+    expect(legSectionsOf(wrapper)).toEqual({
+      walkedLegs: [legGeometries[0], legGeometries[1], legGeometries[2]],
+      currentLeg: legGeometries[3],
+      upcomingLegs: []
+    });
+  });
+
+  test('区間を持たないルートでは描き分けず、経路を1色で描く（null を渡す）', () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    expect(legSectionsOf(wrapper)).toBeNull();
   });
 });

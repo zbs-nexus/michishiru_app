@@ -73,17 +73,26 @@ const distanceBetweenM = (from, to) =>
   calculateDistanceM(toLngLat(from), toLngLat(to)) ?? Number.POSITIVE_INFINITY;
 
 /**
- * @description 現在地から選択された距離以内にある口コミの場所を、近い順に集める。
+ * @description 検索条件のジャンルに合い、現在地から選択された距離以内にある
+ * 口コミの場所を、近い順に集める。
+ *
+ * ジャンルは口コミの投稿時に選んだ genreId と、検索条件のジャンルID（おまかせなら選ばれた全件）を
+ * 突き合わせる。どちらも検索条件マスタの genreId なので同じ値で比べられる。
+ * ジャンルを持たない口コミの場所は、条件に合うか判断できないため候補にしない。
  *
  * 口コミの場所はルートの質を上げる付加的な候補のため、取得に失敗しても
  * ルート作成は止めず、口コミの場所なしで続行する。
  * @param {object} params パラメータ
  * @param {{lat: number, lng: number}} params.currentLocation 現在地
  * @param {number} params.radiusM 候補にする範囲（m）。選択された距離
+ * @param {string[]} params.genreIds 検索条件のジャンルID（英語。例: nature）
  * @param {object} repositories データ取得に使うリポジトリ
  * @returns {Promise<Array<{name: string, position: number[], isReviewSpot: true}>>} 近い順の口コミの場所
  */
-const collectReviewCandidateSpots = async ({ currentLocation, radiusM }, repositories) => {
+const collectReviewCandidateSpots = async (
+  { currentLocation, radiusM, genreIds },
+  repositories
+) => {
   let reviewSpots = [];
 
   try {
@@ -96,12 +105,14 @@ const collectReviewCandidateSpots = async ({ currentLocation, radiusM }, reposit
   }
 
   const origin = [currentLocation.lng, currentLocation.lat];
+  const targetGenreIds = new Set(genreIds.filter((genreId) => typeof genreId === 'string'));
 
   return reviewSpots
     .filter(
       (spot) =>
         typeof spot.name === 'string' &&
         spot.name !== '' &&
+        targetGenreIds.has(spot.genreId) &&
         Number.isFinite(spot.position?.[0]) &&
         Number.isFinite(spot.position?.[1])
     )
@@ -306,6 +317,33 @@ const ensureReviewSpot = async (
   });
 
   return { spots, route };
+};
+
+/**
+ * @description 区間ごとの座標列を確かめ、応答に載せる区間の一覧にする。
+ *
+ * 区間は「出発地→スポット1、…、スポットN→出発地」の順で、数はスポット数+1になる。
+ * 数が合わない、または2点未満の区間を含む場合はスポットとの対応を保証できないため、
+ * 区間を返さない（フロントは全体の線を1色で描く）。
+ * @param {number[][][]|undefined} legCoordinates Repository が返した区間ごとの座標列
+ * @param {number} spotCount 巡るスポットの数
+ * @returns {Array<{coordinates: number[][]}>} 区間の一覧。確かめられない場合は空配列
+ */
+const toRouteLegs = (legCoordinates, spotCount) => {
+  const legs = Array.isArray(legCoordinates) ? legCoordinates : [];
+  const isValid =
+    legs.length === spotCount + 1 &&
+    legs.every((coordinates) => Array.isArray(coordinates) && coordinates.length >= 2);
+
+  if (!isValid) {
+    logWarn('区間の数がスポット数と合わないため、区間ごとの線を返しません', {
+      legCount: legs.length,
+      spotCount
+    });
+    return [];
+  }
+
+  return legs.map((coordinates) => ({ coordinates }));
 };
 
 /**
@@ -617,7 +655,7 @@ const collectCandidateSpotsWithRetry = async (
  * @param {boolean} [conditions.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
  * @param {object} [repositories] 外部サービスへのアクセス（テスト時に差し替える）
- * @returns {Promise<{routeTitle: string, conceptStory: string, totalDistanceM: number, totalDurationS: number, spots: object[], coordinates: number[][], selectedGenreId?: string, selectedGenreName?: string, selectedDistanceKm?: number}>} 作成したルート
+ * @returns {Promise<{routeTitle: string, conceptStory: string, totalDistanceM: number, totalDurationS: number, spots: object[], coordinates: number[][], legs: Array<{coordinates: number[][]}>, selectedGenreId?: string, selectedGenreName?: string, selectedDistanceKm?: number}>} 作成したルート
  * @throws {ApplicationError} マスタやスポットが見つからない、または外部サービスが失敗した場合
  */
 export const createRoute = async (
@@ -657,7 +695,12 @@ export const createRoute = async (
       repositories
     ),
     collectReviewCandidateSpots(
-      { currentLocation, radiusM: selectedDistanceKm * METERS_PER_KM },
+      {
+        currentLocation,
+        radiusM: selectedDistanceKm * METERS_PER_KM,
+        // 周辺検索と同じジャンル（おまかせなら選ばれたすべて）に合う口コミの場所だけを候補にする
+        genreIds: selectedGenres.map((genre) => genre.genreId)
+      },
       repositories
     )
   ]);
@@ -846,11 +889,13 @@ export const createRoute = async (
         name: spot.name,
         lng: snappedPosition[0],
         lat: snappedPosition[1],
-        // 地図で星の形に描き分けるための目印
+        // 地図で紫に描き分けるための目印
         isReviewSpot: spot.isReviewSpot === true
       };
     }),
-    coordinates: route.coordinates
+    coordinates: route.coordinates,
+    // 案内画面で区間ごとに描き分けるための線。最終の spots と route で確かめる
+    legs: toRouteLegs(route.legCoordinates, spots.length)
   };
 
   if (isGenreRandom) {
