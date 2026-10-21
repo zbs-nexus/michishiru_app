@@ -57,6 +57,9 @@ inclusion: always
 | スポット | spot | ユーザーが立ち寄る場所（公園・神社・カフェ等） |
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
+| 口コミの場所の候補 | reviewCandidates | 現在地から選択された距離以内にある、口コミが付いた場所（近い順）。ルートの候補に混ぜる |
+| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図で星の形に描き分ける（`spot-marker is-review`） |
+| チェーン店か | isChain | Places の候補がチェーン店か（`BusinessChains` を持つ）。選ぶ優先順位を下げる |
 | スポットのカテゴリ | spotCategory | スポット検索に渡す種別（Places のカテゴリ） |
 | スポットのカテゴリID | spotCategoryId | `spotCategory` を識別する値。カテゴリマスタが持つ |
 | スポット数 | spotCount | 立ち寄ったスポットの個数 |
@@ -415,3 +418,4 @@ inclusion: always
 | 2026/10/14 | 到達済みのスタンプを「済」の文字から足跡の画像（`assets/images/spot-visited-stamp.png`）に変更したことに伴い VISITED_STAMP_LABEL を削除 |
 | 2026/10/14 | ビル群での現在地のずれ対策（速さによる飛びの除外・経路への吸着表示）に伴い「ルートとスポット」へ displayLocation / isSnappedToRoute / MAX_SNAP_DEVIATION_M / MAX_WALKING_SPEED_MPS / jumpCandidate / MAX_CONSECUTIVE_JUMP_COUNT を追加 |
 | 2026/10/21 | 案内中に前の目的地へ戻すボタンの追加に伴い「ルートとスポット」へ returnToPreviousSpot / canReturnToPreviousSpot を追加。visitedSpotIds の「到達後は未到達へ戻さない」を、returnToPreviousSpot でのみ戻す旨へ変更 |
+| 2026/10/21 | 口コミの場所を巡るルートの生成とチェーン店の優先度の引き下げに伴い「ルートとスポット」へ reviewCandidates / isReviewSpot / isChain を追加 |
