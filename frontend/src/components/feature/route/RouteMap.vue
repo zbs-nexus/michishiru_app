@@ -188,7 +188,7 @@ const hasNoGeometry = ref(false);
  */
 let map = null;
 let markers = [];
-/** スポットのマーカー要素と、表示の切り替えに必要な情報（spotId・巡る順） */
+/** スポットのマーカー要素と、表示の切り替えに必要な情報（スポット・巡る順・口コミのピンか） */
 let spotMarkerStates = [];
 let originMarker = null;
 let currentLocationMarker = null;
@@ -321,15 +321,12 @@ const renderOriginMarker = () => {
  * スタイルは global.css に置いている。
  * @param {number} order 巡る順序（1始まり）
  * @param {boolean} isVisited 到達済みかどうか
- * @param {boolean} [isReviewSpot] 口コミが付いた場所か（色を紫にする）
  * @returns {HTMLElement} マーカーとして使う要素
  */
-const createSpotMarkerElement = (order, isVisited, isReviewSpot = false) => {
+const createSpotMarkerElement = (order, isVisited) => {
   const element = document.createElement('div');
   element.className = 'spot-marker';
-  // 口コミの場所は色だけを紫にする（形・文字・大きさは他のスポットと同じ丸）
-  element.classList.toggle('is-review', isReviewSpot);
-  applySpotMarkerState(element, order, isVisited, isReviewSpot);
+  applySpotMarkerState(element, order, isVisited);
   return element;
 };
 
@@ -339,22 +336,16 @@ const createSpotMarkerElement = (order, isVisited, isReviewSpot = false) => {
  * @param {HTMLElement} element マーカーの要素
  * @param {number} order 巡る順序（1始まり）
  * @param {boolean} isVisited 到達済みかどうか
- * @param {boolean} [isReviewSpot] 口コミが付いた場所か（読み上げで補う）
  * @returns {void}
  */
-const applySpotMarkerState = (element, order, isVisited, isReviewSpot = false) => {
+const applySpotMarkerState = (element, order, isVisited) => {
   element.classList.toggle('is-visited', isVisited);
   // スタンプは背景画像で出すため、到達済みでは番号の文字を消す
   element.textContent = isVisited ? '' : String(order);
-
-  // 見た目からは番号も到達済みかどうかも読み取れないため、読み上げで補う。
-  // 紫の意味も、色だけでは伝わらないため添える
-  const reviewLabel = isReviewSpot ? '・口コミの場所' : '';
+  // 見た目からは番号も到達済みかどうかも読み取れないため、読み上げで補う
   element.setAttribute(
     'aria-label',
-    isVisited
-      ? `${order}番目のスポット（到達済み${reviewLabel}）`
-      : `${order}番目のスポット${isReviewSpot ? '（口コミの場所）' : ''}`
+    isVisited ? `${order}番目のスポット（到達済み）` : `${order}番目のスポット`
   );
 };
 
@@ -605,23 +596,114 @@ const toReviewMarkers = (spots, modifierClass) =>
     });
 
 /**
+ * @description ルートで巡る口コミの場所のID（口コミのピンと重ねないために使う）
+ * @returns {Set<string>} 口コミの場所のID
+ */
+const toRouteReviewSpotIds = () =>
+  new Set(
+    props.spots
+      .filter((spot) => isRouteReviewSpot(spot))
+      .map((spot) => spot.reviewSpotId)
+  );
+
+/**
  * @description 投稿済みの口コミのピンを描き直す。
  * 自分の口コミはオレンジ、他の人の口コミは紫で出し、表示オフのぶんは作らない。
+ * ルートで巡る口コミの場所は、ルートのスポットとして同じ形のピンで描くため、ここでは描かない
+ * （同じ場所に2本のピンが重なるのを防ぐ）。
  * @returns {void}
  */
 const renderReviewMarkers = () => {
   reviewMarkers.forEach((marker) => marker.remove());
   reviewMarkers = [];
 
+  const routeReviewSpotIds = toRouteReviewSpotIds();
+  const excludeRouteSpots = (spots) =>
+    spots.filter((spot) => !routeReviewSpotIds.has(spot.spotId));
+
   if (props.showMyReviews) {
-    reviewMarkers.push(...toReviewMarkers(props.myReviewSpots, MY_REVIEW_PIN_CLASS));
+    reviewMarkers.push(
+      ...toReviewMarkers(excludeRouteSpots(props.myReviewSpots), MY_REVIEW_PIN_CLASS)
+    );
   }
 
   if (props.showOtherReviews) {
     reviewMarkers.push(
-      ...toReviewMarkers(props.otherReviewSpots, OTHER_REVIEW_PIN_CLASS)
+      ...toReviewMarkers(excludeRouteSpots(props.otherReviewSpots), OTHER_REVIEW_PIN_CLASS)
     );
   }
+};
+
+/**
+ * @description ルートのスポットが、口コミのピンとして描ける口コミの場所か。
+ * 口コミを開くにはIDと元の座標が要るため、どちらも揃っている場合だけ真とする
+ * （古い応答などで欠けている場合は、通常のスポットとして番号の丸で描く）。
+ * @param {object} spot ルートのスポット
+ * @returns {boolean} 口コミのピンとして描けるなら true
+ */
+const isRouteReviewSpot = (spot) =>
+  spot.isReviewSpot === true &&
+  typeof spot.reviewSpotId === 'string' &&
+  Number.isFinite(spot.reviewPosition?.lng) &&
+  Number.isFinite(spot.reviewPosition?.lat);
+
+/**
+ * @description ルートで巡る口コミの場所のピンの表示（色・選択・到達済み・読み上げ）を整える。
+ * 色は口コミのピンと同じ規則で、自分の口コミならオレンジ、それ以外は紫。
+ * 自分の口コミの一覧は後から届くため、届いたときにも呼び直して色を合わせる。
+ * @param {HTMLElement} element ピンの要素
+ * @param {object} spot ルートのスポット
+ * @param {number} order 巡る順序（1始まり）
+ * @param {boolean} isVisited 到達済みかどうか
+ * @returns {void}
+ */
+const applyRouteReviewPinState = (element, spot, order, isVisited) => {
+  const isMine = props.myReviewSpots.some((review) => review.spotId === spot.reviewSpotId);
+  const isSelected = spot.reviewSpotId === props.selectedReviewSpotId;
+
+  element.classList.toggle(MY_REVIEW_PIN_CLASS, isMine);
+  element.classList.toggle(OTHER_REVIEW_PIN_CLASS, !isMine);
+  element.classList.toggle('is-selected', isSelected);
+  element.classList.toggle('is-visited', isVisited);
+  element.setAttribute('aria-pressed', String(isSelected));
+
+  // ピンには番号が無いため、巡る順と到達状況は読み上げで補う
+  element.setAttribute(
+    'aria-label',
+    `${order}番目のスポット（${isVisited ? '到達済み・' : ''}口コミの場所）：${spot.name}の口コミを見る`
+  );
+};
+
+/**
+ * @description ルートで巡る口コミの場所を、口コミのピンと同じ形で描くマーカーを作る。
+ * 位置は口コミのピンと同じ元の座標にし、押すと口コミのピンと同じく口コミを開く。
+ * @param {object} spot ルートのスポット
+ * @param {number} order 巡る順序（1始まり）
+ * @returns {{marker: object, element: HTMLElement}} マーカーと要素
+ */
+const createRouteReviewMarker = (spot, order) => {
+  const element = createReviewPinElement(OTHER_REVIEW_PIN_CLASS, {
+    spotId: spot.reviewSpotId,
+    spotName: spot.name
+  });
+  element.classList.add('is-route-spot');
+  applyRouteReviewPinState(element, spot, order, props.visitedSpotIds.includes(spot.spotId));
+
+  element.addEventListener('click', (event) => {
+    // 地図のクリックや長押し判定に伝播させない
+    event.stopPropagation();
+    emit('selectReviewSpot', {
+      spotId: spot.reviewSpotId,
+      position: { lng: spot.reviewPosition.lng, lat: spot.reviewPosition.lat }
+    });
+  });
+
+  // 押すと口コミを開くため、名前のポップアップは付けない
+  const marker = new Marker({ element, anchor: 'bottom' })
+    .setLngLat([spot.reviewPosition.lng, spot.reviewPosition.lat])
+    .addTo(map);
+
+  return { marker, element };
 };
 
 /**
@@ -764,14 +846,18 @@ const renderSpotMarkers = () => {
   markers = props.spots
     .filter((spot) => spot.lng !== null && spot.lat !== null)
     .map((spot, index) => {
-      const isReviewSpot = spot.isReviewSpot === true;
-      const element = createSpotMarkerElement(
-        index + 1,
-        props.visitedSpotIds.includes(spot.spotId),
-        isReviewSpot
-      );
+      const order = index + 1;
 
-      spotMarkerStates.push({ spotId: spot.spotId, order: index + 1, element, isReviewSpot });
+      // 口コミの場所は、口コミのピンと同じ形で描く
+      if (isRouteReviewSpot(spot)) {
+        const { marker, element } = createRouteReviewMarker(spot, order);
+        spotMarkerStates.push({ spot, order, element, isReviewPin: true });
+        return marker;
+      }
+
+      const element = createSpotMarkerElement(order, props.visitedSpotIds.includes(spot.spotId));
+
+      spotMarkerStates.push({ spot, order, element, isReviewPin: false });
 
       return new Marker({ element })
         .setLngLat([spot.lng, spot.lat])
@@ -781,13 +867,20 @@ const renderSpotMarkers = () => {
 };
 
 /**
- * @description 到達状況に合わせて、スポットのマーカーの表示だけを切り替える。
+ * @description 到達状況・選択・自分の口コミかどうかに合わせて、スポットのマーカーの表示だけを切り替える。
  * 位置は動かさない（マーカーを作り直さず、要素の中身だけを差し替える）。
  * @returns {void}
  */
 const updateSpotMarkerStates = () => {
-  spotMarkerStates.forEach(({ spotId, order, element, isReviewSpot }) => {
-    applySpotMarkerState(element, order, props.visitedSpotIds.includes(spotId), isReviewSpot);
+  spotMarkerStates.forEach(({ spot, order, element, isReviewPin }) => {
+    const isVisited = props.visitedSpotIds.includes(spot.spotId);
+
+    if (isReviewPin) {
+      applyRouteReviewPinState(element, spot, order, isVisited);
+      return;
+    }
+
+    applySpotMarkerState(element, order, isVisited);
   });
 };
 
@@ -846,6 +939,8 @@ watch(
     renderRouteLine();
     renderOriginMarker();
     renderSpotMarkers();
+    // 巡る口コミの場所が変わると、口コミのピンから外す場所も変わるため描き直す
+    renderReviewMarkers();
     fitToRoute();
   }
 );
@@ -927,6 +1022,8 @@ watch(
     }
 
     renderReviewMarkers();
+    // ルートで巡る口コミの場所のピンも、色（自分の口コミか）と選択の表示を合わせる
+    updateSpotMarkerStates();
   },
   { deep: true }
 );

@@ -41,7 +41,7 @@
   --route-walked-leg: #9AA0A6;
   /* 今の区間。トースト（次の目的地のバナー）の左枠と同じ緑。ROUTE_CURRENT_LEG_COLOR と同値にする */
   --route-current-leg: var(--accent-green);
-  /* 口コミの場所を示す紫。口コミのピン（紫）とルートの口コミのスポットで同じ値を使う */
+  /* 他の人の口コミのピンの紫。ルートで巡る口コミの場所も同じピンで描く */
   --review-purple: #8E44AD;
   /* 羊皮紙。画面の地の色 */
   --bg-light: #FBF4E4;
@@ -897,21 +897,6 @@ textarea {
 }
 
 /*
- * 口コミが付いた場所のスポットマーカー。
- * 形・番号の文字・大きさ（26px）は通常のスポットと同じ丸のままにし、色だけを紫にする。
- * 紫は口コミのピン（他の人の口コミ）と同じ --review-purple で、「口コミの場所」を色で示す。
- * 到達済み（is-visited）は背景をスタンプ画像に差し替えるため、こちらの色より後で上書きされる。
- */
-.spot-marker.is-review {
-  background: var(--review-purple);
-}
-
-/* 到達済みは口コミの場所も通常と同じ足跡のスタンプにする（紫を残さない） */
-.spot-marker.is-review.is-visited {
-  background: url('../images/spot-visited-stamp.png') center / cover no-repeat;
-}
-
-/*
  * 地図の開始地点マーカー。
  * スポットマーカーと同じ理由でグローバルに定義している。
  * スポット（青い丸に番号）と見分けられるよう、色を緑にして一段大きくしている。
@@ -1124,6 +1109,21 @@ textarea {
 /* 他の人の口コミ投稿の場所は紫 */
 .review-pin-other .review-pin-head {
   background: var(--review-purple);
+}
+
+/*
+ * ルートで巡る口コミの場所（is-route-spot）を到達済みにしたとき。
+ * 番号の丸のスポットと同じく、足跡のスタンプに替える（ピンの頭は隠す）。
+ * ピンは下端を座標に合わせている（anchor: bottom）ため、スタンプも座標の真上に乗る。
+ */
+.review-pin.is-route-spot.is-visited {
+  width: 32px;
+  height: 32px;
+  background: url('../images/spot-visited-stamp.png') center / cover no-repeat;
+}
+
+.review-pin.is-route-spot.is-visited .review-pin-head {
+  display: none;
 }
 
 /*

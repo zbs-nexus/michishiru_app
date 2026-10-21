@@ -25,6 +25,9 @@ backend/.env.*
 iac/.env
 iac/.env.*
 
+# ===== Seed export (backend/tools/seedReviewSpots.js --export) =====
+backend/tools/output/
+
 # ===== Logs =====
 *.log
 npm-debug.log*

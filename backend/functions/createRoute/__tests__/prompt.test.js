@@ -28,6 +28,12 @@ describe('buildRoutePlanPrompt', () => {
     assert.match(prompt, /合計距離を目標距離に収めることを最優先/);
   });
 
+  it('口コミの場所の中では平均評価の高いものを優先するよう指示する', () => {
+    const prompt = buildRoutePlanPrompt(baseConditions);
+
+    assert.match(prompt, /"ratingAverage"（5段階の平均評価）が\s*高いものを優先して選んでください/);
+  });
+
   it('チェーン店の優先順位を下げるよう指示する', () => {
     const prompt = buildRoutePlanPrompt(baseConditions);
 
