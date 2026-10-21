@@ -125,11 +125,16 @@ const distanceLabel = computed(() => {
   width: calc(100% - 24px);
   max-width: 406px;
   padding: 10px 16px 10px 12px;
-  border-radius: 16px;
-  border: 2px solid var(--border-gold);
-  border-left: 5px solid var(--accent-green);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
-  box-shadow: 0 4px 16px rgba(58, 46, 32, 0.28);
+  background-clip: padding-box;
+  /*
+   * 左端の緑の帯で案内中であることを示す。
+   * border-image は辺ごとに色を変えられないため、border-left ではなく
+   * 内側の影（inset）で帯を引く。
+   */
+  box-shadow: inset 5px 0 0 var(--accent-green), var(--shadow-raised);
 }
 
 /* 文言の側。マスコットの右に縦並びで置く */

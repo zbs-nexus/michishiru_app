@@ -163,8 +163,8 @@ const handleRemove = (index) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid #DDE3E8;
+  border-radius: 6px;
+  border: 2px solid var(--border-ink);
 }
 
 .photo-remove {
@@ -191,9 +191,9 @@ const handleRemove = (index) => {
   justify-content: center;
   width: 56px;
   height: 56px;
-  border: 1px dashed #B6C0CA;
-  border-radius: 8px;
-  color: var(--text-gray);
+  border: 2px dashed var(--border-ink);
+  border-radius: 6px;
+  color: var(--text-dark);
   cursor: pointer;
 }
 

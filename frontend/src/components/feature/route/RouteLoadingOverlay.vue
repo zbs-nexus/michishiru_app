@@ -10,8 +10,9 @@ import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.v
 
 <template>
   <div class="screen is-loading">
+    <!-- 他の画面と同じ古地図の地 -->
     <div
-      class="loading-bg"
+      class="paper-map-bg"
       aria-hidden="true"
     />
     <div class="loading-content">
