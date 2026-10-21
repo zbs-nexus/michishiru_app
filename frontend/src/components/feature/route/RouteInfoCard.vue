@@ -1,5 +1,6 @@
 <script setup>
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
+import { DEFAULT_MASCOT_LEVEL } from '@/constants/mascotLevels';
 
 /**
  * @description ルートの名称・説明・所要時間を、マスコットが紹介する形で表示する。
@@ -21,6 +22,11 @@ defineProps({
   durationMinutes: {
     type: Number,
     required: true
+  },
+  /** マスコットのレベル。省略時は MascotSpeechBubble 側の既定（Lv.1）になる */
+  mascotLevel: {
+    type: Number,
+    default: DEFAULT_MASCOT_LEVEL
   }
 });
 </script>
@@ -28,6 +34,7 @@ defineProps({
 <template>
   <MascotSpeechBubble
     class="route-info-card"
+    :level="mascotLevel"
     placement="side"
     size="medium"
   >

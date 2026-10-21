@@ -4,7 +4,6 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
-import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
@@ -136,22 +135,6 @@ const handleBackToHome = () => {
         おすすめルート
       </h2>
 
-      <!--
-        提案の案内役。ホームで取得したレベルに応じた姿で出す。
-        この画面は地図と紹介文に高さを譲りたいので size は small にし、
-        経験値バーは出さずレベル名だけ添える（情報を絞る）。
-        ホームを経由せず直接来た場合に取得前の卵が出ないよう isExperienceLoaded で守る。
-      -->
-      <MascotSpeechBubble
-        v-if="mascotStore.isExperienceLoaded"
-        class="suggestion-mascot"
-        message="こんなルートはどう？ 気に入ったら決定してね！"
-        :level="mascotStore.mascotLevel"
-        placement="side"
-        size="small"
-        has-level-label
-      />
-
       <RouteMapPreview
         :geometry="routeStore.currentRoute.geometry"
         :spots="routeStore.currentRoute.spots"
@@ -161,6 +144,7 @@ const handleBackToHome = () => {
         :route-name="routeStore.currentRoute.routeName"
         :description="routeStore.currentRoute.description"
         :duration-minutes="routeStore.currentRoute.durationMinutes"
+        :mascot-level="mascotStore.mascotLevel"
       />
     </div>
 
@@ -204,11 +188,6 @@ const handleBackToHome = () => {
 .suggestion-content {
   display: flex;
   flex-direction: column;
-}
-
-/* 案内役と地図の間を空ける。高さが限られる画面なので最小限にとどめる */
-.suggestion-mascot {
-  margin-bottom: calc(6px + var(--fit) * 8);
 }
 
 /*
