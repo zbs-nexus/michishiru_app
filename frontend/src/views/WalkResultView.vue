@@ -5,8 +5,10 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
+import MascotLevelUpCelebration from '@/components/feature/mascot/MascotLevelUpCelebration.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import WalkResultStats from '@/components/feature/walk/WalkResultStats.vue';
+import { useMascotLevelUp } from '@/composables/useMascotLevelUp';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkResultSave } from '@/composables/useWalkResultSave';
 import { useMascotStore } from '@/stores/mascotStore';
@@ -37,6 +39,14 @@ const {
 // 実績は既に確定していて利用者の操作を待たせる必要がなく、
 // スピナーを出すとかえって失敗したように見える
 const { saveErrorMessage, saveCurrentWalkResult } = useWalkResultSave();
+// レベルアップの検知と、お祝い演出に見せるレベルの一覧を持つ
+const {
+  isCelebrationVisible,
+  celebrationLevels,
+  captureBeforeLoad,
+  detectLevelUp,
+  closeCelebration
+} = useMascotLevelUp();
 
 /**
  * 計測状態に応じた注記。注記が不要な場合はnull。
@@ -64,9 +74,16 @@ onMounted(async () => {
     showMessage(saveErrorMessage.value ?? '実績を保存できませんでした');
   }
 
+  // 取り直す前のレベルを控える。これと取り直した後のレベルを比べて
+  // 今回の散歩でレベルが上がったかを判定する（実績未取得で来た場合は控えない）
+  captureBeforeLoad();
+
   // 保存の後に取り直すことで、今終えた散歩の分を含めたレベルと経験値が見える。
   // 保存に失敗した場合でも呼ぶ（値は前のままだが、取り直しても害はない）
   await mascotStore.loadExperience();
+
+  // 取り直した後のレベルと比べ、上がっていればお祝い演出を起こす
+  detectLevelUp();
 });
 
 /**
@@ -104,6 +121,16 @@ const handleReturnHome = () => {
       v-if="toastMessage"
       :message="toastMessage"
       @close="hideMessage"
+    />
+
+    <!--
+      レベルアップ演出。今回の散歩でレベルが上がったときだけ、結果画面の上に重ねる。
+      閉じると（最後の段で close）通常の結果画面に戻る。
+    -->
+    <MascotLevelUpCelebration
+      v-if="isCelebrationVisible"
+      :levels="celebrationLevels"
+      @close="closeCelebration"
     />
 
     <div class="result-content">

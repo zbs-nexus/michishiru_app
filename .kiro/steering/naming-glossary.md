@@ -248,6 +248,11 @@ inclusion: always
 | 上限レベルかどうか | isMaxLevel | Lv.10 に達しているか |
 | 実績を取得できたかどうか | hasExperience | 取得に失敗した場合は false。バーを出さず Lv.1 で続ける |
 | 経験値バー | MascotExperienceBar | レベル内の進捗を示すバー（コンポーネント名） |
+| レベルアップ演出 | MascotLevelUpCelebration | 散歩結果画面で、今回の散歩でレベルが上がったときに全画面で祝う演出（コンポーネント名） |
+| 見せるレベルの一覧 | celebrationLevels | レベルアップ演出で順に見せるレベルの昇順の配列（経由レベルを含む。例: `[4, 5]`）。開始レベルの次から到達レベルまでが入る |
+| 散歩前のレベル | levelBeforeWalk | `loadExperience()` を呼ぶ前に控える、今回の散歩を含める前のレベル。これと取得後のレベルを比べてレベルアップを判定する。実績未取得で結果画面に来た場合は `null`（比較できないため演出を出さない） |
+| 演出を表示中かどうか | isCelebrationVisible | レベルアップ演出を表示中かどうか。`useMascotLevelUp.js` の状態 |
+| レベルアップの検知 | useMascotLevelUp | 結果画面で散歩前後のレベルを比べ、演出に見せるレベルの一覧を持つ composable |
 
 `variant` は `BaseToast` でも同名で使っているが、値は別（トーストは `error` / `omakase`）。どちらもその部品の「見た目の種類」を指す語として使う。
 
@@ -430,3 +435,4 @@ inclusion: always
 | 2026/10/21 | 案内中に前の目的地へ戻すボタンの追加に伴い「ルートとスポット」へ returnToPreviousSpot / canReturnToPreviousSpot を追加。visitedSpotIds の「到達後は未到達へ戻さない」を、returnToPreviousSpot でのみ戻す旨へ変更 |
 | 2026/10/21 | 口コミの場所を巡るルートの生成とチェーン店の優先度の引き下げに伴い「ルートとスポット」へ reviewCandidates / isReviewSpot / isChain を追加 |
 | 2026/10/21 | 案内中の経路の区間ごとの描き分けに伴い「ルートとスポット」へ leg / legs / legCoordinates / currentLegIndex / legSections / walkedLegs / currentLeg / upcomingLegs を追加 |
+| 2026/10/14 | 散歩結果画面のレベルアップ演出の追加に伴い「マスコット」へ MascotLevelUpCelebration / celebrationLevels / levelBeforeWalk / isCelebrationVisible / useMascotLevelUp を追加 |
