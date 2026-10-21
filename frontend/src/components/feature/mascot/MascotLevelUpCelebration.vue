@@ -8,7 +8,7 @@ import { getMascotLevel } from '@/constants/mascotLevels';
  * 結果画面の上に重ねて「レベルアップ！」を見せ、閉じると下の結果画面に戻る。
  * 複数レベル上がった場合は、経由レベルを1段ずつ順に見せる（例: Lv.4 → Lv.5）。
  * 各段はタップ（クリック）・キー操作で次へ進め、最後の段で閉じると `close` を emit する。
- * 自動送りも入れるが、タップでいつでも次へ進める。
+ * 時間では進めない。利用者が押すまで同じ段を見せ続ける（レベルアップをしっかり味わえるように）。
  *
  * 画像は1枚絵のため中割り（コマ送り）はできない。旧→新の切り替えは
  * 「フェードアウト → 光 → フェードイン」で見せる。
@@ -27,9 +27,6 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-/** 自動で次の段へ送るまでの待ち時間（ミリ秒）。タップはこれを待たずに送れる */
-const AUTO_ADVANCE_DELAY_MS = 2600;
-
 /** 今見せている段の位置（levels の添字） */
 const currentStepIndex = ref(0);
 
@@ -42,9 +39,6 @@ const overlayRef = ref(null);
 /** 演出を開く前にフォーカスがあった要素。閉じたら戻す */
 let previouslyFocusedElement = null;
 
-/** 自動送りのタイマー。段が変わる・閉じるたびに張り直す */
-let autoAdvanceTimerId = null;
-
 /** 今見せているレベルの定義（画像・名前）。未用意のレベルは代替の姿が返る */
 const currentMascot = computed(() =>
   getMascotLevel(props.levels[currentStepIndex.value])
@@ -54,29 +48,6 @@ const currentMascot = computed(() =>
 const isLastStep = computed(
   () => currentStepIndex.value >= props.levels.length - 1
 );
-
-/**
- * @description 自動送りのタイマーを止める。
- * @returns {void}
- */
-const clearAutoAdvance = () => {
-  if (autoAdvanceTimerId !== null) {
-    clearTimeout(autoAdvanceTimerId);
-    autoAdvanceTimerId = null;
-  }
-};
-
-/**
- * @description 一定時間後に自動で次へ送るタイマーを張る。
- * タップで送られた場合も張り直すため、まず既存のタイマーを止める。
- * @returns {void}
- */
-const scheduleAutoAdvance = () => {
-  clearAutoAdvance();
-  autoAdvanceTimerId = setTimeout(() => {
-    handleAdvance();
-  }, AUTO_ADVANCE_DELAY_MS);
-};
 
 /**
  * @description 画像差し替えの演出（フェード→光→フェード）を一度再生する。
@@ -127,10 +98,9 @@ const handleKeydown = (event) => {
   }
 };
 
-// 段が変わるたびに、画像の差し替え演出を起こし、自動送りを張り直す
+// 段が変わるたびに、画像の差し替え演出を起こす
 watch(currentStepIndex, () => {
   playTransition();
-  scheduleAutoAdvance();
 });
 
 onMounted(() => {
@@ -142,11 +112,9 @@ onMounted(() => {
   // キーで操作できるよう、オーバーレイへフォーカスを移す
   overlayRef.value?.focus();
   playTransition();
-  scheduleAutoAdvance();
 });
 
 onBeforeUnmount(() => {
-  clearAutoAdvance();
   // 演出を開く前にフォーカスがあった要素へ戻す（支援技術の利用者が迷子にならないように）
   previouslyFocusedElement?.focus();
 });
