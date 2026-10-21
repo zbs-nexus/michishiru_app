@@ -1249,8 +1249,17 @@ textarea {
   position: relative;
 }
 
-/* .content と同じく、残りの高さを受け持ち、収まらない場合だけ中をスクロールさせる */
+/*
+ * .content と同じく、残りの高さを受け持ち、収まらない場合だけ中をスクロールさせる。
+ *
+ * position と z-index も .content と同じにする。消さないこと。
+ * 背景の絵（.paper-map-bg）は position: fixed のため、位置指定を持たない要素より
+ * 常に手前に描かれる（DOM の順番は関係ない）。結果画面は .content を通らないので、
+ * これが無いと注記（.hint）など位置指定を持たない中身が絵の下に隠れる。
+ */
 .result-content {
+  position: relative;
+  z-index: 1;
   flex: 1;
   min-height: 0;
   overflow-x: hidden;
