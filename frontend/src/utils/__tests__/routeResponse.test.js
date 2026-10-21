@@ -71,3 +71,53 @@ describe('toRoute（口コミの場所の目印）', () => {
     expect(route.distanceKm).toBe(3);
   });
 });
+
+describe('toRoute（区間ごとの線）', () => {
+  /** 2区間ぶんの線 */
+  const legs = [
+    {
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [139.7036, 35.6862],
+          [139.704, 35.6866]
+        ]
+      }
+    },
+    {
+      geometry: {
+        type: 'LineString',
+        coordinates: [
+          [139.704, 35.6866],
+          [139.7036, 35.6862]
+        ]
+      }
+    }
+  ];
+
+  test('区間ごとの線を巡る順のまま受け取る', () => {
+    const route = toRoute({ ...buildPayload([]), legs });
+
+    expect(route.legs).toEqual(legs);
+  });
+
+  test('legs を持たない古い応答・getRoute 形式は空配列にする', () => {
+    expect(toRoute(buildPayload([])).legs).toEqual([]);
+    expect(toRoute({ routeName: '保存済み', distance: 3, spots: [] }).legs).toEqual([]);
+  });
+
+  test('2点未満の区間を含む場合は、対応がずれるため全体を空配列にする', () => {
+    const route = toRoute({
+      ...buildPayload([]),
+      legs: [legs[0], { geometry: { type: 'LineString', coordinates: [[139.704, 35.6866]] } }]
+    });
+
+    expect(route.legs).toEqual([]);
+  });
+
+  test('区間を足しても、全体の線（geometry）は変わらない', () => {
+    const route = toRoute({ ...buildPayload([]), legs });
+
+    expect(route.geometry).toEqual(buildPayload([]).geometry);
+  });
+});

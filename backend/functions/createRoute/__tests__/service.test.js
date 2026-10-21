@@ -29,6 +29,8 @@ const createSpot = (name) => ({ name, position: [139.703, 35.686] });
  * @param {string[]} [options.strandedSpotNames] 経路から大きく外れている（乖離大）とみなすスポット名
  * @param {object[]} [options.reviewSpots] 口コミの場所として返す一覧
  * @param {boolean} [options.isReviewSpotsFailing] 口コミの場所の取得を失敗させるか
+ * @param {number} [options.legCountOffset] 経路計算が返す区間の数を「スポット数+1」からずらす量
+ * @param {boolean} [options.hasShortLeg] 先頭の区間を1点だけにするか
  * @returns {{repositories: object, calls: object}} 差し替え用のリポジトリと呼び出し記録
  */
 const createRepositoryStub = ({
@@ -43,7 +45,9 @@ const createRepositoryStub = ({
   distancesM = [3000],
   strandedSpotNames = [],
   reviewSpots = [],
-  isReviewSpotsFailing = false
+  isReviewSpotsFailing = false,
+  legCountOffset = 0,
+  hasShortLeg = false
 } = {}) => {
   const calls = {
     calculateWalkingRoute: [],
@@ -95,6 +99,17 @@ const createRepositoryStub = ({
           [139.703, 35.686],
           [139.704, 35.687]
         ],
+        // 区間は2点の線。添字を経度に混ぜ、どの区間かを見分けられるようにする
+        legCoordinates: Array.from(
+          { length: spots.length + 1 + legCountOffset },
+          (_, index) =>
+            hasShortLeg && index === 0
+              ? [[139.7, 35.686]]
+              : [
+                  [139.7 + index * 0.001, 35.686],
+                  [139.7 + (index + 1) * 0.001, 35.686]
+                ]
+        ),
         totalDistanceM,
         totalDurationS: 600,
         // スナップ後座標は元座標と同一とし、乖離は strandedSpotNames のスポットだけ大きくする
@@ -298,6 +313,77 @@ describe('createRoute', () => {
       result.spots.map((spot) => spot.name),
       ['スポット2', 'スポット3']
     );
+  });
+
+  describe('区間ごとの線', () => {
+    it('スポット数+1の区間を巡る順のまま返す', async () => {
+      const { repositories } = createRepositoryStub({ distancesM: [3000] });
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.equal(result.spots.length, 3);
+      assert.equal(result.legs.length, 4);
+      result.legs.forEach((leg, index) => {
+        assert.deepEqual(leg, {
+          coordinates: [
+            [139.7 + index * 0.001, 35.686],
+            [139.7 + (index + 1) * 0.001, 35.686]
+          ]
+        });
+      });
+    });
+
+    it('区間の数がスポット数+1と異なる場合は区間を返さない', async () => {
+      for (const legCountOffset of [-1, 1]) {
+        const { repositories } = createRepositoryStub({ distancesM: [3000], legCountOffset });
+
+        const result = await createRoute(conditions, repositories);
+
+        assert.deepEqual(result.legs, []);
+        // 全体の線は従来どおり返す
+        assert.equal(result.coordinates.length, 2);
+      }
+    });
+
+    it('2点未満の区間を含む場合は区間を返さない', async () => {
+      const { repositories } = createRepositoryStub({ distancesM: [3000], hasShortLeg: true });
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.deepEqual(result.legs, []);
+    });
+
+    it('区間の座標列を返さない経路計算でも、空の区間でルートを返す', async () => {
+      const { repositories } = createRepositoryStub({ distancesM: [3000] });
+      const calculate = repositories.calculateWalkingRoute;
+      repositories.calculateWalkingRoute = async (args) => {
+        const { legCoordinates: _legCoordinates, ...route } = await calculate(args);
+        return route;
+      };
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.deepEqual(result.legs, []);
+    });
+
+    it('スポットを削って再計算した場合も、最終のスポット数+1の区間を返す', async () => {
+      const { repositories } = createRepositoryStub({
+        plannedSpotsSequence: [
+          [
+            createSpot('スポット1'),
+            createSpot('スポット2'),
+            createSpot('スポット3'),
+            createSpot('スポット4')
+          ]
+        ],
+        distancesM: [6000, 5000, 3500]
+      });
+
+      const result = await createRoute(conditions, repositories);
+
+      assert.equal(result.spots.length, 2);
+      assert.equal(result.legs.length, 3);
+    });
   });
 
   describe('おまかせ', () => {

@@ -320,6 +320,33 @@ const ensureReviewSpot = async (
 };
 
 /**
+ * @description 区間ごとの座標列を確かめ、応答に載せる区間の一覧にする。
+ *
+ * 区間は「出発地→スポット1、…、スポットN→出発地」の順で、数はスポット数+1になる。
+ * 数が合わない、または2点未満の区間を含む場合はスポットとの対応を保証できないため、
+ * 区間を返さない（フロントは全体の線を1色で描く）。
+ * @param {number[][][]|undefined} legCoordinates Repository が返した区間ごとの座標列
+ * @param {number} spotCount 巡るスポットの数
+ * @returns {Array<{coordinates: number[][]}>} 区間の一覧。確かめられない場合は空配列
+ */
+const toRouteLegs = (legCoordinates, spotCount) => {
+  const legs = Array.isArray(legCoordinates) ? legCoordinates : [];
+  const isValid =
+    legs.length === spotCount + 1 &&
+    legs.every((coordinates) => Array.isArray(coordinates) && coordinates.length >= 2);
+
+  if (!isValid) {
+    logWarn('区間の数がスポット数と合わないため、区間ごとの線を返しません', {
+      legCount: legs.length,
+      spotCount
+    });
+    return [];
+  }
+
+  return legs.map((coordinates) => ({ coordinates }));
+};
+
+/**
  * @description 配列をシャッフルした新しい配列を返す（Fisher-Yates）
  * @param {Array} items 元の配列（変更しない）
  * @returns {Array} シャッフルした配列
@@ -628,7 +655,7 @@ const collectCandidateSpotsWithRetry = async (
  * @param {boolean} [conditions.isDistanceRandom] 距離をおまかせで選ぶか
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
  * @param {object} [repositories] 外部サービスへのアクセス（テスト時に差し替える）
- * @returns {Promise<{routeTitle: string, conceptStory: string, totalDistanceM: number, totalDurationS: number, spots: object[], coordinates: number[][], selectedGenreId?: string, selectedGenreName?: string, selectedDistanceKm?: number}>} 作成したルート
+ * @returns {Promise<{routeTitle: string, conceptStory: string, totalDistanceM: number, totalDurationS: number, spots: object[], coordinates: number[][], legs: Array<{coordinates: number[][]}>, selectedGenreId?: string, selectedGenreName?: string, selectedDistanceKm?: number}>} 作成したルート
  * @throws {ApplicationError} マスタやスポットが見つからない、または外部サービスが失敗した場合
  */
 export const createRoute = async (
@@ -866,7 +893,9 @@ export const createRoute = async (
         isReviewSpot: spot.isReviewSpot === true
       };
     }),
-    coordinates: route.coordinates
+    coordinates: route.coordinates,
+    // 案内画面で区間ごとに描き分けるための線。最終の spots と route で確かめる
+    legs: toRouteLegs(route.legCoordinates, spots.length)
   };
 
   if (isGenreRandom) {

@@ -59,6 +59,11 @@ const toResponseBody = (route) => ({
     type: 'LineString',
     coordinates: route.coordinates
   },
+  // 区間ごとの線。巡る順で legs[i] はスポット i へ向かう区間、最後は出発地への帰り道。
+  // スポットとの対応を確かめられない場合は空配列
+  legs: route.legs.map((leg) => ({
+    geometry: { type: 'LineString', coordinates: leg.coordinates }
+  })),
   // おまかせで選んだ条件。おまかせを使っていない項目は含めない
   ...(route.selectedGenres && {
     selected_genres: route.selectedGenres.map((genre) => ({

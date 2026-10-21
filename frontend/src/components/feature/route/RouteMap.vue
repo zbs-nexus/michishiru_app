@@ -17,10 +17,16 @@ import {
   MAP_FIT_PADDING_PX,
   MAP_STYLE,
   MAX_FIT_ZOOM_LEVEL,
+  ROUTE_CURRENT_LEG_CASING_WIDTH_PX,
+  ROUTE_CURRENT_LEG_COLOR,
+  ROUTE_CURRENT_LEG_WIDTH_PX,
   ROUTE_LINE_COLOR,
   ROUTE_LINE_OUTLINE_COLOR,
   ROUTE_LINE_OUTLINE_WIDTH_PX,
-  ROUTE_LINE_WIDTH_PX
+  ROUTE_LINE_WIDTH_PX,
+  ROUTE_WALKED_LEG_COLOR,
+  ROUTE_WALKED_LEG_DASH_ARRAY,
+  ROUTE_WALKED_LEG_WIDTH_PX
 } from '@/constants/mapDefaults';
 import { toCoordinateBounds } from '@/utils/geoBounds';
 import { useMapLongPress } from '@/composables/useMapLongPress';
@@ -123,6 +129,14 @@ const props = defineProps({
   selectedReviewSpotId: {
     type: String,
     default: null
+  },
+  /**
+   * 区間の描き分け（{ walkedLegs, currentLeg, upcomingLegs }。utils/routeLegs.js が作る）。
+   * 案内画面だけが渡す。null の場合は経路全体を1色で描く
+   */
+  legSections: {
+    type: Object,
+    default: null
   }
 });
 
@@ -136,6 +150,21 @@ const ROUTE_OUTLINE_LAYER_ID = 'route-line-outline';
 
 /** ルートの線を描くレイヤーのID */
 const ROUTE_LINE_LAYER_ID = 'route-line';
+
+/** 歩き終えた区間を保持するソースのID */
+const WALKED_LEGS_SOURCE_ID = 'route-walked-legs';
+
+/** 今の区間を保持するソースのID */
+const CURRENT_LEG_SOURCE_ID = 'route-current-leg';
+
+/** 歩き終えた区間（灰色の破線）を描くレイヤーのID */
+const WALKED_LEG_LAYER_ID = 'route-walked-leg-line';
+
+/** 今の区間の白い縁取りを描くレイヤーのID */
+const CURRENT_LEG_CASING_LAYER_ID = 'route-current-leg-casing';
+
+/** 今の区間（緑の太線）を描くレイヤーのID */
+const CURRENT_LEG_LAYER_ID = 'route-current-leg-line';
 
 /** 開始地点のマーカーに表示する文字（Start の頭文字） */
 const ORIGIN_MARKER_LABEL = 'S';
@@ -190,20 +219,37 @@ const { attach: attachLongPress } = useMapLongPress({
  * @param {object|null} geometry 経路の形
  * @returns {object} ソースへ渡すGeoJSON
  */
-const toRouteFeature = (geometry) => {
-  const rawGeometry = geometry === null ? null : toRaw(geometry);
+const toRouteFeature = (geometry) => ({
+  type: 'Feature',
+  properties: {},
+  geometry: { type: 'LineString', coordinates: toPlainCoordinates(geometry) }
+});
 
-  const coordinates = (rawGeometry?.coordinates ?? []).map((position) => [
+/**
+ * @description 経路の形から、素の数値の配列に作り直した座標列を取り出す。
+ * リアクティブなProxyのまま渡せない理由は toRouteFeature を参照。
+ * @param {object|null} geometry 経路の形
+ * @returns {number[][]} [経度, 緯度] の配列
+ */
+const toPlainCoordinates = (geometry) => {
+  const rawGeometry = geometry === null || geometry === undefined ? null : toRaw(geometry);
+
+  return (rawGeometry?.coordinates ?? []).map((position) => [
     Number(position[0]),
     Number(position[1])
   ]);
-
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: { type: 'LineString', coordinates }
-  };
 };
+
+/**
+ * @description 複数の区間の線をGeoJSONのFeatureCollectionへ包む。
+ * 素の数値の配列へ作り直す理由は toRouteFeature と同じ。
+ * @param {object[]} geometries 区間の線の一覧
+ * @returns {object} ソースへ渡すGeoJSON
+ */
+const toLegFeatureCollection = (geometries) => ({
+  type: 'FeatureCollection',
+  features: geometries.map((geometry) => toRouteFeature(geometry))
+});
 
 /**
  * @description 経路の先頭の座標を取り出す。
@@ -617,16 +663,34 @@ const renderRouteLine = () => {
   // 1点だけでは線にならないため、実際に線を引ける座標数で判定する
   hasNoGeometry.value = routeFeature.geometry.coordinates.length < 2;
 
+  // 区間の描き分けがある場合、青い線はこれからの区間だけにする。
+  // 全体を青で描くと、歩き終えた区間（破線）の隙間から青が透けるため
+  const sections = props.legSections;
+  const routeData =
+    sections === null ? routeFeature : toLegFeatureCollection(sections.upcomingLegs);
+  const walkedData = toLegFeatureCollection(sections === null ? [] : sections.walkedLegs);
+  const currentData = toLegFeatureCollection(sections === null ? [] : [sections.currentLeg]);
+
   const source = map.getSource(ROUTE_SOURCE_ID);
 
   if (source) {
-    source.setData(routeFeature);
+    source.setData(routeData);
+    map.getSource(WALKED_LEGS_SOURCE_ID)?.setData(walkedData);
+    map.getSource(CURRENT_LEG_SOURCE_ID)?.setData(currentData);
     return;
   }
 
   map.addSource(ROUTE_SOURCE_ID, {
     type: 'geojson',
-    data: routeFeature
+    data: routeData
+  });
+  map.addSource(WALKED_LEGS_SOURCE_ID, {
+    type: 'geojson',
+    data: walkedData
+  });
+  map.addSource(CURRENT_LEG_SOURCE_ID, {
+    type: 'geojson',
+    data: currentData
   });
 
   // 縁取りを先に敷いてから本体を重ね、地図の背景に紛れないようにする
@@ -649,6 +713,42 @@ const renderRouteLine = () => {
     paint: {
       'line-color': ROUTE_LINE_COLOR,
       'line-width': ROUTE_LINE_WIDTH_PX
+    }
+  });
+
+  // 歩き終えた区間。端を丸めると短い破線が点に潰れるため butt にする
+  map.addLayer({
+    id: WALKED_LEG_LAYER_ID,
+    type: 'line',
+    source: WALKED_LEGS_SOURCE_ID,
+    layout: { 'line-cap': 'butt', 'line-join': 'round' },
+    paint: {
+      'line-color': ROUTE_WALKED_LEG_COLOR,
+      'line-width': ROUTE_WALKED_LEG_WIDTH_PX,
+      'line-dasharray': ROUTE_WALKED_LEG_DASH_ARRAY
+    }
+  });
+
+  // 今の区間は最後に重ね、ほかの区間と交差しても最前面に出す
+  map.addLayer({
+    id: CURRENT_LEG_CASING_LAYER_ID,
+    type: 'line',
+    source: CURRENT_LEG_SOURCE_ID,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ROUTE_LINE_OUTLINE_COLOR,
+      'line-width': ROUTE_CURRENT_LEG_CASING_WIDTH_PX
+    }
+  });
+
+  map.addLayer({
+    id: CURRENT_LEG_LAYER_ID,
+    type: 'line',
+    source: CURRENT_LEG_SOURCE_ID,
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: {
+      'line-color': ROUTE_CURRENT_LEG_COLOR,
+      'line-width': ROUTE_CURRENT_LEG_WIDTH_PX
     }
   });
 };
@@ -747,6 +847,19 @@ watch(
     renderOriginMarker();
     renderSpotMarkers();
     fitToRoute();
+  }
+);
+
+// 次の目的地が切り替わったら、区間の描き分けだけを描き直す。
+// 進めるたびに利用者が動かした地図の位置が戻らないよう、寄せ直し（fit）はしない
+watch(
+  () => props.legSections,
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    renderRouteLine();
   }
 );
 

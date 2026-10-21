@@ -33,6 +33,14 @@
   --border-ink: #5C4430;
   /* ルートを示す青。mapDefaults.js の ROUTE_LINE_COLOR と同値にする */
   --route-blue: #1A73E8;
+  /*
+   * 案内中の区間の描き分け。MapLibre の paint は CSS 変数を読めず
+   * mapDefaults.js の定数で渡すため、変更時は両方直す
+   */
+  /* 歩き終えた区間の灰。ROUTE_WALKED_LEG_COLOR と同値にする */
+  --route-walked-leg: #9AA0A6;
+  /* 今の区間。トースト（次の目的地のバナー）の左枠と同じ緑。ROUTE_CURRENT_LEG_COLOR と同値にする */
+  --route-current-leg: var(--accent-green);
   /* 口コミの場所を示す紫。口コミのピン（紫）とルートの口コミのスポットで同じ値を使う */
   --review-purple: #8E44AD;
   /* 羊皮紙。画面の地の色 */
