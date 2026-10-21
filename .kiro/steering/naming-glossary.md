@@ -58,7 +58,7 @@ inclusion: always
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
 | 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から選択された距離以内にある口コミが付いた場所（平均評価の高い順）。ルートの候補に混ぜる |
-| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では口コミのピンと同じ形・色で描く（`review-pin is-route-spot`） |
+| 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では紫の番号の丸で描き、押すと口コミを開く（`spot-marker is-review`）。その場所の口コミのピンは重ねて描かない |
 | 巡る口コミの場所のID | reviewSpotId | ルートのスポットのもとになった口コミの場所の spotId。ピンを押して口コミを開くために使う。口コミの場所でなければ null |
 | 巡る口コミの場所の元の座標 | reviewPosition | 口コミのピンの位置 `{ lng, lat }`。経路へ寄せた座標（lng / lat）とは別で、口コミの解決（半径40m）にはこちらを使う。API では reviewLng / reviewLat |
 | チェーン店か | isChain | Places の候補がチェーン店か（`BusinessChains` を持つ）。選ぶ優先順位を下げる |

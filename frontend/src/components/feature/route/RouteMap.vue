@@ -188,7 +188,7 @@ const hasNoGeometry = ref(false);
  */
 let map = null;
 let markers = [];
-/** スポットのマーカー要素と、表示の切り替えに必要な情報（スポット・巡る順・口コミのピンか） */
+/** スポットのマーカー要素と、表示の切り替えに必要な情報（スポット・巡る順・口コミの場所か） */
 let spotMarkerStates = [];
 let originMarker = null;
 let currentLocationMarker = null;
@@ -609,8 +609,8 @@ const toRouteReviewSpotIds = () =>
 /**
  * @description 投稿済みの口コミのピンを描き直す。
  * 自分の口コミはオレンジ、他の人の口コミは紫で出し、表示オフのぶんは作らない。
- * ルートで巡る口コミの場所は、ルートのスポットとして同じ形のピンで描くため、ここでは描かない
- * （同じ場所に2本のピンが重なるのを防ぐ）。
+ * ルートで巡る口コミの場所は、ルートのスポット（紫の番号の丸）として描き、押すと口コミを開けるため、
+ * ここでは描かない（同じ場所にピンと番号の丸が重なるのを防ぐ）。
  * @returns {void}
  */
 const renderReviewMarkers = () => {
@@ -635,11 +635,11 @@ const renderReviewMarkers = () => {
 };
 
 /**
- * @description ルートのスポットが、口コミのピンとして描ける口コミの場所か。
+ * @description ルートのスポットが、押して口コミを開ける口コミの場所か。
  * 口コミを開くにはIDと元の座標が要るため、どちらも揃っている場合だけ真とする
- * （古い応答などで欠けている場合は、通常のスポットとして番号の丸で描く）。
+ * （古い応答などで欠けている場合は、通常のスポットとして青の番号の丸で描く）。
  * @param {object} spot ルートのスポット
- * @returns {boolean} 口コミのピンとして描けるなら true
+ * @returns {boolean} 口コミを開ける口コミの場所なら true
  */
 const isRouteReviewSpot = (spot) =>
   spot.isReviewSpot === true &&
@@ -648,26 +648,24 @@ const isRouteReviewSpot = (spot) =>
   Number.isFinite(spot.reviewPosition?.lat);
 
 /**
- * @description ルートで巡る口コミの場所のピンの表示（色・選択・到達済み・読み上げ）を整える。
- * 色は口コミのピンと同じ規則で、自分の口コミならオレンジ、それ以外は紫。
- * 自分の口コミの一覧は後から届くため、届いたときにも呼び直して色を合わせる。
- * @param {HTMLElement} element ピンの要素
+ * @description ルートで巡る口コミの場所の番号の丸の表示（番号・到達済み・選択・読み上げ）を整える。
+ * 番号と到達済みのスタンプは通常のスポットと同じ規則で、色だけが紫になる（CSS の is-review）。
+ * @param {HTMLElement} element 番号の丸の要素
  * @param {object} spot ルートのスポット
  * @param {number} order 巡る順序（1始まり）
  * @param {boolean} isVisited 到達済みかどうか
  * @returns {void}
  */
-const applyRouteReviewPinState = (element, spot, order, isVisited) => {
-  const isMine = props.myReviewSpots.some((review) => review.spotId === spot.reviewSpotId);
+const applyRouteReviewSpotState = (element, spot, order, isVisited) => {
   const isSelected = spot.reviewSpotId === props.selectedReviewSpotId;
 
-  element.classList.toggle(MY_REVIEW_PIN_CLASS, isMine);
-  element.classList.toggle(OTHER_REVIEW_PIN_CLASS, !isMine);
-  element.classList.toggle('is-selected', isSelected);
   element.classList.toggle('is-visited', isVisited);
+  element.classList.toggle('is-selected', isSelected);
+  // スタンプは背景画像で出すため、到達済みでは番号の文字を消す
+  element.textContent = isVisited ? '' : String(order);
   element.setAttribute('aria-pressed', String(isSelected));
 
-  // ピンには番号が無いため、巡る順と到達状況は読み上げで補う
+  // 紫の意味と、押すと口コミが開くことは見た目だけでは伝わらないため、読み上げで補う
   element.setAttribute(
     'aria-label',
     `${order}番目のスポット（${isVisited ? '到達済み・' : ''}口コミの場所）：${spot.name}の口コミを見る`
@@ -675,19 +673,20 @@ const applyRouteReviewPinState = (element, spot, order, isVisited) => {
 };
 
 /**
- * @description ルートで巡る口コミの場所を、口コミのピンと同じ形で描くマーカーを作る。
- * 位置は口コミのピンと同じ元の座標にし、押すと口コミのピンと同じく口コミを開く。
+ * @description ルートで巡る口コミの場所を、紫の番号の丸で描くマーカーを作る。
+ * 形・番号・大きさ・位置（経路へ寄せた座標）は通常のスポットと同じにし、色だけを紫にする。
+ * 押すと口コミのピンと同じく口コミを開く。口コミの解決には元の座標（口コミのピンの位置）を渡す
+ * （経路へ寄せた座標は最大150mずれ、半径40mの解決で見つからないことがあるため）。
  * @param {object} spot ルートのスポット
  * @param {number} order 巡る順序（1始まり）
  * @returns {{marker: object, element: HTMLElement}} マーカーと要素
  */
 const createRouteReviewMarker = (spot, order) => {
-  const element = createReviewPinElement(OTHER_REVIEW_PIN_CLASS, {
-    spotId: spot.reviewSpotId,
-    spotName: spot.name
-  });
-  element.classList.add('is-route-spot');
-  applyRouteReviewPinState(element, spot, order, props.visitedSpotIds.includes(spot.spotId));
+  // 押せることを支援技術へ伝えるためボタンにする（既定の見た目は CSS で打ち消す）
+  const element = document.createElement('button');
+  element.type = 'button';
+  element.className = 'spot-marker is-review';
+  applyRouteReviewSpotState(element, spot, order, props.visitedSpotIds.includes(spot.spotId));
 
   element.addEventListener('click', (event) => {
     // 地図のクリックや長押し判定に伝播させない
@@ -699,8 +698,8 @@ const createRouteReviewMarker = (spot, order) => {
   });
 
   // 押すと口コミを開くため、名前のポップアップは付けない
-  const marker = new Marker({ element, anchor: 'bottom' })
-    .setLngLat([spot.reviewPosition.lng, spot.reviewPosition.lat])
+  const marker = new Marker({ element })
+    .setLngLat([spot.lng, spot.lat])
     .addTo(map);
 
   return { marker, element };
@@ -848,16 +847,16 @@ const renderSpotMarkers = () => {
     .map((spot, index) => {
       const order = index + 1;
 
-      // 口コミの場所は、口コミのピンと同じ形で描く
+      // 口コミの場所は紫の番号の丸で描き、押すと口コミを開く
       if (isRouteReviewSpot(spot)) {
         const { marker, element } = createRouteReviewMarker(spot, order);
-        spotMarkerStates.push({ spot, order, element, isReviewPin: true });
+        spotMarkerStates.push({ spot, order, element, isReviewSpot: true });
         return marker;
       }
 
       const element = createSpotMarkerElement(order, props.visitedSpotIds.includes(spot.spotId));
 
-      spotMarkerStates.push({ spot, order, element, isReviewPin: false });
+      spotMarkerStates.push({ spot, order, element, isReviewSpot: false });
 
       return new Marker({ element })
         .setLngLat([spot.lng, spot.lat])
@@ -872,11 +871,11 @@ const renderSpotMarkers = () => {
  * @returns {void}
  */
 const updateSpotMarkerStates = () => {
-  spotMarkerStates.forEach(({ spot, order, element, isReviewPin }) => {
+  spotMarkerStates.forEach(({ spot, order, element, isReviewSpot }) => {
     const isVisited = props.visitedSpotIds.includes(spot.spotId);
 
-    if (isReviewPin) {
-      applyRouteReviewPinState(element, spot, order, isVisited);
+    if (isReviewSpot) {
+      applyRouteReviewSpotState(element, spot, order, isVisited);
       return;
     }
 
@@ -1022,7 +1021,7 @@ watch(
     }
 
     renderReviewMarkers();
-    // ルートで巡る口コミの場所のピンも、色（自分の口コミか）と選択の表示を合わせる
+    // ルートで巡る口コミの場所の番号の丸も、選択の表示を合わせる
     updateSpotMarkerStates();
   },
   { deep: true }
