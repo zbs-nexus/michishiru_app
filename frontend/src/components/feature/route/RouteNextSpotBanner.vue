@@ -127,21 +127,17 @@ const distanceLabel = computed(() => {
 /*
  * 屋外で歩きながら見るため、地図の上でも文字が沈まないよう
  * 背景は不透明にし、影を強めて地図から浮かせる。
- * 画面幅が広い場合もアプリの表示幅に合わせて中央へ寄せる。
+ * 置き場所（画面上部への固定・幅）は親が決め、この帯は親の幅いっぱいに広がる。
+ * 親が下にボタンを積むため、目的地の名前で帯が伸びても重ならない。
  * 左にマスコット、右に文言を置き、案内役が話している帯として見せる。
  */
 .next-spot-banner {
   touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
-  position: fixed;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
   display: flex;
   align-items: center;
   gap: 12px;
-  width: calc(100% - 24px);
-  max-width: 406px;
+  box-sizing: border-box;
+  width: 100%;
   padding: 10px 16px 10px 12px;
   border: var(--pixel-frame-width) solid var(--border-ink);
   border-image: var(--pixel-frame-ink);
@@ -199,17 +195,17 @@ const distanceLabel = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
-/* 目的地の名前。長い場合は2行まで表示する */
+/*
+ * 目的地の名前。どこへ向かうかを取り違えないよう、長くても省略せず全文を折り返して出す。
+ * 区切りの無い長い英数字（店名のローマ字など）も枠からはみ出さないよう、どこでも折り返す。
+ */
 .banner-name {
-  display: -webkit-box;
-  overflow: hidden;
   margin: 0;
   font-size: 19px;
   font-weight: 700;
   line-height: 1.35;
   color: var(--text-dark);
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
 }
 
 .banner-message {
