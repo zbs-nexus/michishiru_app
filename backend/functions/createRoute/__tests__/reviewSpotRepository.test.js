@@ -30,7 +30,9 @@ mock.method(DynamoDBDocumentClient, 'from', () => ({
   }
 }));
 
-const { listReviewSpots } = await import('../repositories/reviewSpotRepository.js');
+const { listReviewSpots, queryReviewedSpotIdsByUserId } = await import(
+  '../repositories/reviewSpotRepository.js'
+);
 
 /**
  * @description DynamoDB の例外を模した値を作る
@@ -61,7 +63,7 @@ describe('listReviewSpots', () => {
     });
   });
 
-  it('場所メタ行を名前・ジャンル・[経度, 緯度]・平均評価へ変換する', async () => {
+  it('場所メタ行を場所ID・名前・ジャンル・[経度, 緯度]・平均評価へ変換する', async () => {
     sendImplementation = async () => ({
       Items: [
         {
@@ -80,7 +82,8 @@ describe('listReviewSpots', () => {
 
     const spots = await listReviewSpots();
 
-    // 作成者のIDなど、ルート作成に不要な値は持ち出さない
+    // 作成者のIDなど、ルート作成に不要な値は持ち出さない。
+    // 場所IDは、自分が口コミ投稿済みの場所かを見分けるために持ち出す
     assert.deepEqual(spots, [
       {
         spotId: 'spot-1',
@@ -160,6 +163,58 @@ describe('listReviewSpots', () => {
     await assert.rejects(listReviewSpots(), (error) => {
       assert.equal(error.code, ERROR_CODES.DATA_SOURCE_ERROR);
       assert.equal(error.context.errorName, 'ValidationException');
+      return true;
+    });
+    assert.equal(sentCommands.length, 1);
+  });
+});
+
+describe('queryReviewedSpotIdsByUserId', () => {
+  beforeEach(() => {
+    sentCommands = [];
+    sendImplementation = async () => ({ Items: [] });
+  });
+
+  it('GSI-UserReview をユーザーIDで新しい順に、オレンジのピンと同じ件数上限（100件）で引く', async () => {
+    await queryReviewedSpotIdsByUserId('user-me');
+
+    assert.equal(sentCommands.length, 1);
+    assert.equal(sentCommands[0].constructor.name, 'QueryCommand');
+    assert.deepEqual(sentCommands[0].input, {
+      TableName: 'Review-test',
+      IndexName: 'GSI-UserReview',
+      KeyConditionExpression: '#userId = :userId',
+      ExpressionAttributeNames: { '#userId': 'userId', '#spotId': 'spotId' },
+      ExpressionAttributeValues: { ':userId': 'user-me' },
+      ProjectionExpression: '#spotId',
+      ScanIndexForward: false,
+      Limit: 100
+    });
+  });
+
+  it('口コミ行から場所IDだけを、返った順に取り出す', async () => {
+    sendImplementation = async () => ({
+      Items: [{ spotId: 'spot-2' }, { spotId: 'spot-1' }]
+    });
+
+    assert.deepEqual(await queryReviewedSpotIdsByUserId('user-me'), ['spot-2', 'spot-1']);
+  });
+
+  it('Items が無い応答は空配列にする', async () => {
+    sendImplementation = async () => ({});
+
+    assert.deepEqual(await queryReviewedSpotIdsByUserId('user-me'), []);
+  });
+
+  it('再試行の対象外の例外は1回で諦め、DATA_SOURCE_ERROR に読み替える', async () => {
+    sendImplementation = async () => {
+      throw createAwsError('AccessDeniedException');
+    };
+
+    await assert.rejects(queryReviewedSpotIdsByUserId('user-me'), (error) => {
+      assert.equal(error.code, ERROR_CODES.DATA_SOURCE_ERROR);
+      assert.equal(error.message, '自分の口コミの取得に失敗しました');
+      assert.equal(error.context.errorName, 'AccessDeniedException');
       return true;
     });
     assert.equal(sentCommands.length, 1);

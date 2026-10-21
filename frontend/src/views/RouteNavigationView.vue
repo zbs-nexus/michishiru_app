@@ -1048,10 +1048,10 @@ const handleConfirmEnd = async () => {
 
 /* オン状態の丸をピンの色（自分=オレンジ / 他の人=紫）と対応づける */
 .review-toggle-mine.is-on .review-toggle-dot {
-  background: #F39C12;
+  background: var(--review-orange);
 }
 
 .review-toggle-other.is-on .review-toggle-dot {
-  background: #8E44AD;
+  background: var(--review-purple);
 }
 </style>

@@ -609,7 +609,7 @@ const toRouteReviewSpotIds = () =>
 /**
  * @description 投稿済みの口コミのピンを描き直す。
  * 自分の口コミはオレンジ、他の人の口コミは紫で出し、表示オフのぶんは作らない。
- * ルートで巡る口コミの場所は、ルートのスポット（紫の番号の丸）として描き、押すと口コミを開けるため、
+ * ルートで巡る口コミの場所は、ルートのスポット（紫・オレンジの番号の丸）として描き、押すと口コミを開けるため、
  * ここでは描かない（同じ場所にピンと番号の丸が重なるのを防ぐ）。
  * @returns {void}
  */
@@ -648,8 +648,17 @@ const isRouteReviewSpot = (spot) =>
   Number.isFinite(spot.reviewPosition?.lat);
 
 /**
- * @description ルートで巡る口コミの場所の番号の丸の表示（番号・到達済み・選択・読み上げ）を整える。
- * 番号と到達済みのスタンプは通常のスポットと同じ規則で、色だけが紫になる（CSS の is-review）。
+ * @description ルートで巡る口コミの場所の種類を、読み上げに使う語にする。
+ * 色（他の人の口コミ＝紫 / 自分の口コミ＝オレンジ）だけでは意味が伝わらないため、読み上げで補う。
+ * @param {boolean} isMine 自分が口コミ投稿済みの場所か
+ * @returns {string} 読み上げに使う語
+ */
+const toReviewSpotLabel = (isMine) => (isMine ? '自分の口コミの場所' : '他の人の口コミの場所');
+
+/**
+ * @description ルートで巡る口コミの場所の番号の丸の表示（番号・到達済み・選択・色・読み上げ）を整える。
+ * 番号と到達済みのスタンプは通常のスポットと同じ規則で、色だけが変わる
+ * （他の人の口コミは紫の is-review、自分の口コミはオレンジの is-mine。色は CSS で塗る）。
  * @param {HTMLElement} element 番号の丸の要素
  * @param {object} spot ルートのスポット
  * @param {number} order 巡る順序（1始まり）
@@ -658,23 +667,26 @@ const isRouteReviewSpot = (spot) =>
  */
 const applyRouteReviewSpotState = (element, spot, order, isVisited) => {
   const isSelected = spot.reviewSpotId === props.selectedReviewSpotId;
+  const isMine = spot.isMyReviewSpot === true;
 
   element.classList.toggle('is-visited', isVisited);
   element.classList.toggle('is-selected', isSelected);
+  // 自分が口コミ投稿済みの場所はオレンジ、他の人の口コミの場所は紫（口コミのピンと同じ色の意味）
+  element.classList.toggle('is-mine', isMine);
   // スタンプは背景画像で出すため、到達済みでは番号の文字を消す
   element.textContent = isVisited ? '' : String(order);
   element.setAttribute('aria-pressed', String(isSelected));
 
-  // 紫の意味と、押すと口コミが開くことは見た目だけでは伝わらないため、読み上げで補う
+  // 紫・オレンジの意味と、押すと口コミが開くことは見た目だけでは伝わらないため、読み上げで補う
   element.setAttribute(
     'aria-label',
-    `${order}番目のスポット（${isVisited ? '到達済み・' : ''}口コミの場所）：${spot.name}の口コミを見る`
+    `${order}番目のスポット（${isVisited ? '到達済み・' : ''}${toReviewSpotLabel(isMine)}）：${spot.name}の口コミを見る`
   );
 };
 
 /**
- * @description ルートで巡る口コミの場所を、紫の番号の丸で描くマーカーを作る。
- * 形・番号・大きさ・位置（経路へ寄せた座標）は通常のスポットと同じにし、色だけを紫にする。
+ * @description ルートで巡る口コミの場所を、紫（自分の口コミはオレンジ）の番号の丸で描くマーカーを作る。
+ * 形・番号・大きさ・位置（経路へ寄せた座標）は通常のスポットと同じにし、色だけを変える。
  * 押すと口コミのピンと同じく口コミを開く。口コミの解決には元の座標（口コミのピンの位置）を渡す
  * （経路へ寄せた座標は最大150mずれ、半径40mの解決で見つからないことがあるため）。
  * @param {object} spot ルートのスポット
@@ -847,7 +859,7 @@ const renderSpotMarkers = () => {
     .map((spot, index) => {
       const order = index + 1;
 
-      // 口コミの場所は紫の番号の丸で描き、押すと口コミを開く
+      // 口コミの場所は紫（自分の口コミはオレンジ）の番号の丸で描き、押すと口コミを開く
       if (isRouteReviewSpot(spot)) {
         const { marker, element } = createRouteReviewMarker(spot, order);
         spotMarkerStates.push({ spot, order, element, isReviewSpot: true });

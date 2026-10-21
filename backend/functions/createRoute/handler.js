@@ -1,6 +1,7 @@
 import { ERROR_CODES } from '../../shared/constants/errorCodes.js';
 import { resolveErrorResponse } from '../../shared/utils/errorHandler.js';
 import { logError, logInfo } from '../../shared/utils/logger.js';
+import { getAuthenticatedUserId } from '../../shared/utils/requestContext.js';
 import {
   buildErrorResponse,
   buildSuccessResponse
@@ -110,7 +111,13 @@ export const handler = async (event) => {
   });
 
   try {
-    const route = await createRoute(validationResult.value);
+    const route = await createRoute({
+      ...validationResult.value,
+      // 自分が口コミ投稿済みの場所を見分けるために使う。クレームを持たないイベント
+      // （Lambda を直接呼び出す場合など）では取れないため、その場合は null のまま続ける
+      // （口コミの場所はすべて他の人の口コミの場所として描く）
+      userId: getAuthenticatedUserId(event)
+    });
 
     return buildSuccessResponse(toResponseBody(route));
   } catch (error) {

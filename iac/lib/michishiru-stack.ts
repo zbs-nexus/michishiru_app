@@ -299,7 +299,8 @@ export class MichishiruStack extends cdk.Stack {
 
       conditionTable.grantReadData(createRouteFn);
       spotCategoryTable.grantReadData(createRouteFn);
-      // 口コミの場所（GSI-SpotList）を読むだけなので読み取りに限る
+      // 口コミの場所（GSI-SpotList）と、自分の口コミ（GSI-UserReview。スポットを
+      // オレンジに描き分ける判定に使う）を読むだけなので読み取りに限る。grant は索引の ARN も含む
       reviewTable.grantReadData(createRouteFn);
 
       // Location Service（Places / Routes）はリソース単位の指定に対応しないため
