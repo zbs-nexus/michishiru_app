@@ -71,6 +71,7 @@ const isError = computed(() => props.variant === 'error');
 <style scoped>
 /* 画面幅が広い場合もアプリの表示幅に合わせて中央へ寄せる */
 .toast {
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
   position: fixed;
   top: 16px;
   left: 50%;
@@ -82,17 +83,22 @@ const isError = computed(() => props.variant === 'error');
   width: calc(100% - 40px);
   max-width: 390px;
   padding: 14px 16px;
-  border-radius: 12px;
-  border: 2px solid var(--border-gold);
-  border-left: 4px solid var(--danger);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
-  box-shadow: 0 4px 16px rgba(58, 46, 32, 0.22);
+  background-clip: padding-box;
+  /*
+   * 左端の色帯で種別を示す。
+   * border-image は辺ごとに色を変えられないため、border-left ではなく
+   * 内側の影（inset）で帯を引く。
+   */
+  box-shadow: inset 5px 0 0 var(--danger), var(--shadow-raised);
   animation: toast-slide-in 0.2s ease-out;
 }
 
 /* 成功通知: 左端の色帯を緑にしてエラー（赤）と見分ける */
 .toast.is-success {
-  border-left-color: var(--accent-green);
+  box-shadow: inset 5px 0 0 var(--accent-green), var(--shadow-raised);
 }
 
 .toast-body {
@@ -134,12 +140,10 @@ const isError = computed(() => props.variant === 'error');
  */
 .toast.is-omakase {
   padding: 12px 14px;
-  border: 2px solid transparent;
-  border-radius: 20px;
-  background:
-    linear-gradient(135deg, var(--surface) 0%, var(--bg-deep) 100%) padding-box,
-    linear-gradient(135deg, var(--accent-gold) 0%, var(--primary-light) 100%) border-box;
-  box-shadow: 0 8px 24px rgba(58, 46, 32, 0.28);
+  background: linear-gradient(135deg, var(--surface) 0%, var(--bg-deep) 100%);
+  background-clip: padding-box;
+  /* おまかせは種別の帯を出さないため、内側の影は付けない */
+  box-shadow: var(--shadow-raised);
   animation: toast-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -147,9 +151,9 @@ const isError = computed(() => props.variant === 'error');
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
-  border: 2px solid var(--border-gold);
-  box-shadow: 0 3px 8px rgba(58, 46, 32, 0.32);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  box-shadow: var(--shadow);
   animation: toast-logo-bounce 0.6s ease-out 0.35s;
 }
 

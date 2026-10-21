@@ -116,6 +116,28 @@ describe('MichishiruStack (バックエンド有効)', () => {
     expect(policyJson).toContain('michishiru_categorymaster_akutsu');
   });
 
+  test('createRoute に口コミテーブルの読み取り権限とテーブル名を与える', () => {
+    const policies = template.findResources('AWS::IAM::Policy');
+    const createRoutePolicy = Object.entries(policies).find(([logicalId]) =>
+      logicalId.startsWith('CreateRouteFunctionServiceRoleDefaultPolicy')
+    );
+    const policyJson = JSON.stringify(createRoutePolicy?.[1] ?? {});
+
+    // 口コミテーブルは CDK 管理のため ARN は Fn::GetAtt で参照される
+    expect(policyJson).toContain('ReviewTable');
+    // GSI-SpotList（口コミの場所）と GSI-UserReview（自分の口コミ）を引けるよう、索引への権限も付いている
+    expect(policyJson).toContain('/index/*');
+
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      Environment: {
+        Variables: Match.objectLike({
+          BEDROCK_MODEL_ID: Match.anyValue(),
+          REVIEW_TABLE_NAME: Match.anyValue()
+        })
+      }
+    });
+  });
+
   test('createRoute に Places / Routes / Bedrock の権限を与える', () => {
     template.hasResourceProperties('AWS::IAM::Policy', {
       PolicyDocument: {
@@ -159,23 +181,35 @@ describe('MichishiruStack (バックエンド有効)', () => {
     });
   });
 
-  test('ログイン後に呼ぶ9つのメソッドを Cognito 認可で保護する', () => {
+  test('ログイン後に呼ぶ10のメソッドを Cognito 認可で保護する', () => {
     const methods = Object.values(template.findResources('AWS::ApiGateway::Method'));
     const authorizedMethods = methods.filter(
       (method) => method.Properties?.AuthorizationType === 'COGNITO_USER_POOLS'
     );
 
-    expect(authorizedMethods).toHaveLength(9);
+    expect(authorizedMethods).toHaveLength(10);
 
     for (const method of authorizedMethods) {
       expect(method.Properties?.AuthorizerId).toBeDefined();
     }
 
     // routes GET/POST、conditions GET、spots GET、reviews POST、
-    // review-photo-uploads POST、my-reviews GET、review-spots GET、walk-results POST
+    // review-photo-uploads POST、my-reviews GET、review-spots GET、
+    // walk-results POST、experience GET
     expect(
       authorizedMethods.map((method) => method.Properties?.HttpMethod).sort()
-    ).toEqual(['GET', 'GET', 'GET', 'GET', 'GET', 'POST', 'POST', 'POST', 'POST']);
+    ).toEqual([
+      'GET',
+      'GET',
+      'GET',
+      'GET',
+      'GET',
+      'GET',
+      'POST',
+      'POST',
+      'POST',
+      'POST'
+    ]);
   });
 
   test('未認証のメソッドはログイン前に呼ぶ照合APIだけである', () => {
@@ -256,6 +290,47 @@ describe('MichishiruStack (バックエンド有効)', () => {
     template.hasResourceProperties('AWS::ApiGateway::Resource', {
       PathPart: 'walk-results'
     });
+  });
+
+  test('getUserExperience の Lambda 関数を作成する', () => {
+    template.hasResourceProperties('AWS::Lambda::Function', {
+      Handler: 'functions/getUserExperience/handler.handler',
+      Environment: {
+        Variables: Match.objectLike({
+          WALK_RESULT_TABLE_NAME: Match.anyValue(),
+          REVIEW_TABLE_NAME: Match.anyValue()
+        })
+      }
+    });
+  });
+
+  test('実績取得のAPIの経路を作成する', () => {
+    // 経験値は不可算のため、ここだけパスを単数にしている（意図的な例外）
+    template.hasResourceProperties('AWS::ApiGateway::Resource', {
+      PathPart: 'experience'
+    });
+  });
+
+  test('getUserExperience には読み取り（GetItem / Query）だけを与える', () => {
+    // ARN の表現に依存しないよう、対象ポリシーを論理IDで引いて中身を確認する
+    const policies = template.findResources('AWS::IAM::Policy');
+    const getUserExperiencePolicy = Object.entries(policies).find(([logicalId]) =>
+      logicalId.startsWith('GetUserExperienceFunctionServiceRoleDefaultPolicy')
+    );
+
+    expect(getUserExperiencePolicy).toBeDefined();
+
+    const policyJson = JSON.stringify(getUserExperiencePolicy?.[1] ?? {});
+
+    // 累計アイテムの1件取得と、口コミ件数の Query
+    expect(policyJson).toContain('dynamodb:GetItem');
+    expect(policyJson).toContain('dynamodb:Query');
+    // 書き込みはこの関数の役割ではない
+    expect(policyJson).not.toContain('dynamodb:PutItem');
+    expect(policyJson).not.toContain('dynamodb:UpdateItem');
+    expect(policyJson).not.toContain('dynamodb:DeleteItem');
+    // 全件走査は使わない（grantReadData だと付いてしまう）
+    expect(policyJson).not.toContain('dynamodb:Scan');
   });
 
   test('createWalkResult には実績テーブルの Put と Update だけを与える', () => {

@@ -29,7 +29,7 @@ const getPlacesClient = () => {
  * @param {{lat: number, lng: number}} conditions.currentLocation 現在地
  * @param {string} conditions.spotCategoryId 検索するスポットのカテゴリID
  * @param {number} [conditions.queryRadiusM] 検索半径（m）。指定時はこの範囲内のみ検索する
- * @returns {Promise<{name: string, position: number[]}[]>} スポット候補の一覧
+ * @returns {Promise<{name: string, position: number[], isChain: boolean}[]>} スポット候補の一覧
  * @throws {ApplicationError} 外部サービスへのアクセスに失敗した場合
  */
 export const searchNearbySpots = async ({
@@ -55,7 +55,9 @@ export const searchNearbySpots = async ({
     return (response.ResultItems ?? []).map((item) => ({
       name: item.Title,
       // Places は [経度, 緯度] の順で返す。Routes へ渡す形と揃えるためそのまま保持する
-      position: item.Position
+      position: item.Position,
+      // チェーン店かどうか。Places はチェーンに属する場所にだけ BusinessChains を付ける
+      isChain: Array.isArray(item.BusinessChains) && item.BusinessChains.length > 0
     }));
   } catch (error) {
     throw createDataSourceError('周辺スポットの検索に失敗しました', {

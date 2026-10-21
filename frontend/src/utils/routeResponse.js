@@ -70,6 +70,23 @@ const toLineGeometry = (geometry) => {
 };
 
 /**
+ * @description ルート生成APIの区間ごとの線を取り出す。
+ * legs[i] はスポット i へ向かう区間、最後は出発地への帰り道。
+ * 1つでも線にならない区間があるとスポットとの対応がずれるため、その場合は全体を空にする。
+ * @param {object[]} items APIが返したlegsの配列
+ * @returns {Array<{geometry: {type: string, coordinates: number[][]}}>} 区間の一覧。無い場合は空配列
+ */
+const toLegs = (items) => {
+  if (!Array.isArray(items)) {
+    return [];
+  }
+
+  const legs = items.map((item) => ({ geometry: toLineGeometry(item?.geometry) }));
+
+  return legs.every((leg) => leg.geometry !== null) ? legs : [];
+};
+
+/**
  * @description ルート生成APIの立ち寄り先をスポットへ変換する。
  * APIのキーはwaypointsだが、中身は「ユーザーが足を止める場所」のため
  * 用語辞書に従いspotとして扱う（経路上の座標点はgeometryが持つ）。
@@ -77,6 +94,28 @@ const toLineGeometry = (geometry) => {
  * @returns {object[]} スポットの一覧
  */
 const toSpots = (items) => {
+  /**
+   * @description 口コミの場所を開くための情報を取り出す。
+   * IDと座標が揃っていないと口コミを開けないため、どれか欠けていればすべて null にする。
+   * @param {object} item APIが返した立ち寄り先
+   * @returns {{reviewSpotId: string|null, reviewPosition: {lng: number, lat: number}|null}} 口コミの場所の情報
+   */
+  const toReviewSpotLink = (item) => {
+    const isLinkable =
+      item.isReviewSpot === true &&
+      typeof item.reviewSpotId === 'string' &&
+      item.reviewSpotId !== '' &&
+      Number.isFinite(item.reviewLng) &&
+      Number.isFinite(item.reviewLat);
+
+    return isLinkable
+      ? {
+        reviewSpotId: item.reviewSpotId,
+        reviewPosition: { lng: item.reviewLng, lat: item.reviewLat }
+      }
+      : { reviewSpotId: null, reviewPosition: null };
+  };
+
   if (!Array.isArray(items)) {
     return [];
   }
@@ -88,7 +127,15 @@ const toSpots = (items) => {
     lat: Number.isFinite(item.lat) ? item.lat : null,
     lng: Number.isFinite(item.lng) ? item.lng : null,
     spotType: item.spotType ?? item.type ?? null,
-    icon: item.icon ?? null
+    icon: item.icon ?? null,
+    // 口コミが付いた場所か。地図で口コミの番号の丸として描く（古い応答には無いため false 扱い）
+    isReviewSpot: item.isReviewSpot === true,
+    // 自分が口コミ投稿済みの場所か。口コミの場所のうち、自分の口コミはオレンジ・他の人の口コミは紫にする。
+    // 口コミの場所でないのに真になる値は受け取らない（古い応答には無いため false 扱い）
+    isMyReviewSpot: item.isReviewSpot === true && item.isMyReviewSpot === true,
+    // 口コミの場所のIDと元の座標（口コミのピンの位置）。ピンを押して口コミを開くときに使う。
+    // 口コミの場所でない、または古い応答で持たない場合は null
+    ...toReviewSpotLink(item)
   }));
 };
 
@@ -97,9 +144,9 @@ const toSpots = (items) => {
  *
  * ルート生成APIのレスポンス（route_title / summary / geometry を持つ形）と、
  * 既存のgetRoute APIのレスポンス（routeName / distance を持つ形）の両方を受け付ける。
- * getRoute側は経路の座標を持たないため、geometryはnullになる。
+ * getRoute側は経路の座標を持たないため、geometryはnull、legsは空配列になる。
  * @param {object} payload APIから受け取った値
- * @returns {{routeName: string, description: string, distanceKm: number, durationMinutes: number, spots: object[], geometry: object|null}} 画面で扱うルート情報
+ * @returns {{routeName: string, description: string, distanceKm: number, durationMinutes: number, spots: object[], geometry: object|null, legs: object[]}} 画面で扱うルート情報
  * @throws {Error} 応答がオブジェクトでない場合
  */
 export const toRoute = (payload) => {
@@ -124,6 +171,8 @@ export const toRoute = (payload) => {
       : (body.duration ?? 0),
     spots: toSpots(body.waypoints ?? body.spots),
     geometry: toLineGeometry(body.geometry),
+    // 区間ごとの線。案内画面で区間ごとに描き分けるために使う
+    legs: toLegs(body.legs),
     // おまかせで選ばれた条件。おまかせを使っていない項目はnull
     selectedGenres: Array.isArray(body.selected_genres)
       ? body.selected_genres.map((genre) => ({

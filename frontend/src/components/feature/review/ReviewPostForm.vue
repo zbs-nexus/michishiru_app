@@ -608,6 +608,7 @@ const handleSubmit = () => {
  * ピンの寄せ位置を決めるため。途中の高さを測ると寄せ位置がずれる。
  */
 .review-form {
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
   position: fixed;
   bottom: 0;
   left: 50%;
@@ -615,18 +616,26 @@ const handleSubmit = () => {
   z-index: 150;
   width: 100%;
   max-width: 430px;
+  /*
+   * vh はスマホではツールバーの分だけ大きくなるため、表示中の高さ（dvh）で測る
+   * （dvh に対応していないブラウザ向けに vh を先に書いている）。全体表示も同じ。
+   */
   max-height: 42vh;
+  max-height: 42dvh;
   overflow-y: auto;
   padding: 0 20px 16px;
   background: var(--surface);
-  border-top: 2px solid var(--border-gold);
-  border-radius: 16px 16px 0 0;
-  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.2);
+  /* 地図の上に重なるシートなので、上辺と左右に茶の線を回して紙の端を見せる */
+  border: 2px solid var(--border-ink);
+  border-bottom: none;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 0 -4px 0 rgba(92,68,48,0.25);
   animation: review-form-slide-in 0.2s ease-out;
 }
 
 .review-form.is-expanded {
   max-height: 85vh;
+  max-height: 85dvh;
 }
 
 /*
@@ -654,7 +663,7 @@ const handleSubmit = () => {
   width: 40px;
   height: 4px;
   border-radius: 999px;
-  background: var(--border-gold);
+  background: var(--border-ink);
 }
 
 .review-form-header {
@@ -707,11 +716,13 @@ const handleSubmit = () => {
 /* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
 .review-name-input {
   width: 100%;
-  padding: 12px 14px;
+  padding: 10px 12px;
   font-size: 16px;
-  border: 1px solid var(--border-gold);
-  border-radius: 10px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
+  background-clip: padding-box;
+  box-shadow: var(--shadow);
 }
 
 .review-name-input:focus {
@@ -786,8 +797,8 @@ const handleSubmit = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid #DDE3E8;
+  border-radius: 6px;
+  border: 2px solid var(--border-ink);
 }
 
 .kept-photo-remove {
@@ -863,8 +874,8 @@ const handleSubmit = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid #DDE3E8;
+  border-radius: 6px;
+  border: 2px solid var(--border-ink);
 }
 
 /* 投稿ボタン押下時の未入力エラー */
@@ -872,7 +883,7 @@ const handleSubmit = () => {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
-  color: #D93025;
+  color: var(--danger);
 }
 
 /* 評価と投稿ボタンを1行に並べ、全幅ボタンの分の高さを節約する */
