@@ -76,6 +76,24 @@ const props = defineProps({
     type: Object,
     default: null
   },
+  /**
+   * 見えている地図範囲の中央へ寄せる座標 { lng, lat }。未設定の場合はnull。
+   * ピンを描く座標（pinPosition）とは別に持つ。口コミフォームを開いたとき、
+   * 赤・オレンジ・紫のどのピンでもフォームに隠れない位置へ持ってくるため。
+   */
+  focusPosition: {
+    type: Object,
+    default: null
+  },
+  /**
+   * 寄せるときの、地図中央からの縦のずれ（ピクセル）。
+   * 画面上部のバナーや下部のフォームで地図が隠れる場合に、
+   * 見えている範囲の中央へ来るよう親が指定する。下方向が正。
+   */
+  focusOffsetY: {
+    type: Number,
+    default: 0
+  },
   /** 自分が投稿した口コミの場所（{ spotId, position, spotName } の配列） */
   myReviewSpots: {
     type: Array,
@@ -100,6 +118,11 @@ const props = defineProps({
   visitedSpotIds: {
     type: Array,
     default: () => []
+  },
+  /** 選択中の口コミの場所のID。該当するピンを大きく前面に出す。未選択はnull */
+  selectedReviewSpotId: {
+    type: String,
+    default: null
   }
 });
 
@@ -136,6 +159,8 @@ const hasNoGeometry = ref(false);
  */
 let map = null;
 let markers = [];
+/** スポットのマーカー要素と、表示の切り替えに必要な情報（spotId・巡る順） */
+let spotMarkerStates = [];
 let originMarker = null;
 let currentLocationMarker = null;
 let pinMarker = null;
@@ -243,12 +268,9 @@ const renderOriginMarker = () => {
   originMarker.setLngLat(originPosition);
 };
 
-/** 到達済みのスポットのマーカーに押すスタンプの文字 */
-const VISITED_STAMP_LABEL = '済';
-
 /**
  * @description スポットの見出し要素を組み立てる。
- * 未到達は巡る順の番号、到達済みは「済」のスタンプを表示する。
+ * 未到達は巡る順の番号、到達済みは足跡のスタンプ画像（global.css の背景）を表示する。
  * ライブラリがマーカーをコンポーネントの外側へ挿入するため、
  * スタイルは global.css に置いている。
  * @param {number} order 巡る順序（1始まり）
@@ -257,14 +279,28 @@ const VISITED_STAMP_LABEL = '済';
  */
 const createSpotMarkerElement = (order, isVisited) => {
   const element = document.createElement('div');
-  element.className = isVisited ? 'spot-marker is-visited' : 'spot-marker';
-  element.textContent = isVisited ? VISITED_STAMP_LABEL : String(order);
-  // 見た目は「済」だけになるため、何番目のスポットかを読み上げで補う
+  element.className = 'spot-marker';
+  applySpotMarkerState(element, order, isVisited);
+  return element;
+};
+
+/**
+ * @description スポットのマーカー要素の表示（番号 / 足跡のスタンプ）だけを切り替える。
+ * マーカー自体は作り直さず、位置と開いているポップアップをそのまま残す。
+ * @param {HTMLElement} element マーカーの要素
+ * @param {number} order 巡る順序（1始まり）
+ * @param {boolean} isVisited 到達済みかどうか
+ * @returns {void}
+ */
+const applySpotMarkerState = (element, order, isVisited) => {
+  element.classList.toggle('is-visited', isVisited);
+  // スタンプは背景画像で出すため、到達済みでは番号の文字を消す
+  element.textContent = isVisited ? '' : String(order);
+  // 見た目からは番号も到達済みかどうかも読み取れないため、読み上げで補う
   element.setAttribute(
     'aria-label',
     isVisited ? `${order}番目のスポット（到達済み）` : `${order}番目のスポット`
   );
-  return element;
 };
 
 /**
@@ -432,6 +468,24 @@ const renderPinMarker = () => {
   }
 };
 
+/**
+ * @description 対象の座標を、見えている地図範囲の中央へ寄せる。
+ *
+ * offsetは地図中央からのずれで、上部バナーと下部フォームで隠れるぶんを
+ * 親が測って渡す。フォームの開閉で可視範囲が変わるため、offsetの変化にも追従する。
+ * @returns {void}
+ */
+const focusOnPosition = () => {
+  if (props.focusPosition === null) {
+    return;
+  }
+
+  map.easeTo({
+    center: [props.focusPosition.lng, props.focusPosition.lat],
+    offset: [0, props.focusOffsetY]
+  });
+};
+
 /** 自分が投稿した口コミのピン（オレンジ）を表す修飾クラス */
 const MY_REVIEW_PIN_CLASS = 'review-pin-mine';
 
@@ -446,11 +500,16 @@ const OTHER_REVIEW_PIN_CLASS = 'review-pin-other';
  * @param {string} spotName 場所の名称（読み上げ用）
  * @returns {HTMLElement} マーカーとして使う要素
  */
-const createReviewPinElement = (modifierClass, spotName) => {
+const createReviewPinElement = (modifierClass, spot) => {
   const container = document.createElement('button');
   container.className = `review-pin ${modifierClass}`;
   container.type = 'button';
-  container.setAttribute('aria-label', `${spotName ?? ''}の口コミを見る`);
+  container.setAttribute('aria-label', `${spot.spotName ?? ''}の口コミを見る`);
+
+  // 選択中はピンを大きく前面に出し、支援技術にも選択状態を伝える
+  const isSelected = spot.spotId === props.selectedReviewSpotId;
+  container.classList.toggle('is-selected', isSelected);
+  container.setAttribute('aria-pressed', String(isSelected));
 
   const head = document.createElement('div');
   head.className = 'review-pin-head';
@@ -462,7 +521,7 @@ const createReviewPinElement = (modifierClass, spotName) => {
 /**
  * @description 口コミの場所の一覧からマーカーを作る。
  * ピンを押すとその場所を親へ通知する。
- * @param {Array<{position: {lng: number, lat: number}, spotName: string}>} spots 場所の一覧
+ * @param {Array<{spotId: string, position: {lng: number, lat: number}, spotName: string}>} spots 場所の一覧
  * @param {string} modifierClass 色を決める修飾クラス
  * @returns {object[]} 生成したマーカー
  */
@@ -473,12 +532,16 @@ const toReviewMarkers = (spots, modifierClass) =>
         Number.isFinite(spot.position?.lng) && Number.isFinite(spot.position?.lat)
     )
     .map((spot) => {
-      const element = createReviewPinElement(modifierClass, spot.spotName);
+      const element = createReviewPinElement(modifierClass, spot);
 
       element.addEventListener('click', (event) => {
         // 地図のクリックや長押し判定に伝播させない
         event.stopPropagation();
-        emit('selectReviewSpot', { lng: spot.position.lng, lat: spot.position.lat });
+        // 押した瞬間に大きくできるよう、座標だけでなく spotId も渡す
+        emit('selectReviewSpot', {
+          spotId: spot.spotId,
+          position: { lng: spot.position.lng, lat: spot.position.lat }
+        });
       });
 
       return new Marker({ element, anchor: 'bottom' })
@@ -588,19 +651,33 @@ const renderRouteLine = () => {
 const renderSpotMarkers = () => {
   markers.forEach((marker) => marker.remove());
 
+  spotMarkerStates = [];
   markers = props.spots
     .filter((spot) => spot.lng !== null && spot.lat !== null)
-    .map((spot, index) =>
-      new Marker({
-        element: createSpotMarkerElement(
-          index + 1,
-          props.visitedSpotIds.includes(spot.spotId)
-        )
-      })
+    .map((spot, index) => {
+      const element = createSpotMarkerElement(
+        index + 1,
+        props.visitedSpotIds.includes(spot.spotId)
+      );
+
+      spotMarkerStates.push({ spotId: spot.spotId, order: index + 1, element });
+
+      return new Marker({ element })
         .setLngLat([spot.lng, spot.lat])
         .setPopup(new Popup({ offset: 16 }).setText(spot.name))
-        .addTo(map)
-    );
+        .addTo(map);
+    });
+};
+
+/**
+ * @description 到達状況に合わせて、スポットのマーカーの表示だけを切り替える。
+ * 位置は動かさない（マーカーを作り直さず、要素の中身だけを差し替える）。
+ * @returns {void}
+ */
+const updateSpotMarkerStates = () => {
+  spotMarkerStates.forEach(({ spotId, order, element }) => {
+    applySpotMarkerState(element, order, props.visitedSpotIds.includes(spotId));
+  });
 };
 
 onMounted(() => {
@@ -625,6 +702,14 @@ onMounted(() => {
 
   if (props.isLongPressEnabled) {
     attachLongPress(map);
+  }
+
+  // 操作できない概略表示（提案画面）は、枠の大きさが変わってもルート全体が見えるよう収め直す。
+  // 提案画面の地図は画面の高さに合わせて伸び縮みするため、文字の読み込みや
+  // 端末の向きの変更で大きさが変わる。大きさの変化はライブラリが検知して resize を発行する。
+  // 操作できる地図で同じことをすると、利用者が動かした位置が戻されるため行わない
+  if (!props.isInteractive) {
+    map.on('resize', fitToRoute);
   }
 
   // スタイルの読み込み完了前はソースを追加できないため、loadを待つ
@@ -654,16 +739,13 @@ watch(
   }
 );
 
-// スポットへ到達したら、番号をスタンプへ差し替える。
-// 地図の位置は動かさない（歩行中に表示範囲が戻ると現在地を見失うため fitToRoute は呼ばない）
+// スポットへ到達したら、番号を「済」スタンプへ差し替える。
+// ピンの位置も地図の表示範囲も動かさず、表示だけを変える。
+// マーカーは load 前に存在しないため、スタイルの読み込み状態に関係なく呼んでよい
 watch(
   () => props.visitedSpotIds,
   () => {
-    if (map === null || !map.isStyleLoaded()) {
-      return;
-    }
-
-    renderSpotMarkers();
+    updateSpotMarkerStates();
   }
 );
 
@@ -680,7 +762,7 @@ watch(
   { deep: true }
 );
 
-// 長押しのピンが更新されたら描き直す
+// 赤いピンが更新されたら描き直す
 watch(
   () => props.pinPosition,
   () => {
@@ -693,13 +775,27 @@ watch(
   { deep: true }
 );
 
-// 口コミピンの一覧・表示切り替えに追従する
+// 寄せる対象、またはフォームの高さ（offset）が変わったら寄せ直す
+watch(
+  () => [props.focusPosition, props.focusOffsetY],
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    focusOnPosition();
+  },
+  { deep: true }
+);
+
+// 口コミピンの一覧・表示切り替え・選択に追従する
 watch(
   () => [
     props.myReviewSpots,
     props.showMyReviews,
     props.otherReviewSpots,
-    props.showOtherReviews
+    props.showOtherReviews,
+    props.selectedReviewSpotId
   ],
   () => {
     if (map === null || !map.isStyleLoaded()) {
@@ -714,6 +810,7 @@ watch(
 onBeforeUnmount(() => {
   markers.forEach((marker) => marker.remove());
   markers = [];
+  spotMarkerStates = [];
   originMarker?.remove();
   originMarker = null;
   if (currentLocationMarker !== null) {

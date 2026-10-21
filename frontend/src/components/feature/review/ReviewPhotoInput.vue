@@ -82,11 +82,15 @@ const handleRemove = (index) => {
         :key="url"
         class="photo-item"
       >
+        <!--
+          拡大表示では同じ場所の写真を送れるようにするため、
+          押された1枚だけでなく一覧と位置を渡す
+        -->
         <button
           class="photo-thumb-btn"
           type="button"
           aria-label="写真を拡大表示"
-          @click="$emit('view', url)"
+          @click="$emit('view', { photoUrls: previewUrls, index })"
         >
           <img
             :src="url"
@@ -159,8 +163,8 @@ const handleRemove = (index) => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid #DDE3E8;
+  border-radius: 6px;
+  border: 2px solid var(--border-ink);
 }
 
 .photo-remove {
@@ -187,9 +191,9 @@ const handleRemove = (index) => {
   justify-content: center;
   width: 56px;
   height: 56px;
-  border: 1px dashed #B6C0CA;
-  border-radius: 8px;
-  color: var(--text-gray);
+  border: 2px dashed var(--border-ink);
+  border-radius: 6px;
+  color: var(--text-dark);
   cursor: pointer;
 }
 

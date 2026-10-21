@@ -135,7 +135,7 @@ const distanceScaleLabels = computed(() => [
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 12px;
+  margin-bottom: calc(6px + var(--fit) * 6);
 }
 
 /* 見出しの下余白は .section-header が持つため、横並びの中央揃えを崩さないよう消す */
@@ -143,28 +143,32 @@ const distanceScaleLabels = computed(() => [
   margin-bottom: 0;
 }
 
-/* おまかせの札。選ぶと紫のインクで塗られる */
+/*
+ * おまかせの札。選ぶと紫のインクで塗られる。
+ * 見出しの行の高さを決めるため、低い画面では少し小さくする（28〜32px）。
+ */
 .random-icon-btn {
-  width: 2rem;
-  height: 2rem;
-  border: 2px solid var(--border-gold);
+  width: calc(28px + var(--fit) * 4);
+  height: calc(28px + var(--fit) * 4);
+  border: 2px solid var(--border-ink);
   border-radius: 50%;
   background-color: var(--surface);
-  color: var(--text-gray);
+  color: var(--text-dark);
   font-family: var(--font-display);
   font-size: 1.2rem;
   font-weight: bold;
+  box-shadow: var(--shadow);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .random-icon-btn:hover {
-  border-color: var(--accent-gold);
+  border-color: var(--primary-light);
   background-color: var(--bg-deep);
 }
 
 .random-icon-btn.selected {
-  border-color: var(--accent-gold);
+  border-color: var(--border-ink);
   background-color: var(--primary-color);
   color: var(--white);
 }

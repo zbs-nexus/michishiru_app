@@ -1,7 +1,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { createDataSourceError } from '../../shared/utils/errorHandler.js';
-import { logWarn } from '../../shared/utils/logger.js';
+import { logError, logWarn } from '../../shared/utils/logger.js';
 import {
   DEFAULT_QUERY_LIMIT,
   GSI_SPOT_LIST,
@@ -76,6 +76,19 @@ const sendWithRetry = async (command) => {
       await wait(2 ** attempt * 100);
     }
   }
+
+  /*
+   * ApplicationError の context は上位でログに出ないため、ここで原因を残す。
+   * GSI を増やした直後は索引の作り直し（backfill）が終わるまで読めず、
+   * ValidationException が返る。ピンが出ない原因がこれかどうかを
+   * 切り分けられるよう、例外名とメッセージを記録する。
+   */
+  logError('口コミの場所の一覧のQueryに失敗しました', {
+    indexName: GSI_SPOT_LIST,
+    tableName: REVIEW_TABLE_NAME,
+    errorName: lastError?.name,
+    errorMessage: lastError?.message
+  });
 
   throw createDataSourceError('口コミの場所の一覧の取得に失敗しました', {
     errorName: lastError?.name

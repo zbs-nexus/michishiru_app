@@ -7,8 +7,13 @@
 
 /*
  * 配色はマスコット（フクロウ）に合わせたファンタジー寄りの古地図・羊皮紙調。
- * 紙の色（--bg-light / --surface）に金の縁取り（--border-gold）と
- * 紫のインク（--primary-color）を重ねる、の3点で全画面の印象を揃える。
+ * 全画面の印象は以下の4点で揃える。
+ *   1. 地は古地図の一枚絵（.paper-map-bg）
+ *   2. 面を囲む線は茶のインク（--border-ink）
+ *   3. 影はぼかさず右下へずらすだけ（--shadow）
+ *   4. 見出しは紫のインク（--primary-color）、本文は墨（--text-dark）
+ * 金（--accent-gold / --border-gold）は罫線・スライダーのレール・星などの
+ * 装飾だけに使い、面の輪郭には使わない。
  */
 :root {
   /* 紫のインク。見出し・主要ボタン・つまみに使う */
@@ -19,6 +24,13 @@
   /* 金。飾りと縁取り専用。明るい面の文字色には使わない（コントラストが足りない） */
   --accent-gold: #B8862B;
   --border-gold: #DCC48A;
+  /*
+   * 茶のインク。古地図の線画と同じ色で、札（カード）・入力欄・ボタンの輪郭に使う。
+   * 金の縁取り（--border-gold）は明るい紙の上では輪郭が弱く、
+   * 背景に敷いた地図の絵に溶けてしまうため、面を囲む線はこちらに統一する。
+   * --border-gold は罫線・スライダーのレール・星など、装飾の金にだけ残す。
+   */
+  --border-ink: #5C4430;
   /* ルートを示す青。mapDefaults.js の ROUTE_LINE_COLOR と同値にする */
   --route-blue: #1A73E8;
   /* 羊皮紙。画面の地の色 */
@@ -33,8 +45,63 @@
   --danger: #B3372B;
   /* マーカーの縁取りなど、純白が必要な箇所に使う */
   --white: #ffffff;
-  --shadow: 0 2px 10px rgba(74,58,36,0.14);
-  --shadow-raised: 0 10px 28px rgba(74,58,36,0.2);
+  /*
+   * 影。ぼかさず右下へずらすだけにして、紙に重ねた札のように見せる。
+   * ドット文字（DotGothic16）と古地図の線画に合わせ、全画面でこの硬い影を使う。
+   * ぼかした影は輪郭がにじんでドット絵と質感が合わないため使わない。
+   */
+  --shadow: 3px 3px 0 rgba(92,68,48,0.4);
+  --shadow-raised: 4px 4px 0 rgba(92,68,48,0.45);
+  /*
+   * 地図の上に置くマーカー・ピンの影。
+   * 紙の上の札とは違い、実際の地図（MapLibre のタイル）の上に浮かせるため、
+   * ずらした硬い影ではなく、真下に落ちる柔らかい影にする。
+   * 硬い影だとピンが指す座標が影の分だけずれて見える。
+   */
+  --shadow-marker: 0 1px 4px rgba(0,0,0,0.35);
+  /*
+   * 絵の上に置く文字の縁取り。
+   * 地図の濃い線画（山・川）に重なっても読めるよう、紙の色で文字の周りを薄く塗る。
+   */
+  --text-halo: 0 0 6px var(--bg-light), 0 0 3px var(--bg-light);
+  /*
+   * ドット絵の枠。ボタン・入力欄・カードの輪郭に使う。
+   *
+   * 仕組み: border-image の9スライス。5×5のSVGを3×3に切り分け、
+   * 四隅のタイルはそのまま、辺のタイルだけ引き伸ばして任意の大きさに合わせる。
+   * 絵は「濃い茶の外枠」と「薄い茶の内枠」を1マスずつ重ねた二重線で、
+   * 四隅は1マス欠けて角が段差になる。角丸では出せないカクッとした折れ方になる。
+   *
+   *   外枠（濃い茶） ■■■■■    四隅は濃い茶だけが回り込み、
+   *   内枠（薄い茶） ■□□□■    内枠の線は角の手前で止まる
+   *
+   * SVGには width / height を必ず書くこと。
+   * 単位なしの border-image-slice は「画像のピクセル数」として解釈されるが、
+   * 寸法を持たないSVGは border の領域いっぱいに引き伸ばされた大きさが基準になり、
+   * 2 が意図した2マスにならない。切り出し位置がずれて枠がまだらに割れる。
+   *
+   * border-width 8px に対してスライスが2マスなので倍率は4倍。
+   * 外枠・内枠それぞれ4px、欠ける角も4pxになる。
+   * 太さを変えるときは --pixel-frame-width だけを触れば、
+   * 二重線の比率と角の段差が同じ比で付いてくる。
+   * ただし枠の分だけ要素が外へ広がるため、変えたあとは
+   * ジャンルの4列やボタンの高さが崩れていないか確認すること。
+   *
+   * 角丸（border-radius）とは併用できない。枠は四角いのに背景だけ角が丸まるため、
+   * この枠を使う要素では border-radius を書かないこと。
+   *
+   * 色はSVGに焼き込むため、枠の色ごとに変数を用意している。
+   * 増やす場合は2つの fill（%23 は # のエスケープ）を変えて追記する。
+   * 読み込めなかった場合は border の指定（solid）がそのまま残るため、
+   * 角が丸くない通常の一重の枠として表示される。
+   *
+   * clip-path でも同じ形は作れるが、focus のアウトラインと影まで
+   * 切り落としてしまうため採用していない。
+   */
+  --pixel-frame-width: 8px;
+  --pixel-frame-ink: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5' viewBox='0 0 5 5'%3E%3Cpath fill='%234A2E1C' d='M1 0H4V1H5V4H4V5H1V4H0V1H1Z'/%3E%3Cpath fill='%23B08E5C' d='M2 1H3V2H4V3H3V4H2V3H1V2H2Z'/%3E%3C/svg%3E") 2 stretch;
+  --pixel-frame-primary: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5' viewBox='0 0 5 5'%3E%3Cpath fill='%232E2449' d='M1 0H4V1H5V4H4V5H1V4H0V1H1Z'/%3E%3Cpath fill='%235F4C91' d='M2 1H3V2H4V3H3V4H2V3H1V2H2Z'/%3E%3C/svg%3E") 2 stretch;
+  --pixel-frame-danger: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='5' height='5' viewBox='0 0 5 5'%3E%3Cpath fill='%236E2219' d='M1 0H4V1H5V4H4V5H1V4H0V1H1Z'/%3E%3Cpath fill='%23C25A4C' d='M2 1H3V2H4V3H3V4H2V3H1V2H2Z'/%3E%3C/svg%3E") 2 stretch;
   /*
    * アプリ全体の書体。DotGothic16 のドット文字で、古いゲーム機の画面のような
    * 粗い輪郭を出す。見出しも本文も同じものを使う。
@@ -54,6 +121,30 @@
    */
   --font-display: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
   --font-body: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
+  /*
+   * 画面の高さに合わせて寸法を伸び縮みさせる係数（0px〜1px）。
+   * どの端末でも全画面をスクロールせずに収めるために使う。
+   * 寸法は calc(低い画面での値 + var(--fit) * 伸び幅) の形で書く。
+   * 例: calc(12px + var(--fit) * 8) は、低い画面で 12px、高い画面で 20px になる。
+   * svh に対応していないブラウザでは、従来どおり高い画面の値で表示する。
+   */
+  --fit: 1px;
+}
+
+/*
+ * 表示領域の高さが 560px 以下で 0px、860px 以上で 1px になり、その間は高さに比例する。
+ * 560px は iPhone SE の Safari（ツールバー表示時 約548px）と 360×640 級の Android で
+ * 下限の値になるように決めた。
+ * 860px は、最も項目の多い状態（パスワード再設定で全項目にエラーが出たとき）でも、
+ * 画面が高くなった分より中身の伸びが小さくなるように決めた。この幅を狭めると、
+ * 中くらいの高さの端末で中身の伸びが画面の伸びを追い越し、はみ出す。
+ * 高さはツールバーを出した状態（svh）で測る。文書をスクロールさせない作りのため
+ * ツールバーは出たままになり、この状態で収まっていれば必ず収まる。
+ */
+@supports (height: 1svh) {
+  :root {
+    --fit: clamp(0px, calc((100svh - 560px) / 300), 1px);
+  }
 }
 
 /*
@@ -71,7 +162,13 @@ body {
   background-size: cover, cover, 40px 40px;
   background-attachment: fixed;
   color: var(--text-dark);
+  /*
+   * 100vh はスマホではツールバーを隠した状態の高さになり、表示中は
+   * ツールバーの分だけはみ出して画面がスクロールしてしまう。表示中の高さに追従する
+   * dvh を使う（dvh に対応していないブラウザ向けに vh を先に書いている）。
+   */
   min-height: 100vh;
+  min-height: 100dvh;
   max-width: 430px;
   margin: 0 auto;
   position: relative;
@@ -108,44 +205,86 @@ textarea {
 
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
-}
-
-/* 画面の切り替えはVue Routerが行うため、表示中の画面のみがマウントされる */
-.screen {
-  display: flex;
-  min-height: 100vh;
-  flex-direction: column;
 }
 
 /*
- * ヘッダー背景。夜明けの空から羊皮紙へ溶けるグラデーションに、
- * 星と遠くの森を散らして物語の冒頭のように見せる。
+ * 画面の骨格。画面の切り替えはVue Routerが行うため、表示中の画面のみがマウントされる。
+ * 表示領域の高さちょうどにして、文書そのものはスクロールさせない。
+ * 中身は .content が残りの高さを受け持ち、各部品が --fit で縮むことで収める。
  */
-.header-bg {
-  height: 168px;
-  background-color: var(--bg-light);
-  background-image:
-    /* 星 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23C8972F' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%235F4C91' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
-    /* 遠くの森 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 40'%3E%3Cg fill='%23A9BE9B'%3E%3Cpath d='M12 40L22 14l10 26z'/%3E%3Cpath d='M34 40L46 8l12 32z'/%3E%3Cpath d='M60 40L70 16l10 24z'/%3E%3Cpath d='M82 40L96 10l14 30z'/%3E%3C/g%3E%3C/svg%3E"),
-    linear-gradient(180deg, #E7DCF2 0%, #F3E8DC 48%, var(--bg-light) 100%);
-  background-position: 16% 26%, 76% 18%, 50% 100%, 0 0;
-  background-size: 14px 14px, 10px 10px, 100% 44px, cover;
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat;
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+.screen {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
+/*
+ * 古地図の絵。羊皮紙の画面（ホーム・認証・ロード中・散歩結果）の地として敷く。
+ * 使う画面は DefaultLayout の #background スロットへ <div class="paper-map-bg" /> を置く。
+ *
+ * スクロールしても絵が動かないよう固定する。body は max-width: 430px の
+ * 中央寄せだが、position: fixed はビューポートを基準にするため、
+ * 中央寄せと幅の上限をここでも指定して本文の列に重ねる。
+ */
+.paper-map-bg {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  /* 絵を読み込めなかったときも羊皮紙として見えるよう、地色を下に敷く */
+  background-color: var(--bg-deep);
+  background-image:
+    /* 絵の上に重ねる羊皮紙色の膜。線画と文字の明暗差を作って読みやすくする */
+    linear-gradient(rgba(251,244,228,0.36), rgba(251,244,228,0.36)),
+    url('../images/home-map-background.png');
+  background-position: center, center;
+  background-size: cover, cover;
+  background-repeat: no-repeat, no-repeat;
+}
+
+/*
+ * 画面の本文。フッターを除いた残りの高さを受け持つ。
+ * スクロールは最後の手段で、横向きや文字の拡大などで収まりきらない場合に限り、
+ * 文書ではなくこの中だけをスクロールさせる（フッターの操作は常に見えたままにする）。
+ */
 .content {
-  padding: 20px;
   flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(8px + var(--fit) * 12) 20px;
   position: relative;
   z-index: 1;
+}
+
+/*
+ * ホーム画面（情報入力）。
+ * RouteConditionView が .screen に is-home を付けて使う。
+ * 共通の見た目はすべて全画面で揃えてあるため、ここにはこの画面だけの差だけを置く。
+ */
+
+/* 画面下に固定した「ルートを作成」に本文が隠れないよう、その分だけ空ける */
+.screen.is-home .content {
+  padding-bottom: 96px;
+}
+
+/*
+ * この画面の見出しだけは、金の罫線を引かず墨の色で書く。
+ * 認証画面（ログイン・登録・再設定）は紫のインクに金の罫線を引く形で、
+ * 画面ごとのデザイン（提供されたデザイン）がそうなっているため合わせている。
+ */
+.screen.is-home .section-title {
+  color: var(--text-dark);
+  background-image: none;
+  padding-bottom: 0;
+  margin-bottom: 20px;
 }
 
 /* ロゴヘッダー */
@@ -153,24 +292,27 @@ textarea {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 30px;
-  padding-top: 10px;
+  margin-bottom: calc(4px + var(--fit) * 26);
+  padding-top: calc(var(--fit) * 10);
 }
 
-/* ロゴは金の縁で囲み、紙に貼った封蝋のように見せる */
+/* ロゴはドット絵の枠で囲み、紙に貼った封蝋のように見せる */
 .logo-icon img {
   display: block;
-  border-radius: 12px;
-  border: 2px solid var(--border-gold);
+  width: calc(30px + var(--fit) * 20);
+  height: calc(30px + var(--fit) * 20);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
 }
 
 .logo-text h1 {
   font-family: var(--font-display);
-  font-size: 25px;
+  font-size: calc(19px + var(--fit) * 6);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--primary-color);
+  text-shadow: var(--text-halo);
 }
 
 .logo-text p {
@@ -182,15 +324,18 @@ textarea {
 /*
  * セクションタイトル。見出しの下に金の罫線を引いて章の始まりを示す。
  * 罫線は中央が濃く両端が消えるグラデーションにして、紙に馴染ませる。
+ * 背景の地図の線画に重なっても読めるよう、紙の色で縁取る。
  */
 .section-title {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: calc(17px + var(--fit) * 5);
   font-weight: 700;
+  line-height: 1.35;
   letter-spacing: 0.04em;
-  margin-bottom: 24px;
-  padding-bottom: 10px;
+  margin-bottom: calc(6px + var(--fit) * 18);
+  padding-bottom: calc(4px + var(--fit) * 6);
   color: var(--primary-color);
+  text-shadow: var(--text-halo);
   background-image: linear-gradient(90deg, var(--accent-gold), rgba(184,134,43,0) 85%);
   background-position: 0 100%;
   background-size: 100% 2px;
@@ -199,11 +344,12 @@ textarea {
 
 .page-title {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: calc(18px + var(--fit) * 4);
   font-weight: 700;
   letter-spacing: 0.08em;
-  margin-bottom: 20px;
+  margin-bottom: calc(6px + var(--fit) * 14);
   color: var(--primary-color);
+  text-shadow: var(--text-halo);
   text-align: center;
 }
 
@@ -219,16 +365,18 @@ textarea {
 
 /* 入力セクション */
 .input-section {
-  margin-bottom: 24px;
+  margin-bottom: calc(10px + var(--fit) * 14);
 }
 
+/* 項目名は墨の色。見出し（紫のインク）と区別し、背景の絵からは紙の色で浮かせる */
 .input-section h3 {
   font-family: var(--font-display);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.08em;
   margin-bottom: 12px;
-  color: var(--primary-color);
+  color: var(--text-dark);
+  text-shadow: var(--text-halo);
 }
 
 /* ボタングリッド */
@@ -238,35 +386,42 @@ textarea {
   gap: 10px;
 }
 
-/* 選択ボタンは紙の札。選ぶと金の縁と淡い光がつく */
+/* 選択ボタンは紙の札。ドット絵の枠で囲み、選ぶと輪郭が紫のインクへ変わる */
 .select-btn {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px 8px;
-  border: 2px solid var(--border-gold);
-  border-radius: 14px;
+  padding: calc(8px + var(--fit) * 8) 6px;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  /* 欠けた角に背景が回り込まないよう、面は枠の内側だけに塗る */
   background: var(--surface);
+  background-clip: padding-box;
   box-shadow: var(--shadow);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: transform 0.2s;
 }
 
 .select-btn:hover {
-  border-color: var(--accent-gold);
   transform: translateY(-2px);
 }
 
+/*
+ * 選んだ札は輪郭の色だけで示す。
+ * 金の光（box-shadow の輪）は背景の地図の線画と重なって濁るため使わない。
+ */
 .select-btn.selected {
   border-color: var(--primary-color);
-  background: linear-gradient(180deg, var(--surface) 0%, var(--bg-deep) 100%);
-  box-shadow: 0 0 0 3px rgba(184,134,43,0.22), var(--shadow);
+  border-image: var(--pixel-frame-primary);
+  background: var(--surface);
+  background-clip: padding-box;
+  box-shadow: var(--shadow);
 }
 
 .btn-icon {
-  font-size: 24px;
-  margin-bottom: 6px;
+  font-size: calc(20px + var(--fit) * 4);
+  margin-bottom: calc(2px + var(--fit) * 4);
 }
 
 .select-btn span:last-child {
@@ -276,17 +431,19 @@ textarea {
 
 /* 距離スライダー */
 .slider-wrapper {
-  padding: 4px 0;
+  padding: calc(var(--fit) * 4) 0;
 }
 
 .distance-value {
   display: block;
   text-align: center;
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: calc(24px + var(--fit) * 6);
   font-weight: 700;
-  color: var(--primary-color);
-  margin-bottom: 8px;
+  line-height: 1.3;
+  color: var(--text-dark);
+  text-shadow: var(--text-halo);
+  margin-bottom: calc(var(--fit) * 8);
 }
 
 .distance-value small {
@@ -354,31 +511,44 @@ textarea {
   margin-top: 2px;
   padding: 0 2px;
   font-size: 12px;
-  color: var(--text-gray);
-}
-
-.hint {
-  font-size: 12px;
-  line-height: 1.7;
-  color: var(--text-gray);
-  margin-top: 8px;
+  color: var(--text-dark);
+  text-shadow: var(--text-halo);
 }
 
 /*
- * ボタン。紫のインクに金の縁を回し、巻物の留め具のように見せる。
- * 文字は明朝＋字間を広げて、ボタンというより「宣言」に見せる。
+ * 補足の一文。背景に地図の絵を敷くと灰色の文字は沈むため、
+ * 墨の色にして紙の色で縁取る。
+ */
+.hint {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-dark);
+  text-shadow: var(--text-halo);
+  margin-top: calc(4px + var(--fit) * 4);
+}
+
+/*
+ * ボタン。紫のインクに茶の縁を回し、巻物の留め具のように見せる。
+ * 字間を広げて、ボタンというより「宣言」に見せる。
+ */
+/*
+ * 低い画面でも押しやすい高さ（44px 以上）が残るよう、縦の余白の下限を決めている。
+ * 行間を固定するのは、書体の読み込み前後や端末の書体の違いでボタンの高さが変わり、
+ * 画面に収まるかどうかが端末ごとにぶれるのを防ぐため。
  */
 .primary-btn {
   width: 100%;
-  padding: 16px;
+  padding: calc(11px + var(--fit) * 5) 16px;
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: calc(16px + var(--fit) * 1);
+  line-height: 1.4;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--white);
   background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-color) 100%);
-  border: 2px solid var(--border-gold);
-  border-radius: 14px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow-raised);
   cursor: pointer;
   transition: filter 0.2s, transform 0.2s;
@@ -399,16 +569,19 @@ textarea {
   z-index: 50;
 }
 
+/* 行間を固定する理由は .primary-btn と同じ */
 .secondary-btn {
-  padding: 14px 24px;
+  padding: calc(10px + var(--fit) * 4) 22px;
   font-family: var(--font-display);
   font-size: 15px;
+  line-height: 1.4;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--primary-color);
   background: var(--surface);
-  border: 2px solid var(--primary-color);
-  border-radius: 14px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--primary-color);
+  border-image: var(--pixel-frame-primary);
   box-shadow: var(--shadow);
   cursor: pointer;
   transition: background 0.2s;
@@ -422,29 +595,42 @@ textarea {
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: calc(6px + var(--fit) * 10);
 }
 
 .auth-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: calc(2px + var(--fit) * 4);
 }
 
+/* 背景に地図の絵を敷くため、灰色ではなく墨の色にして紙の色で縁取る */
 .auth-label {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--text-gray);
+  line-height: 1.4;
+  color: var(--text-dark);
+  text-shadow: var(--text-halo);
 }
 
-/* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
+/*
+ * 入力欄。ドット絵の枠で囲み、紙に書き込む枠のように見せる。
+ * 16px未満にするとiOSで入力時に画面が拡大されるため、文字の大きさは下げない。
+ * 低い画面では上下の余白だけを詰める（高さ 38px を下限にして押しやすさを保つ）。
+ * 行間を固定するのは、入力欄の高さを書体に左右させないため。
+ * DotGothic16 の既定の行間は 1.5 倍で、固定しないと入力欄1つにつき約4px高くなり、
+ * 入力欄の多い画面（パスワード再設定など）が低い端末に収まらなくなる。
+ */
 .auth-field input {
-  padding: 14px;
+  padding: calc(8px + var(--fit) * 6) 12px;
   font-size: 16px;
-  border: 1px solid var(--border-gold);
-  border-radius: 10px;
+  line-height: 1.25;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   background: var(--surface);
+  background-clip: padding-box;
   color: var(--text-dark);
+  box-shadow: var(--shadow);
 }
 
 .auth-field input:focus {
@@ -459,6 +645,7 @@ textarea {
 /* 入力チェックに引っかかった欄は枠を赤くして、どこを直すかを分かりやすくする */
 .auth-field input[aria-invalid="true"] {
   border-color: var(--danger);
+  border-image: var(--pixel-frame-danger);
 }
 
 .auth-field input[aria-invalid="true"]:focus {
@@ -484,23 +671,38 @@ textarea {
   display: none;
 }
 
+/*
+ * 入力欄ごとのエラーは全項目に同時に出ることがあるため、文字を小さめにして行間を詰める。
+ * 文字は画面の高さで変えずに 12px で固定する。全項目が未入力のときに出る文言のうち
+ * 最も長いもの（確認のため新しいパスワードをもう一度入力してください / 26文字）が、
+ * 幅の狭い端末（360px）でも1行に収まる大きさにしている。
+ */
 .auth-error {
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--danger);
+  text-shadow: var(--text-halo);
 }
 
+/*
+ * 低い画面では文字と行間を詰める。
+ * 幅の狭い端末（360px）でパスワードの条件の文言が3行に折り返さないよう、文字は 12px まで下げる。
+ */
 .auth-note {
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-gray);
+  font-size: calc(12px + var(--fit) * 1);
+  line-height: calc(17px + var(--fit) * 4);
+  color: var(--text-dark);
+  text-shadow: var(--text-halo);
 }
 
 /* 画面の下に置く「ログインへ」「登録へ」の行き先 */
 .auth-switch {
-  margin-top: 24px;
+  margin-top: calc(8px + var(--fit) * 16);
   font-size: 13px;
+  line-height: 1.5;
   text-align: center;
-  color: var(--text-gray);
+  color: var(--text-dark);
+  text-shadow: var(--text-halo);
 }
 
 .auth-switch a {
@@ -511,53 +713,15 @@ textarea {
 /*
  * ローディング画面。
  * RouteLoadingOverlay が .screen に is-loading を付けて使う。
- * 夜明けの空から羊皮紙へ移るグラデーションで、旅立ちの前の時間を表す。
+ * 地は他の画面と同じ古地図の絵（.paper-map-bg）だけにして、
+ * 待っている間に目を向けてほしいマスコットと吹き出しを邪魔しないようにする。
  */
 .screen.is-loading {
-  background: linear-gradient(180deg, #E7DCF2 0%, #F3E8DC 55%, var(--bg-light) 100%);
   justify-content: center;
   align-items: center;
   text-align: center;
   position: relative;
   overflow: hidden;
-}
-
-.loading-bg {
-  position: absolute;
-  inset: 0;
-  background-image:
-    /* 三日月 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Cpath fill='%23E8C86A' d='M24 2a18 18 0 1 0 0 36 23 23 0 0 1 0-36z'/%3E%3C/svg%3E"),
-    /* 金の星 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23C8972F' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
-    /* 紫の星 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%235F4C91' d='M12 2l2.1 6.4H21l-5.5 4 2.1 6.4L12 15l-5.6 3.8 2.1-6.4-5.5-4h6.9z'/%3E%3C/svg%3E"),
-    /* 針葉樹 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 40'%3E%3Cpath fill='%235E8A64' d='M15 2l9 14H6z'/%3E%3Cpath fill='%236C9A70' d='M15 12l10 16H5z'/%3E%3Crect fill='%238A6E52' x='13' y='28' width='4' height='9'/%3E%3C/svg%3E"),
-    /* きのこ */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3E%3Cpath fill='%23C06A5A' d='M15 3c7 0 11 5 11 9H4c0-4 4-9 11-9z'/%3E%3Crect fill='%23EFE3CF' x='11' y='12' width='8' height='12' rx='3'/%3E%3C/svg%3E"),
-    /* ランタン */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 34'%3E%3Cpath fill='none' stroke='%238A6E52' stroke-width='2' d='M12 2v5'/%3E%3Crect fill='%23E8C86A' x='5' y='8' width='14' height='16' rx='4'/%3E%3Crect fill='%238A6E52' x='3' y='24' width='18' height='3' rx='1'/%3E%3C/svg%3E"),
-    /* 羽根 */
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 36'%3E%3Cpath fill='%23D9CBB2' d='M10 1c6 7 6 20 0 34C4 21 4 8 10 1z'/%3E%3C/svg%3E");
-  background-position:
-    86% 8%,
-    14% 16%,
-    72% 26%,
-    12% 86%,
-    78% 82%,
-    48% 92%,
-    26% 70%;
-  background-size:
-    46px 46px,
-    16px 16px,
-    11px 11px,
-    44px 58px,
-    30px 30px,
-    26px 37px,
-    18px 32px;
-  background-repeat: no-repeat;
-  opacity: 0.75;
 }
 
 .loading-content {
@@ -570,10 +734,11 @@ textarea {
 
 .loading-content h2 {
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: calc(24px + var(--fit) * 4);
   letter-spacing: 0.1em;
   color: var(--primary-color);
-  margin-bottom: 36px;
+  text-shadow: var(--text-halo);
+  margin-bottom: calc(16px + var(--fit) * 20);
 }
 
 /* 吹き出しの中に入るため、画面見出しより小さくして行間を詰める */
@@ -598,7 +763,7 @@ textarea {
   display: flex;
   justify-content: center;
   gap: 10px;
-  margin-top: 30px;
+  margin-top: calc(16px + var(--fit) * 14);
 }
 
 /* 道に落ちた灯りのように、金色の点が順に光る */
@@ -622,21 +787,38 @@ textarea {
   50% { opacity: 1; transform: scale(1); }
 }
 
-/* マップ表示。古地図らしく金の枠で囲む */
+/* マップ表示。古地図らしくドット絵の枠で囲む */
 .map-preview {
   background: var(--bg-map);
-  border: 2px solid var(--border-gold);
-  border-radius: 16px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: calc(8px + var(--fit) * 8);
   box-shadow: var(--shadow);
 }
 
 /*
+ * 地図のコントロール（拡大・縮小・現在地）。
+ * MapLibre がコンポーネントの外側へ挿入するため <style scoped> では届かない。
+ * ライブラリの既定は白い角丸＋薄い影なので、他の画面の札と同じ
+ * 茶の輪郭とずらした影へ揃える。
+ */
+.maplibregl-ctrl-group {
+  background: var(--surface);
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  box-shadow: var(--shadow);
+}
+
+.maplibregl-ctrl-group button + button {
+  border-top: 2px solid var(--border-ink);
+}
+
+/*
  * 現在地へ戻るボタン。
- * MapLibre のコントロールとして地図コンテナへ挿入されるため、
- * コンポーネントの <style scoped> では届かない。
- * 枠と大きさはライブラリの .maplibregl-ctrl-group が与えるので、
+ * 大きさはライブラリの .maplibregl-ctrl-group が与えるので、
  * ここでは中のアイコンだけを描く。
  */
 .recenter-btn::after {
@@ -671,25 +853,22 @@ textarea {
   color: var(--white);
   font-size: 13px;
   font-weight: bold;
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-marker);
   cursor: pointer;
 }
 
 /*
- * 到達済みのスポットマーカー。番号の代わりに朱色の「済」の判子を押した見た目にする。
- * 外周の二重線と傾きで、青い番号の丸と一目で見分けられるようにする。
- * 回転は transform ではなく rotate で行う（MapLibre が位置決めに transform を使うため）。
+ * 到達済みのスポットマーカー。番号の代わりに、フクロウの足跡のスタンプ画像を表示する。
+ * 足跡が見分けられるよう番号の丸（26px）より一回り大きくする。
+ * マーカーは中心を座標に合わせている（MapLibre の既定の anchor: center）ため、
+ * 大きさが変わってもピンの位置はずれない。
+ * 画像は表示サイズの3倍（96px）で用意し、高解像度の画面でもにじまないようにしている。
  */
 .spot-marker.is-visited {
-  width: 30px;
-  height: 30px;
-  border: 2px solid var(--danger);
-  background: var(--white);
-  color: var(--danger);
-  font-family: var(--font-display);
-  font-size: 15px;
-  box-shadow: inset 0 0 0 2px var(--white), inset 0 0 0 3px var(--danger), var(--shadow);
-  rotate: -12deg;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: url('../images/spot-visited-stamp.png') center / cover no-repeat;
 }
 
 /*
@@ -709,7 +888,7 @@ textarea {
   color: var(--white);
   font-size: 15px;
   font-weight: bold;
-  box-shadow: 0 0 0 2px var(--accent-gold), var(--shadow);
+  box-shadow: 0 0 0 2px var(--accent-gold), var(--shadow-marker);
   cursor: pointer;
 }
 
@@ -718,8 +897,18 @@ textarea {
  * 青い円と方向を示す矢印で構成。
  * RouteMap.vue が動的に生成するため、グローバルに定義している。
  */
+/*
+ * マーカーは MapLibre が transform でコンテナ原点から位置決めするため、
+ * 必ず absolute にする（relative だと通常フローに入り、transform の起点が
+ * フロー上の静止位置になって、2個目以降のマーカーがその分ずれる。
+ * ずれ量はピクセル固定なのでピンが地面に貼り付かず、拡大縮小のたびに別の地点を指す）。
+ *
+ * MapLibre の .maplibregl-marker も absolute を指定しているが、
+ * こちらのCSSが後に読み込まれて同じ詳細度で上書きできてしまうため、明示する。
+ * 内側の点や頭は absolute で配置するが、absolute の要素も包含ブロックになるため問題ない。
+ */
 .current-location-marker {
-  position: relative;
+  position: absolute;
   width: 24px;
   height: 24px;
 }
@@ -767,17 +956,26 @@ textarea {
  * しずく型で、下端が座標を指す。
  */
 .location-pin {
-  position: relative;
+  /* relative にしないこと（理由は current-location-marker のコメント） */
+  position: absolute;
   width: 24px;
-  height: 24px;
+  /* 先端の張り出しぶんを含めた高さ（頭24px + 張り出し5px） */
+  height: 29px;
   cursor: pointer;
 }
 
-/* しずくの頭。先端（左下の角）が下を向くよう回転させる */
+/*
+ * しずくの頭。先端（左下の角）が下を向くよう回転させる。
+ *
+ * 24pxの正方形を45°回すと、角は箱の底辺より 24 × (√2 - 1) ÷ 2 ≒ 5px 外へ出る。
+ * MapLibre の anchor: 'bottom' が座標に合わせるのはレイアウト上の箱の底辺
+ * （transform は offsetHeight に影響しない）ため、頭をこの5px分だけ持ち上げて
+ * 先端と箱の底辺を一致させる。そうしないと先端が座標の5px下を指す。
+ */
 .location-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 0;
+  bottom: 5px;
   width: 24px;
   height: 24px;
   margin-left: -12px;
@@ -786,7 +984,11 @@ textarea {
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   transform-origin: center;
-  box-shadow: var(--shadow);
+  /*
+   * 影は要素と一緒に45°回るため、ずらした硬い影は向きが狂う。
+   * 真下に落ちる柔らかい影を使う。
+   */
+  box-shadow: var(--shadow-marker);
 }
 
 /* 中心の白い点。ピンらしく見せる */
@@ -805,29 +1007,46 @@ textarea {
 /*
  * 投稿済みの口コミのピン。形は location-pin と同じしずく型で、色だけを変える。
  * 押せることを支援技術へ伝えるためボタン要素で作るため、既定の見た目を打ち消す。
+ *
+ * サイズは --pin-size にまとめ、高さ・頭・持ち上げ量をそこから比率で出す。
+ * しずくは正方形を45°回しているため、角が箱の底辺より size × (√2−1)/2 外へ出る。
+ * MapLibre の anchor: 'bottom' が合わせる箱の底辺と先端を一致させるには、
+ * 高さに 1 + (√2−1)/2 ≒ 1.2071、持ち上げ量に (√2−1)/2 ≒ 0.2071 を掛ける。
+ * 定数で持つと選択時に拡大しても先端が座標からずれない。
  */
 .review-pin {
-  position: relative;
-  width: 24px;
-  height: 24px;
+  /* relative にしないこと（理由は current-location-marker のコメント） */
+  position: absolute;
+  --pin-size: 24px;
+  width: var(--pin-size);
+  /* 先端の張り出しぶんを含めた高さ */
+  height: calc(var(--pin-size) * 1.2071);
   padding: 0;
   background: none;
   border: none;
   cursor: pointer;
+  /* 選択時の拡大をなめらかに見せる */
+  transition: width 0.12s ease-out, height 0.12s ease-out;
 }
 
 .review-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 0;
-  width: 24px;
-  height: 24px;
-  margin-left: -12px;
+  /* 先端を座標に合わせるため張り出しぶんだけ持ち上げる */
+  bottom: calc(var(--pin-size) * 0.2071);
+  width: var(--pin-size);
+  height: var(--pin-size);
+  margin-left: calc(var(--pin-size) / -2);
   border: 3px solid var(--white);
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   transform-origin: center;
-  box-shadow: var(--shadow);
+  /* 硬い影が使えない理由は .location-pin-head のコメントを参照 */
+  box-shadow: var(--shadow-marker);
+  transition:
+    width 0.12s ease-out,
+    height 0.12s ease-out,
+    border-width 0.12s ease-out;
 }
 
 .review-pin-head::after {
@@ -840,6 +1059,21 @@ textarea {
   height: 7px;
   background: var(--white);
   border-radius: 50%;
+}
+
+/*
+ * 選択中のピン。
+ * 大きくし（A）、縁を太く・影を濃くして浮かせ（E）、重なっても隠れないよう前面へ出す。
+ * z-index はマーカー同士の兄弟要素に効く（MapLibre は重なり順を管理しないため）。
+ */
+.review-pin.is-selected {
+  --pin-size: 34px;
+  z-index: 1;
+}
+
+.review-pin.is-selected .review-pin-head {
+  border-width: 4px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 /* 自分が口コミ投稿済みの場所はオレンジ */
@@ -857,19 +1091,18 @@ textarea {
  * 画面の下端に敷く紙。上辺に金の罫線を引いて、地図と操作の境目を示す。
  */
 .bottom-actions {
-  padding: 16px 20px 24px;
+  padding: calc(10px + var(--fit) * 10) 20px calc(12px + var(--fit) * 16);
   background: var(--surface);
-  border-top: 2px solid var(--border-gold);
+  border-top: 2px solid var(--border-ink);
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: center;
-  box-shadow: 0 -4px 14px rgba(74,58,36,0.1);
 }
 
 .distance-display {
   display: flex;
   flex-direction: column;
-  min-width: 80px;
+  min-width: 72px;
 }
 
 .distance-display .label {
@@ -889,16 +1122,34 @@ textarea {
   font-weight: 400;
 }
 
+/*
+ * 主の操作（primary）を1段目に全幅で、従の操作（secondary）を2段目に横並びで置く。
+ * 3つを縦に積むと下部だけで画面の高さの3分の1を占め、低い端末では地図が見えなくなるため。
+ */
 .action-buttons {
   flex: 1;
-  display: flex;
-  flex-direction: column;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
 .action-buttons .primary-btn,
 .action-buttons .secondary-btn {
   width: 100%;
+}
+
+.action-buttons .primary-btn {
+  grid-column: 1 / -1;
+}
+
+/* 半分の幅に「ホームに戻る」が1行で収まるよう、左右の余白と字間を詰める */
+.action-buttons .secondary-btn {
+  padding-left: 6px;
+  padding-right: 6px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 /* ナビゲーション画面の地図 */
@@ -924,14 +1175,15 @@ textarea {
 }
 
 /*
- * 確認ポップアップ。羊皮紙に二重の金枠を回して、
+ * 確認ポップアップ。羊皮紙に茶の枠を回して、
  * 読み上げるべき言葉が書かれた札のように見せる。
  */
 .popup-content {
   background: var(--surface);
-  border: 2px solid var(--border-gold);
-  border-radius: 16px;
-  box-shadow: 0 0 0 4px rgba(255,252,244,0.5), var(--shadow-raised);
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  box-shadow: var(--shadow-raised);
   padding: 24px;
   margin: 20px;
   text-align: center;
@@ -961,81 +1213,72 @@ textarea {
  */
 .popup-btn {
   flex: 1;
-  padding: 12px 10px;
+  padding: 10px 8px;
   font-family: var(--font-display);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.02em;
   white-space: nowrap;
-  border-radius: 10px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  box-shadow: var(--shadow);
   cursor: pointer;
 }
 
 .popup-btn.primary {
   background: linear-gradient(180deg, var(--primary-light) 0%, var(--primary-color) 100%);
+  background-clip: padding-box;
   color: var(--white);
-  border: 2px solid var(--border-gold);
 }
 
 .popup-btn.secondary {
   background: var(--surface);
+  background-clip: padding-box;
   color: var(--text-dark);
-  border: 2px solid var(--border-gold);
 }
 
 /*
  * 結果画面。
  * WalkResultView が .screen に is-result を付けて使う。
  * 旅を終えた記録の紙として、中央寄せの羊皮紙にする。
+ * 中央寄せは .result-content の中で行い、下部のボタンは流れの中に置く。
  */
 .screen.is-result {
-  justify-content: center;
-  align-items: center;
   text-align: center;
   position: relative;
-  overflow: hidden;
 }
 
+/* .content と同じく、残りの高さを受け持ち、収まらない場合だけ中をスクロールさせる */
 .result-content {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  padding: 40px 20px;
+  padding: calc(12px + var(--fit) * 28) 20px calc(8px + var(--fit) * 12);
 }
 
 /*
- * 紙吹雪の代わりに、降りそそぐ光の粒を流す。
- * 装飾のみなのでテンプレート側で aria-hidden にしている。
- */
-.confetti {
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cg fill='%23C8972F'%3E%3Cpath d='M18 14l1.2 3.6h3.8l-3.1 2.3 1.2 3.6L18 21.2l-3.1 2.3 1.2-3.6-3.1-2.3h3.8z'/%3E%3Cpath d='M78 34l1 3h3.2l-2.6 1.9 1 3L78 40l-2.6 1.9 1-3-2.6-1.9h3.2z'/%3E%3C/g%3E%3Cg fill='%235F4C91'%3E%3Cpath d='M34 72l1 3h3.2l-2.6 1.9 1 3L34 78l-2.6 1.9 1-3-2.6-1.9h3.2z'/%3E%3Ccircle cx='62' cy='58' r='1.6'/%3E%3C/g%3E%3Ccircle fill='%23E8C86A' cx='48' cy='26' r='1.8'/%3E%3Ccircle fill='%23E8C86A' cx='88' cy='78' r='1.5'/%3E%3C/svg%3E");
-  opacity: 0.65;
-  animation: confetti-fall 6s linear infinite;
-  pointer-events: none;
-}
-
-@keyframes confetti-fall {
-  from { background-position: 0 -100px; }
-  to { background-position: 0 100px; }
-}
-
-/*
- * 実績の一覧。羊皮紙の枠に金の区切り線を入れて、旅の記録として見せる。
+ * 実績の一覧。茶の枠の中に金の区切り線を入れて、旅の記録として見せる。
  */
 .result-stats {
   position: relative;
   background: var(--surface);
-  border: 2px solid var(--border-gold);
-  border-radius: 16px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
-  padding: 20px 24px;
+  padding: calc(6px + var(--fit) * 14) 24px;
   text-align: left;
 }
 
 .stat-item {
   display: flex;
   justify-content: space-between;
-  padding: 12px 0;
+  padding: calc(7px + var(--fit) * 5) 0;
   border-bottom: 1px solid var(--border-gold);
 }
 
@@ -1055,14 +1298,18 @@ textarea {
   color: var(--primary-color);
 }
 
-/* レスポンシブ調整 */
+/*
+ * レスポンシブ調整（幅の狭い端末）。
+ * 縦の大きさは --fit が画面の高さで決めるため、ここでは横方向だけを詰める。
+ */
 @media (max-width: 380px) {
   .button-grid {
     gap: 6px;
   }
   
   .select-btn {
-    padding: 12px 4px;
+    padding-left: 4px;
+    padding-right: 4px;
   }
   
   .btn-icon {
@@ -1076,7 +1323,6 @@ textarea {
 
 /* 動きを減らす設定の場合は、装飾の動きを止める */
 @media (prefers-reduced-motion: reduce) {
-  .confetti,
   .loading-dots span {
     animation: none;
   }

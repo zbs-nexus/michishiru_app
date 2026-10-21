@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
@@ -11,6 +11,7 @@ import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.
 import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
 import { useLocationTracking } from '@/composables/useLocationTracking';
 import { useRouteProgress } from '@/composables/useRouteProgress';
+import { useRouteSnapping } from '@/composables/useRouteSnapping';
 import { useGenreOptions } from '@/composables/useGenreOptions';
 import { useReviewPosting } from '@/composables/useReviewPosting';
 import { useMyReviews } from '@/composables/useMyReviews';
@@ -38,8 +39,9 @@ const walkStore = useWalkStore();
  * 計測が途切れたとみなす継続時間（ミリ秒）。
  * これより短い中断では、復帰時の区間が MAX_SEGMENT_DISTANCE_M（200m）以内に収まり
  * 距離は直線で繋がるため、実質的な損失が出ない。
- * 一方スポットの到達判定は半径40mで、徒歩での通過時間が約64秒のため、
- * これを超える中断では取りこぼしが起きうる。短い方に合わせて60秒とする。
+ * 60秒は、以前のスポット到達判定（半径40m・徒歩の通過時間 約64秒）に合わせて決めた値。
+ * 現在スポットの到達はボタン操作で決めるため測位の中断の影響を受けないが、
+ * 値はそのまま据え置いている。
  */
 const MEASUREMENT_GAP_THRESHOLD_MS = 60000;
 
@@ -55,8 +57,20 @@ const reviewTargetPosition = ref(null);
  */
 const isExistingSpotSelected = ref(false);
 
+/** 選択中の口コミの場所のID。該当するピンを大きく前面に出す。未選択はnull */
+const selectedReviewSpotId = ref(null);
+
 /** 口コミ投稿フォームを表示するかどうか */
 const isReviewFormVisible = ref(false);
+
+/** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
+const bannerRef = ref(null);
+
+/** 口コミ投稿フォームの要素。可視範囲の下端を測るために参照する */
+const reviewFormRef = ref(null);
+
+/** 対象の場所を可視範囲の中央へ寄せるための、地図中央からの縦のずれ（ピクセル） */
+const focusOffsetY = ref(0);
 
 const {
   currentLocation,
@@ -141,9 +155,12 @@ const {
 } = useRouteProgress({
   spots,
   currentLocation,
-  accuracy,
   geometry
 });
+
+// 地図の現在地マーカーだけを経路へ吸着させる。
+// 距離の計算（useRouteProgress / useWalkRecord）には吸着前の currentLocation を渡す
+const { displayLocation } = useRouteSnapping({ currentLocation, geometry });
 
 // 距離の積算は公開する状態を持たず、現在地のwatchでwalkStoreへ直接書き込む
 useWalkRecord({ currentLocation, accuracy });
@@ -360,45 +377,127 @@ const toggleOtherReviews = () => {
 };
 
 /**
- * @description 指定座標を対象にして口コミ投稿フォームを開く。
- * 投稿済みの場所なら名前・ジャンルを固定して評価のみにするため、先に場所を解決する。
- * @param {{lng: number, lat: number}} position 対象の座標
- * @param {boolean} isExistingSpot 投稿済みのピンから開いたかどうか
+ * @description バナーとフォームに挟まれた可視範囲の中央に対象の場所が来るよう、
+ * 地図中央からの縦のずれ（ピクセル）を求める。
+ * 上端はバナーの下端、下端はフォームの高さで決まる。
+ * @returns {number} 地図中央からの縦のずれ（下方向が正）
+ */
+const measureVisibleCenterOffsetY = () => {
+  const bannerEl = bannerRef.value?.$el ?? null;
+  const formEl = reviewFormRef.value?.$el ?? null;
+
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
+  const topInsetPx = bannerEl ? bannerEl.getBoundingClientRect().bottom : 0;
+  const bottomInsetPx = formEl ? formEl.offsetHeight : 0;
+
+  return (topInsetPx - bottomInsetPx) / 2;
+};
+
+/**
+ * @description フォームの高さが変わったら、寄せ位置を測り直す。
+ * 可視範囲が変わるため、そのままだと対象の場所がフォームに隠れる。
  * @returns {Promise<void>}
  */
-const openReviewForm = async (position, isExistingSpot) => {
-  // 前の場所のメッセージ・解決結果を持ち越さない
-  hideMessage();
-  resetReview();
+const handleChangeReviewFormExpanded = async () => {
+  await nextTick();
+  focusOffsetY.value = measureVisibleCenterOffsetY();
+};
 
-  isExistingSpotSelected.value = isExistingSpot;
-  reviewTargetPosition.value = position;
+/**
+ * @description フォームを表示し、対象の場所を可視範囲の中央へ寄せる。
+ *
+ * フォームを先に描画してから高さを測り、寄せ位置を決めたうえで対象を渡す。
+ * 順序を入れ替えると、地図が古い高さを前提に寄ってしまう。
+ * @param {{lng: number, lat: number}} position 対象の座標
+ * @returns {Promise<void>}
+ */
+const showReviewFormAt = async (position) => {
   isReviewFormVisible.value = true;
 
-  const isResolved = await resolveReviewSpot(position);
+  // フォームが描画されてから高さを測る
+  await nextTick();
+  focusOffsetY.value = measureVisibleCenterOffsetY();
 
-  if (!isResolved) {
-    showMessage(reviewErrorMessage.value ?? '場所の確認に失敗しました');
-  }
+  reviewTargetPosition.value = position;
 };
 
 /**
  * @description 地図の長押しで、押した場所に赤いピンを立てて投稿フォームを開く。
  *
- * 地図は動かさない（押した位置にピンが残る）。解決の結果その場所が投稿済みだった場合は
- * 新規投稿ではないため、赤いピンは newSpotPin の判定で取り下げられる。
+ * 新規投稿の操作を待たせないため、解決を待たずに入力欄を出す。
+ * ピンは押した座標に描き、地図はその座標が可視範囲の中央へ来るよう寄せる。
+ * 押した位置が既存の場所（半径40m以内）だった場合は解決後に評価のみ／本人編集へ
+ * 切り替わり、赤いピンも newSpotPin の判定で取り下げられる。
  * @param {{lng: number, lat: number}} position 長押しされた座標
  * @returns {Promise<void>}
  */
-const handleLongPressMap = (position) => openReviewForm(position, false);
+const handleLongPressMap = async (position) => {
+  // 前の場所のメッセージ・解決結果を持ち越さない
+  hideMessage();
+  resetReview();
+
+  isExistingSpotSelected.value = false;
+  // 長押しの時点では投稿済みか分からないため、選択の強調はいったん外す
+  selectedReviewSpotId.value = null;
+
+  // 解決は裏で進め、入力欄は先に出す
+  const resolving = resolveReviewSpot(position);
+
+  await showReviewFormAt(position);
+
+  const isResolved = await resolving;
+
+  // 既存の場所だと本体の中身が変わって高さが動くため、寄せ位置を測り直す
+  await nextTick();
+  focusOffsetY.value = measureVisibleCenterOffsetY();
+
+  if (!isResolved) {
+    showMessage(reviewErrorMessage.value ?? '場所の確認に失敗しました');
+    return;
+  }
+
+  // 長押し位置が既存の場所だったら、そのピンも選択中として強調する
+  selectedReviewSpotId.value = existingSpot.value?.spotId ?? null;
+};
 
 /**
  * @description 投稿済みのピン（自分=オレンジ / 他の人=紫）をタップしたとき、
  * その場所の口コミを開く。赤いピンは立てない。
- * @param {{lng: number, lat: number}} position タップした場所の座標
+ *
+ * 投稿済みと分かっているため、描く前に解決を終わらせる。
+ * 先にフォームを出すと、解決までの間だけ新規投稿の入力欄が見えてしまう。
+ * @param {{spotId: string, position: {lng: number, lat: number}}} selected タップした場所
  * @returns {Promise<void>}
  */
-const handleSelectReviewSpot = (position) => openReviewForm(position, true);
+const handleSelectReviewSpot = async ({ spotId, position }) => {
+  hideMessage();
+
+  // 押した瞬間にピンを大きく前面へ出す（解決の応答を待たないフィードバック）
+  selectedReviewSpotId.value = spotId;
+
+  /*
+   * 解決してから描く。フォームを開いていない場合は、内容が揃ってから現れる。
+   *
+   * 既に別の場所のフォームを開いている場合は、閉じずに前の場所の内容を出したまま
+   * 解決を待ち、揃ってから中身を差し替える（resolve は前の結果を保持する）。
+   * 先に空にすると、切り替えの間だけ新規モードの空の入力欄が見えてしまう。
+   * 解決中は投稿ボタンを押せないため、前の場所へ誤って投稿されることはない。
+   */
+  const isResolved = await resolveReviewSpot(position);
+
+  // 取得できないまま開くと新規投稿の画面になってしまうため、開かずに知らせる。
+  // 選択の見た目は、既に開いている場所があればそれへ戻す（無ければ外す）
+  if (!isResolved) {
+    selectedReviewSpotId.value = existingSpot.value?.spotId ?? null;
+    showMessage(reviewErrorMessage.value ?? '口コミの取得に失敗しました');
+    return;
+  }
+
+  // 投稿済みと分かったので、赤いピンは立てない
+  isExistingSpotSelected.value = true;
+
+  await showReviewFormAt(position);
+};
 
 /**
  * @description 口コミ投稿フォームを閉じ、立てたピンを消す
@@ -408,6 +507,8 @@ const handleCloseReview = () => {
   isReviewFormVisible.value = false;
   reviewTargetPosition.value = null;
   isExistingSpotSelected.value = false;
+  selectedReviewSpotId.value = null;
+  focusOffsetY.value = 0;
   resetReview();
 };
 
@@ -476,6 +577,7 @@ const handleConfirmEnd = () => {
     />
 
     <RouteNextSpotBanner
+      ref="bannerRef"
       :spot-name="nextSpot?.name ?? null"
       :distance-to-next-m="distanceToNextM"
       :is-completed="isCompleted"
@@ -498,7 +600,7 @@ const handleConfirmEnd = () => {
     </RouteNextSpotBanner>
 
     <!--
-      GPSが届かない・到達半径の外で立ち寄った場合に、手動で次の目的地へ進めるボタン。
+      次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
       押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
     -->
     <button
@@ -513,17 +615,20 @@ const handleConfirmEnd = () => {
     <RouteNavigationMap
       :geometry="routeStore.currentRoute.geometry"
       :spots="spots"
-      :current-location="currentLocation"
+      :current-location="displayLocation"
       :current-accuracy="accuracy"
       :is-tracking="isTracking"
       :tracking-error="trackingError"
       :is-long-press-enabled="true"
       :pin-position="newSpotPin"
+      :focus-position="reviewTargetPosition"
+      :focus-offset-y="focusOffsetY"
       :my-review-spots="myReviews"
       :show-my-reviews="showMyReviews"
       :other-review-spots="otherReviewSpots"
       :show-other-reviews="showOtherReviews"
       :visited-spot-ids="visitedSpotIds"
+      :selected-review-spot-id="selectedReviewSpotId"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
     />
@@ -554,6 +659,7 @@ const handleConfirmEnd = () => {
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
+      ref="reviewFormRef"
       :genre-options="genreOptions"
       :pin-position="reviewTargetPosition"
       :existing-spot="existingSpot"
@@ -564,6 +670,7 @@ const handleConfirmEnd = () => {
       :is-posting="isPosting"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
+      @change-expanded="handleChangeReviewFormExpanded"
     />
 
     <template #footer>
@@ -611,8 +718,9 @@ const handleConfirmEnd = () => {
   font-weight: 600;
   color: var(--white);
   background: var(--primary-color);
-  border: none;
-  border-radius: 999px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }
@@ -643,10 +751,11 @@ const handleConfirmEnd = () => {
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-gray);
-  background: var(--white);
-  border: none;
-  border-radius: 999px;
+  color: var(--text-dark);
+  background: var(--surface);
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }

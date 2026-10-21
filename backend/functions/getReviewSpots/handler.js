@@ -30,6 +30,10 @@ export const handler = async (event) => {
   try {
     const result = await getReviewSpots();
 
+    // 0件とエラーを区別できるよう件数を残す。
+    // ピンが出ないとき、データが無いのか取得に失敗したのかをログだけで判別する
+    logInfo('口コミの場所の一覧を返します', { spotCount: result.spots.length });
+
     return buildSuccessResponse(result);
   } catch (error) {
     const { statusCode, code, message } = resolveErrorResponse(error);
