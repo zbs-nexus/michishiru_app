@@ -131,6 +131,7 @@ const distanceLabel = computed(() => {
  * 左にマスコット、右に文言を置き、案内役が話している帯として見せる。
  */
 .next-spot-banner {
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
   position: fixed;
   top: 12px;
   left: 50%;

@@ -71,6 +71,7 @@ const isError = computed(() => props.variant === 'error');
 <style scoped>
 /* 画面幅が広い場合もアプリの表示幅に合わせて中央へ寄せる */
 .toast {
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
   position: fixed;
   top: 16px;
   left: 50%;

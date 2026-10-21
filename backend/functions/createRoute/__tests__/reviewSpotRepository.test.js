@@ -83,10 +83,12 @@ describe('listReviewSpots', () => {
     // 作成者のIDなど、ルート作成に不要な値は持ち出さない
     assert.deepEqual(spots, [
       {
+        spotId: 'spot-1',
         name: '中央公園の東屋',
         genreId: 'nature',
         position: [139.70451, 35.68721],
-        ratingAverage: 4.5
+        ratingAverage: 4.5,
+        ratingCount: 2
       }
     ]);
   });
