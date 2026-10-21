@@ -150,25 +150,24 @@ const distanceScaleLabels = computed(() => [
 .random-icon-btn {
   width: calc(28px + var(--fit) * 4);
   height: calc(28px + var(--fit) * 4);
-  border: 2px solid var(--border-ink);
+  border: 2px solid var(--border-gold);
   border-radius: 50%;
   background-color: var(--surface);
-  color: var(--text-dark);
+  color: var(--text-gray);
   font-family: var(--font-display);
   font-size: 1.2rem;
   font-weight: bold;
-  box-shadow: var(--shadow);
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .random-icon-btn:hover {
-  border-color: var(--primary-light);
+  border-color: var(--accent-gold);
   background-color: var(--bg-deep);
 }
 
 .random-icon-btn.selected {
-  border-color: var(--border-ink);
+  border-color: var(--accent-gold);
   background-color: var(--primary-color);
   color: var(--white);
 }

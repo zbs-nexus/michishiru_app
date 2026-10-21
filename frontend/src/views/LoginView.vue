@@ -50,7 +50,7 @@ const handleLogin = async ({ username, password }) => {
 <template>
   <DefaultLayout>
     <template #background>
-      <div class="paper-map-bg" />
+      <div class="header-bg" />
     </template>
 
     <BaseToast
