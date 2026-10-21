@@ -68,8 +68,11 @@ const mascotLabel = computed(
 
 <style scoped>
 /*
- * 画像の幅はサイズごとに --mascot-width で切り替える。
- * 画像は縦長（5:6）なので高さは自動にして比率を保つ。
+ * 画像の高さはサイズごとに --mascot-height で切り替え、幅は自動にする。
+ * レベルごとの画像は縦横比がそれぞれ違う（224x300 〜 271x244）ため、
+ * 幅を固定すると姿によって背の高さが変わって並びが揺れる。
+ * 高さを揃えれば、どのレベルでも同じ大きさの案内役として見える。
+ * 幅と高さの両方を固定すると画像が潰れるので、必ず片方だけにする。
  */
 .mascot-avatar {
   position: relative;
@@ -81,21 +84,26 @@ const mascotLabel = computed(
 }
 
 .mascot-avatar.is-small {
-  --mascot-width: 44px;
+  --mascot-height: 52px;
 }
 
 .mascot-avatar.is-medium {
-  --mascot-width: 76px;
+  --mascot-height: 92px;
 }
 
 .mascot-avatar.is-large {
-  --mascot-width: 128px;
+  --mascot-height: 152px;
 }
 
 .mascot-image {
   display: block;
-  width: var(--mascot-width);
-  height: auto;
+  width: auto;
+  height: var(--mascot-height);
+  /*
+   * 画像はドット絵なので、拡大・縮小でぼかされると輪郭が濁る。
+   * 補間を切って、ドットの角をそのまま残す（アプリの書体がドットなのと揃える）。
+   */
+  image-rendering: pixelated;
   /* ふわりと浮いて見せる。地面の影は画像側に描いてある */
   animation: mascot-float 4.5s ease-in-out infinite;
 }
@@ -108,8 +116,8 @@ const mascotLabel = computed(
   position: absolute;
   top: 50%;
   left: 50%;
-  width: calc(var(--mascot-width) * 1.5);
-  height: calc(var(--mascot-width) * 1.5);
+  width: calc(var(--mascot-height) * 1.3);
+  height: calc(var(--mascot-height) * 1.3);
   transform: translate(-50%, -50%);
   border-radius: 50%;
   background: radial-gradient(

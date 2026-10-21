@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
+import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
@@ -16,6 +18,7 @@ import { useRouteStore } from '@/stores/routeStore';
  * 決定で案内へ進み、再作成で同じ条件のまま作り直す。
  */
 const router = useRouter();
+const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const {
   isCreating,
@@ -94,7 +97,22 @@ const handleRegenerate = async () => {
 </script>
 
 <template>
-  <RouteLoadingOverlay v-if="isCreating" />
+  <!-- 再作成中のロード画面。ホーム経由のときと同じ見え方にするため同じ値を渡す -->
+  <RouteLoadingOverlay
+    v-if="isCreating"
+    :mascot-level="mascotStore.mascotLevel"
+  >
+    <template
+      v-if="mascotStore.hasExperience"
+      #experience
+    >
+      <MascotExperienceBar
+        :level-progress="mascotStore.levelProgress"
+        :total-experience-points="mascotStore.totalExperiencePoints"
+        size="large"
+      />
+    </template>
+  </RouteLoadingOverlay>
 
   <DefaultLayout
     v-else-if="routeStore.currentRoute"

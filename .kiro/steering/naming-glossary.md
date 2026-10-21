@@ -201,8 +201,25 @@ inclusion: always
 | マスコットの表示サイズ | size | `small` / `medium` / `large` |
 | 装飾としての表示か | isDecorative | 真のとき代替テキストを空にし支援技術から隠す（読み上げの重複を防ぐ） |
 | レベル表示を出すか | hasLevelLabel | 真のとき `Lv.1 ミチのタマゴ` の表示を添える |
+| 経験値 | experiencePoints | 実績から求めるマスコットの成長の度合い |
+| 累計経験値 | totalExperiencePoints | 全実績から求めた経験値の合計 |
+| 次のレベルまでの必要経験値 | experienceToNextLevel | 現在のレベルから次へ上がるのに要する経験値。Lv.10 では持たない（`null`） |
+| 現在レベル内で獲得した経験値 | experienceInCurrentLevel | 累計経験値から現在レベルの到達しきい値を引いた値 |
+| レベル内進捗の割合 | levelProgressRatio | 0〜1。バーの塗りに使う |
+| レベルの進捗 | levelProgress | 現在レベル・レベル内の経験値・必要経験値・割合・上限かをまとめたもの |
+| レベル到達しきい値 | MASCOT_LEVEL_THRESHOLDS | 各レベルに到達する累計経験値。必要経験値の表から足し上げて導出する |
+| 各レベルの必要経験値 | MASCOT_LEVEL_REQUIREMENTS | Lv.1→2 から Lv.9→10 までの9段。経験値表の唯一の定義元 |
+| 投稿件数 | reviewCount | 利用者が投稿した口コミの件数（その場所に付いた件数の `ratingCount` とは別） |
+| 投稿1件あたりの経験値 | EXPERIENCE_PER_REVIEW | 100 |
+| 1kmあたりの経験値 | EXPERIENCE_PER_KM | 100 |
+| 1分あたりの経験値 | EXPERIENCE_PER_MINUTE | 10 |
+| 上限レベルかどうか | isMaxLevel | Lv.10 に達しているか |
+| 実績を取得できたかどうか | hasExperience | 取得に失敗した場合は false。バーを出さず Lv.1 で続ける |
+| 経験値バー | MascotExperienceBar | レベル内の進捗を示すバー（コンポーネント名） |
 
 `variant` は `BaseToast` でも同名で使っているが、値は別（トーストは `error` / `omakase`）。どちらもその部品の「見た目の種類」を指す語として使う。
+
+`reviewCount` は口コミ節の `ratingCount` と混ざりやすい。`reviewCount` は「その利用者が投稿した件数」、`ratingCount` は「その場所に付いた件数」で、数える対象が別。
 
 ### 地図
 
@@ -371,3 +388,4 @@ inclusion: always
 | 2026/10/07 | 退避した実績を持ち主ごとに送り直すようにしたことに伴い ownerUsername を追加 |
 | 2026/10/14 | 他の人の口コミの紫ピン表示に伴い「口コミ」へ reviewSpots / otherReviewSpots / showMyReviews / showOtherReviews / reviewTargetPosition / newSpotPin / isExistingSpotSelected を追加。ピンの色と意味の対応表（赤＝新規 / オレンジ＝自分 / 紫＝他の人）を明記 |
 | 2026/10/14 | 案内中に手動で次の目的地へ進めるボタンの追加に伴い「ルートとスポット」へ advanceToNextSpot / VISITED_STAMP_LABEL を追加 |
+| 2026/10/14 | マスコットの経験値レベルアップに伴い「マスコット」へ experiencePoints / totalExperiencePoints / experienceToNextLevel / experienceInCurrentLevel / levelProgressRatio / levelProgress / MASCOT_LEVEL_THRESHOLDS / MASCOT_LEVEL_REQUIREMENTS / reviewCount / EXPERIENCE_PER_REVIEW / EXPERIENCE_PER_KM / EXPERIENCE_PER_MINUTE / isMaxLevel / hasExperience / MascotExperienceBar を追加。`reviewCount` と `ratingCount` の違いを明記 |
