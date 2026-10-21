@@ -812,22 +812,23 @@ describe('createRoute（口コミの場所の境界ケース）', () => {
     );
   });
 
-  it('すべて口コミの場所のルートで距離を超えた場合は、距離を優先して最後尾を外す', async () => {
+  it('すべて口コミの場所のルートは、上限（2か所なら1か所）に収め、評価が同じなら後ろを外す', async () => {
     const reviewSpots = createReviewSpots(2);
     const { repositories, calls } = createRepositoryStub({
       reviewSpots,
       plannedSpotsSequence: [
         reviewSpots.map((spot) => ({ name: spot.name, position: spot.position }))
       ],
-      distancesM: [9000, 3000]
+      distancesM: [3000]
     });
 
     const result = await createRoute(conditions, repositories);
 
-    assert.deepEqual(calls.calculatedSpotNames[1], ['口コミ1']);
+    // 最初の経路計算の前に外している
+    assert.deepEqual(calls.calculatedSpotNames[0], ['口コミ1']);
     assert.equal(result.totalDistanceM, 3000);
     // 口コミの場所が既に含まれるため、差し込みは行わない
-    assert.equal(calls.calculateWalkingRoute.length, 2);
+    assert.equal(calls.calculateWalkingRoute.length, 1);
   });
 
   it('チェーン店しか無い場合も、チェーン店を候補から消さずにルートを作る', async () => {
@@ -1125,5 +1126,186 @@ describe('createRoute（口コミの場所の評価の優先と、地図で開�
         ['★5', true]
       ]
     );
+  });
+});
+
+describe('createRoute（口コミの場所の上限）', () => {
+  /**
+   * @description 現在地から少しずつ離れた口コミの場所を作る（すべて3km以内・ジャンルは nature）
+   * @param {string} name 名前
+   * @param {number} order 現在地から何番目に近いか（1始まり）
+   * @param {number} ratingAverage 平均評価
+   * @returns {object} 口コミの場所
+   */
+  const createRatedSpot = (name, order, ratingAverage) => ({
+    spotId: `review-${name}`,
+    name,
+    genreId: 'nature',
+    position: [139.7036 + order * 0.001, 35.6862],
+    ratingAverage,
+    ratingCount: 1
+  });
+
+  /** 評価の異なる口コミの場所（プロンプトの上限5件に収まる数） */
+  const reviewSpots = [
+    createRatedSpot('★2', 1, 2),
+    createRatedSpot('★5', 2, 5),
+    createRatedSpot('★3', 3, 3),
+    createRatedSpot('★4', 4, 4)
+  ];
+
+  /**
+   * @description Bedrockが選んだ形の口コミの場所を作る
+   * @param {string} name 口コミの場所の名前
+   * @returns {{name: string, position: number[]}} スポット
+   */
+  const plannedReviewSpot = (name) => ({
+    name,
+    position: reviewSpots.find((spot) => spot.name === name).position
+  });
+
+  /**
+   * @description 口コミでないスポットを指定の数だけ作る
+   * @param {number} count 数
+   * @returns {object[]} スポット
+   */
+  const createPlainSpots = (count) =>
+    Array.from({ length: count }, (_, index) => createSpot(`スポット${index + 1}`));
+
+  /**
+   * @description 結果から口コミの場所の名前を取り出す
+   * @param {object} result createRoute の結果
+   * @returns {string[]} 口コミの場所の名前
+   */
+  const reviewNamesOf = (result) =>
+    result.spots.filter((spot) => spot.isReviewSpot).map((spot) => spot.name);
+
+  it('Bedrockが上限を超えて選んだ場合は、評価の低い口コミの場所から外して経路を計算する', async () => {
+    // 5か所中3か所が口コミの場所。上限は 5×0.4=2 か所
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots,
+      plannedSpotsSequence: [
+        [
+          createSpot('スポット1'),
+          plannedReviewSpot('★2'),
+          createSpot('スポット2'),
+          plannedReviewSpot('★5'),
+          plannedReviewSpot('★3')
+        ]
+      ],
+      distancesM: [3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    // 最初の経路計算の時点で、最も評価の低い★2だけを外している（4か所中2か所・巡る順は保つ）
+    assert.deepEqual(calls.calculatedSpotNames[0], ['スポット1', 'スポット2', '★5', '★3']);
+    assert.deepEqual(reviewNamesOf(result), ['★5', '★3']);
+  });
+
+  it('4か所中3か所を選んだ場合は、減った数の上限に収まるまで外す', async () => {
+    // 4か所（上限2）→ ★2を外して3か所（上限1）→ ★3を外して2か所（上限1）
+    const { repositories } = createRepositoryStub({
+      reviewSpots,
+      plannedSpotsSequence: [
+        [
+          plannedReviewSpot('★3'),
+          createSpot('スポット1'),
+          plannedReviewSpot('★4'),
+          plannedReviewSpot('★2')
+        ]
+      ],
+      distancesM: [3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.deepEqual(reviewNamesOf(result), ['★4']);
+    assert.deepEqual(result.spots.map((spot) => spot.name), ['スポット1', '★4']);
+  });
+
+  it('上限に収まっていれば外さない（8か所中3か所）', async () => {
+    const plannedSpots = [
+      ...createPlainSpots(5),
+      plannedReviewSpot('★2'),
+      plannedReviewSpot('★5'),
+      plannedReviewSpot('★3')
+    ];
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots,
+      plannedSpotsSequence: [plannedSpots],
+      distancesM: [3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.equal(calls.calculatedSpotNames[0].length, 8);
+    assert.deepEqual(reviewNamesOf(result), ['★2', '★5', '★3']);
+  });
+
+  it('距離超過で削ると上限を超える場合は、評価の低い口コミの場所を外す', async () => {
+    // 4か所中2か所（上限2）。口コミでないスポットを外すと3か所（上限1）で超えてしまう
+    const plannedSpots = [
+      plannedReviewSpot('★2'),
+      ...createPlainSpots(2),
+      plannedReviewSpot('★5')
+    ];
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots,
+      plannedSpotsSequence: [plannedSpots],
+      distancesM: [9000, 3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.deepEqual(calls.calculatedSpotNames[1], ['スポット1', 'スポット2', '★5']);
+    assert.deepEqual(reviewNamesOf(result), ['★5']);
+  });
+
+  it('距離超過で削っても上限に収まる場合は、従来どおり口コミでないスポットを外す', async () => {
+    // 5か所中1か所。口コミでないスポットを外して4か所（上限2）になっても収まる
+    const plannedSpots = [...createPlainSpots(4), plannedReviewSpot('★2')];
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots,
+      plannedSpotsSequence: [plannedSpots],
+      distancesM: [9000, 3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.deepEqual(calls.calculatedSpotNames[1], ['スポット1', 'スポット2', 'スポット3', '★2']);
+    assert.deepEqual(reviewNamesOf(result), ['★2']);
+  });
+
+  it('経路から外れたスポットを除いて上限を超えた場合も、評価の低い口コミの場所を外す', async () => {
+    // 4か所中2か所（上限2）。到達できない1か所を除くと3か所（上限1）になる
+    const plannedSpots = [
+      ...createPlainSpots(2),
+      plannedReviewSpot('★2'),
+      plannedReviewSpot('★5')
+    ];
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots,
+      plannedSpotsSequence: [plannedSpots],
+      strandedSpotNames: ['スポット1'],
+      distancesM: [3000, 3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.deepEqual(calls.calculatedSpotNames[1], ['スポット2', '★5']);
+    assert.deepEqual(reviewNamesOf(result), ['★5']);
+  });
+
+  it('上限の判定に使う平均評価は、応答のスポットに載せない', async () => {
+    const { repositories } = createRepositoryStub({
+      reviewSpots,
+      plannedSpotsSequence: [[plannedReviewSpot('★5'), createSpot('スポット1')]],
+      distancesM: [3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    assert.ok(result.spots.every((spot) => !('ratingAverage' in spot)));
   });
 });
