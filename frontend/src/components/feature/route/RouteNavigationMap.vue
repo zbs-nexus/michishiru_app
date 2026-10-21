@@ -92,6 +92,14 @@ defineProps({
   legSections: {
     type: Object,
     default: null
+  },
+  /**
+   * ズームボタンを置く上端（ピクセル）。画面上部のバナーと前後のボタンの下へ逃がす。
+   * バナーは目的地の名前の長さで伸びるため、親が測って渡す
+   */
+  controlsTopPx: {
+    type: Number,
+    default: 124
   }
 });
 
@@ -99,7 +107,10 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
 </script>
 
 <template>
-  <div class="navigation-map">
+  <div
+    class="navigation-map"
+    :style="{ '--map-controls-top': `${controlsTopPx}px` }"
+  >
     <div class="map-full">
       <RouteMap
         :geometry="geometry"
@@ -145,12 +156,12 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
 }
 
 /*
- * ズームボタンが次の目的地バナー（top: 12px、高さ約60px）と、
- * その右下の「次の目的地へ」ボタン（top: 84px、高さ約30px）に隠れて
+ * ズームボタンが次の目的地バナーと、その右下の「次の目的地へ」ボタンに隠れて
  * 押せなくなるため、この画面だけコントロールを下へ寄せる。
+ * バナーは目的地の名前の長さで伸びるため、位置は親が測った値（controlsTopPx）に従う。
  */
 .navigation-map :deep(.maplibregl-ctrl-top-right) {
-  margin-top: 124px;
+  margin-top: var(--map-controls-top);
 }
 
 /*
