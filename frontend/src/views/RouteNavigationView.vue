@@ -17,6 +17,7 @@ import { useReviewPosting } from '@/composables/useReviewPosting';
 import { useMyReviews } from '@/composables/useMyReviews';
 import { useReviewSpots } from '@/composables/useReviewSpots';
 import { useToastMessage } from '@/composables/useToastMessage';
+import { useWalkResultSave } from '@/composables/useWalkResultSave';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
 import { useMascotStore } from '@/stores/mascotStore';
@@ -140,6 +141,19 @@ const {
   showMessage,
   hideMessage
 } = useToastMessage();
+
+// 実績の保存はこの画面で起こし、保存・取り直し・レベルアップ判定が
+// すべて終わってから結果画面へ進む。結果画面で起こすと遷移直後に
+// 結果が一瞬見えてからお祝い演出が重なり、ちらついて見えるため。
+// 保存に失敗したときの文言はトーストで知らせるため saveErrorMessage も受け取る
+const { saveCurrentWalkResult, saveErrorMessage } = useWalkResultSave();
+
+/**
+ * 終了ボタンを押してから結果画面へ進むまでの「記録中」の状態。
+ * 保存・取り直し・判定の通信を待つ間だけ真にし、その間は画面に「記録中…」を出して
+ * 終了の二度押しを防ぐ。
+ */
+const isFinishing = ref(false);
 
 /** 案内対象のスポット。巡る順に並んでいる */
 const spots = computed(() => routeStore.currentRoute?.spots ?? []);
@@ -573,10 +587,31 @@ const handleCancelEnd = () => {
  * @description 案内を終了して結果画面へ進む
  * @returns {void}
  */
-const handleConfirmEnd = () => {
+const handleConfirmEnd = async () => {
+  if (isFinishing.value) {
+    return;
+  }
+
   isEndConfirmVisible.value = false;
-  // 結果画面が所要時間を読むため、遷移前に終了時刻を確定させる
+  isFinishing.value = true;
+
+  // 結果画面が所要時間を読むため、保存の前に終了時刻を確定させる
   walkStore.endWalk();
+
+  try {
+    const isSucceeded = await saveCurrentWalkResult();
+
+    if (!isSucceeded) {
+      showMessage(saveErrorMessage.value ?? '実績を保存できませんでした');
+    }
+
+    // 保存の後に取り直すことで、今終えた散歩の分を含む累計でレベルアップを判定する。
+    // 判定結果（経由レベルを含む一覧）はストアに積まれ、結果画面がそれを読む
+    await mascotStore.refreshAndDetectLevelUp();
+  } finally {
+    isFinishing.value = false;
+  }
+
   router.push({ name: 'walk-result' });
 };
 </script>
@@ -734,6 +769,21 @@ const handleConfirmEnd = () => {
         @cancel="handleCancelEnd"
       />
     </template>
+
+    <!--
+      終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。
+      ロード画面（RouteLoadingOverlay）は流用せず、文字だけにする。
+      role="status" で処理中であることを読み上げさせ、終了の二度押しを塞ぐ。
+    -->
+    <div
+      v-if="isFinishing"
+      class="finishing-overlay"
+      role="status"
+    >
+      <p class="finishing-text">
+        記録中…
+      </p>
+    </div>
   </DefaultLayout>
 </template>
 
@@ -745,6 +795,32 @@ const handleConfirmEnd = () => {
  */
 .primary-btn.full-width {
   bottom: 44px;
+}
+
+/*
+ * 終了後の保存・取り直し・判定を待つ間の「記録中…」の全画面表示。
+ * 羊皮紙色の膜で地図と操作部をすべて覆い、待っている間の操作（終了の二度押しや
+ * 地図の長押しなど）を物理的に塞ぐ。文字だけで、ロード画面の演出は流用しない。
+ * 口コミトグル（z-index 45）や次の目的地ボタンより手前に出すため、それらより高くする。
+ */
+.finishing-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 羊皮紙色の半透明の膜。下の地図をうっすら残しつつ操作は受け付けない */
+  background: rgba(241, 227, 200, 0.85);
+}
+
+.finishing-text {
+  font-family: var(--font-display);
+  font-size: calc(18px + var(--fit) * 4);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--primary-color);
+  text-shadow: var(--text-halo);
 }
 
 /*
