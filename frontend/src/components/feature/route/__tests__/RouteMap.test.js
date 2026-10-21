@@ -6,7 +6,7 @@ import { nextTick } from 'vue';
 
 /**
  * @description 地図のスポットマーカーのテスト。
- * 口コミの場所だけが星の目印（is-review）を持ち、番号・到達済みの表示・読み上げは
+ * 口コミの場所だけが紫の目印（is-review）を持ち、番号・到達済みの表示・読み上げは
  * 他のスポットと同じ仕組みで動くことを確かめる。
  *
  * jsdom では地図を描けないため、MapLibre を差し替え、作られたマーカーの要素を記録する。
@@ -171,7 +171,7 @@ describe('RouteMap（口コミの場所のスポットマーカー）', () => {
     vi.clearAllMocks();
   });
 
-  test('口コミの場所だけに星の目印を付け、番号は他のスポットと同じに出す', () => {
+  test('口コミの場所だけに紫の目印を付け、番号は他のスポットと同じに出す', () => {
     mountAndLoad();
 
     const [reviewMarker, normalMarker] = spotMarkerElements();
@@ -182,7 +182,7 @@ describe('RouteMap（口コミの場所のスポットマーカー）', () => {
     expect(normalMarker.textContent).toBe('2');
   });
 
-  test('星の形だけでは意味が伝わらないため、読み上げで口コミの場所だと補う', () => {
+  test('紫の色だけでは意味が伝わらないため、読み上げで口コミの場所だと補う', () => {
     mountAndLoad();
 
     const [reviewMarker, normalMarker] = spotMarkerElements();
@@ -209,7 +209,7 @@ describe('RouteMap（口コミの場所のスポットマーカー）', () => {
     expect(normalMarker.classList.contains('is-visited')).toBe(false);
   });
 
-  test('isReviewSpot を持たないスポット（古い応答）は星にしない', () => {
+  test('isReviewSpot を持たないスポット（古い応答）は紫にしない', () => {
     mountAndLoad({
       spots: [{ spotId: 'spot-1', name: '公園', lng: 139.703, lat: 35.686 }]
     });
@@ -219,7 +219,7 @@ describe('RouteMap（口コミの場所のスポットマーカー）', () => {
     expect(marker.classList.contains('is-review')).toBe(false);
   });
 
-  test('口コミのピン（オレンジ・紫）は星の目印を持たず、従来の見た目のまま', () => {
+  test('口コミのピン（オレンジ・紫）はスポットの目印を持たず、従来の見た目のまま', () => {
     mountAndLoad({
       myReviewSpots: [{ spotId: 'r-1', spotName: '自分の口コミ', position: { lng: 139.7, lat: 35.68 } }],
       showMyReviews: true,
@@ -391,9 +391,9 @@ describe('global.css（区間の色）', () => {
   });
 });
 
-describe('global.css（口コミの場所の星）', () => {
+describe('global.css（口コミの場所のスポットの色）', () => {
   /**
-   * 全画面共通のスタイル。星は擬似要素と mask で描くため、jsdom では見た目を確かめられない。
+   * 全画面共通のスタイル。jsdom では描画した色を確かめられないため、宣言を読んで確かめる。
    * jsdom 環境では import.meta.url が file: にならないため、実行ディレクトリ（frontend）から引く
    */
   const css = readFileSync(resolve(process.cwd(), 'src/assets/styles/global.css'), 'utf8');
@@ -420,26 +420,33 @@ describe('global.css（口コミの場所の星）', () => {
     return '';
   };
 
-  test('星の目印は文字・色・大きさを変えない（形だけを変える）', () => {
+  test('口コミの場所のスポットは色だけを紫にし、形・文字・大きさは通常のスポットのまま', () => {
     const block = blockOf('.spot-marker.is-review');
 
-    expect(block).not.toBe('');
-    // 大きさ・文字・文字色は .spot-marker のまま
-    expect(block).not.toMatch(/(^|[\s;])(width|height|font-size|font-weight|color)\s*:/);
+    expect(block).toMatch(/background:\s*var\(--review-purple\)/);
+    // 丸の形・大きさ・番号の文字は .spot-marker のまま変えない
+    expect(block).not.toMatch(
+      /(^|[\s;])(width|height|border|border-radius|font-size|font-weight|color)\s*:/
+    );
+    expect(blockOf('.spot-marker')).toMatch(/border-radius:\s*50%/);
   });
 
-  test('星の本体の色は通常のスポットと同じ青、縁は同じ白を使う', () => {
-    expect(blockOf('.spot-marker.is-review::after')).toMatch(/background:\s*var\(--route-blue\)/);
-    expect(blockOf('.spot-marker.is-review::before')).toMatch(/background:\s*var\(--white\)/);
+  test('紫は口コミのピン（他の人の口コミ）と同じ変数を使い、通常のスポットは青のまま', () => {
+    expect(css).toMatch(/--review-purple:\s*#8E44AD;/);
+    expect(blockOf('.review-pin-other .review-pin-head')).toMatch(
+      /background:\s*var\(--review-purple\)/
+    );
     expect(blockOf('.spot-marker')).toMatch(/background:\s*var\(--route-blue\)/);
   });
 
-  test('星は mask で切り抜く（色をSVGに持たせず、CSS変数のまま使う）', () => {
-    const shared = css.match(
-      /\.spot-marker\.is-review::before,\s*\n\.spot-marker\.is-review::after\s*\{([^}]*)\}/
-    )?.[1];
+  test('星の形の指定（擬似要素・mask）は残っていない', () => {
+    expect(css).not.toMatch(/\.spot-marker\.is-review::(before|after)/);
+    expect(css).not.toMatch(/(^|[\s;])mask:\s*url\(/);
+  });
 
-    expect(shared).toMatch(/(^|[\s;])mask:\s*url\(/);
-    expect(shared).toMatch(/-webkit-mask:\s*url\(/);
+  test('到達済みは口コミの場所も足跡のスタンプになり、紫を残さない', () => {
+    expect(blockOf('.spot-marker.is-review.is-visited')).toMatch(
+      /background:\s*url\('\.\.\/images\/spot-visited-stamp\.png'\)/
+    );
   });
 });

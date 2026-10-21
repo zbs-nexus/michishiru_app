@@ -41,6 +41,8 @@
   --route-walked-leg: #9AA0A6;
   /* 今の区間。トースト（次の目的地のバナー）の左枠と同じ緑。ROUTE_CURRENT_LEG_COLOR と同値にする */
   --route-current-leg: var(--accent-green);
+  /* 口コミの場所を示す紫。口コミのピン（紫）とルートの口コミのスポットで同じ値を使う */
+  --review-purple: #8E44AD;
   /* 羊皮紙。画面の地の色 */
   --bg-light: #FBF4E4;
   --bg-deep: #F1E3C8;
@@ -880,55 +882,18 @@ textarea {
 }
 
 /*
- * 口コミが付いた場所のスポットマーカー。形だけを星にし、
- * 番号の文字・色（--route-blue / 白）・大きさ（26px）は通常のスポットと同じにする。
- *
- * 丸の背景・縁・影は外し、星を2枚の擬似要素で描く。
- *   ::before 白い星（縁の代わり）  ::after 青い星（本体。縁の分だけ内側）
- * 色を CSS 変数のまま使えるよう、星の形は背景ではなく mask で切り抜く
- * （mask は形の透明度だけを使うため、SVG 側に色を持たない）。
- * 擬似要素は z-index: -1 で番号の文字の下に敷く。マーカーには MapLibre の
- * will-change: transform と filter が付き重ね合わせの文脈になるため、地図の下には潜らない。
- * 影は box-shadow だと星の形にならないため、filter の drop-shadow で付ける。
+ * 口コミが付いた場所のスポットマーカー。
+ * 形・番号の文字・大きさ（26px）は通常のスポットと同じ丸のままにし、色だけを紫にする。
+ * 紫は口コミのピン（他の人の口コミ）と同じ --review-purple で、「口コミの場所」を色で示す。
+ * 到達済み（is-visited）は背景をスタンプ画像に差し替えるため、こちらの色より後で上書きされる。
  */
 .spot-marker.is-review {
-  border: none;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  background: var(--review-purple);
 }
 
-.spot-marker.is-review::before,
-.spot-marker.is-review::after {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,3 61.8,37.5 98,37.5 68.6,59.2 79.4,95 50,73.4 20.6,95 31.4,59.2 2,37.5 38.2,37.5'/%3E%3C/svg%3E") center / contain no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpolygon points='50,3 61.8,37.5 98,37.5 68.6,59.2 79.4,95 50,73.4 20.6,95 31.4,59.2 2,37.5 38.2,37.5'/%3E%3C/svg%3E") center / contain no-repeat;
-}
-
-/* 白い星。通常のスポットの白い縁にあたる */
-.spot-marker.is-review::before {
-  inset: 0;
-  background: var(--white);
-}
-
-/* 青い星。白い星の内側に重ね、縁が見えるようにする */
-.spot-marker.is-review::after {
-  inset: 3px;
-  background: var(--route-blue);
-}
-
-/* 到達済みは口コミの場所も通常と同じ足跡のスタンプにする（星は消す） */
+/* 到達済みは口コミの場所も通常と同じ足跡のスタンプにする（紫を残さない） */
 .spot-marker.is-review.is-visited {
-  filter: none;
   background: url('../images/spot-visited-stamp.png') center / cover no-repeat;
-}
-
-.spot-marker.is-review.is-visited::before,
-.spot-marker.is-review.is-visited::after {
-  display: none;
 }
 
 /*
@@ -1143,7 +1108,7 @@ textarea {
 
 /* 他の人の口コミ投稿の場所は紫 */
 .review-pin-other .review-pin-head {
-  background: #8E44AD;
+  background: var(--review-purple);
 }
 
 /*

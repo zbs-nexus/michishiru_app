@@ -96,7 +96,7 @@ const sendWithRetry = async (command) => {
  * 場所メタ行は `sk = 'SPOT'` で揃っているため、GSI-SpotList（PK=sk）を使うと
  * Scan を使わずに Query 1回で引ける。現在地からの距離による絞り込みはService層が行う。
  * GSI-GeoCell（40m四方のセル）で数kmの範囲を引くと数千回の Query が必要になるため使わない。
- * @returns {Promise<Array<{name: string, position: number[], ratingAverage: number}>>} 口コミの場所の一覧
+ * @returns {Promise<Array<{name: string, genreId: string|null, position: number[], ratingAverage: number}>>} 口コミの場所の一覧
  * @throws {ApplicationError} データストアへのアクセスに失敗した場合
  */
 export const listReviewSpots = async () => {
@@ -119,6 +119,8 @@ export const listReviewSpots = async () => {
 
     return {
       name: item.spotName,
+      // 投稿時に選んだジャンル（検索条件マスタの genreId）。検索条件との突き合わせに使う
+      genreId: typeof item.genreId === 'string' ? item.genreId : null,
       // Places の候補と同じ [経度, 緯度] の形に揃える
       position: [Number(item.position?.lng), Number(item.position?.lat)],
       // 平均評価は保存せず、合計と件数から都度算出する（getSpot と同じ扱い）
