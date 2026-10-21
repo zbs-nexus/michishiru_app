@@ -7,7 +7,6 @@ import { handler as getConditionsHandler } from '../backend/functions/getConditi
 import { handler as getReviewSpotsHandler } from '../backend/functions/getReviewSpots/handler.js';
 import { handler as getRouteHandler } from '../backend/functions/getRoute/handler.js';
 import { handler as getSpotHandler } from '../backend/functions/getSpot/handler.js';
-import { handler as getUserExperienceHandler } from '../backend/functions/getUserExperience/handler.js';
 import { handler as getUserReviewsHandler } from '../backend/functions/getUserReviews/handler.js';
 import { handler as verifyPasswordResetTargetHandler } from '../backend/functions/verifyPasswordResetTarget/handler.js';
 
@@ -41,9 +40,6 @@ const LOCAL_DEV_USERNAME = 'local-dev';
  * createWalkResult は DynamoDB へ書き込むため、ローカルで実際に保存するには
  * 認証情報と環境変数 `WALK_RESULT_TABLE_NAME`（例: `WalkResult-dev`）が必要になる。
  * 未設定の場合は 503（DATA_SOURCE_ERROR）を返し、フロントは退避キューへ積む。
- * getUserExperience は DynamoDB を読むため、認証情報と環境変数
- * `WALK_RESULT_TABLE_NAME` / `REVIEW_TABLE_NAME` の両方が必要になる。
- * 未設定の場合は 503 を返し、フロントは経験値バーを出さずに続行する。
  */
 const ROUTE_HANDLERS = [
   { method: 'GET', path: '/api/v1/routes', invoke: getRouteHandler },
@@ -66,7 +62,6 @@ const ROUTE_HANDLERS = [
     path: '/api/v1/walk-results',
     invoke: createWalkResultHandler
   },
-  { method: 'GET', path: '/api/v1/experience', invoke: getUserExperienceHandler },
   {
     method: 'POST',
     path: '/api/v1/password-reset-verifications',

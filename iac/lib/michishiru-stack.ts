@@ -468,31 +468,6 @@ export class MichishiruStack extends cdk.Stack {
         'dynamodb:UpdateItem'
       );
 
-      // Lambda: getUserExperience ハンドラ
-      // （マスコットの経験値のもとになる実績を返す。累計の実績と口コミ件数を読む）
-      // DynamoDB のクライアントはランタイム同梱のため、バンドルせず backendCode を使う。
-      const getUserExperienceFn = new lambda.Function(
-        this,
-        'GetUserExperienceFunction',
-        {
-          runtime: lambda.Runtime.NODEJS_LATEST,
-          handler: 'functions/getUserExperience/handler.handler',
-          code: backendCode,
-          memorySize: 256,
-          timeout: cdk.Duration.seconds(10),
-          environment: {
-            WALK_RESULT_TABLE_NAME: walkResultTable.tableName,
-            REVIEW_TABLE_NAME: reviewTable.tableName
-          }
-        }
-      );
-
-      // この関数は累計アイテムの1件取得と、口コミ件数の Query しか行わない。
-      // grantReadData では Scan まで付くため、実際に使う操作だけを明示して与える。
-      // grant は索引の ARN も含むため、GSI-UserReview を引ける。
-      walkResultTable.grant(getUserExperienceFn, 'dynamodb:GetItem');
-      reviewTable.grant(getUserExperienceFn, 'dynamodb:Query');
-
       // Lambda: verifyPasswordResetTarget ハンドラ
       // （パスワード再設定の前に、ユーザー名とメールアドレスの組み合わせを照合する）
       // ブラウザからはユーザーの登録情報を参照できないため、サーバー側で確かめる。
@@ -543,12 +518,7 @@ export class MichishiruStack extends cdk.Stack {
       //   GET  /api/v1/my-reviews                  自分の口コミ一覧（要認証）
       //   GET  /api/v1/review-spots                口コミが付いた場所の一覧（要認証）
       //   POST /api/v1/walk-results                散歩の実績を保存（要認証）
-      //   GET  /api/v1/experience                  マスコットの経験値のもとになる実績の取得（要認証）
       //   POST /api/v1/password-reset-verifications ユーザー名とメールアドレスの照合
-      //
-      // experience だけパスが単数なのは、経験値が不可算で `experiences` だと
-      // 「体験」に読めてしまうため。合意済みの契約どおり単数にしている
-      // （規約「パスは複数形」に対する意図的な例外）。
       const api = new apigateway.RestApi(this, 'MichishiruApi', {
         restApiName: `michishiru-api-${stage}`,
         description: 'ミチシル ルート取得 API',
@@ -576,7 +546,7 @@ export class MichishiruStack extends cdk.Stack {
         }
       );
 
-      // 保護するメソッドへ渡す設定。authorizationType は省略すると
+      // 保護する3メソッドへ渡す設定。authorizationType は省略すると
       // 既定値に引きずられるため、COGNITO を明示する。
       const cognitoAuthorized: apigateway.MethodOptions = {
         authorizer: apiAuthorizer,
@@ -659,17 +629,6 @@ export class MichishiruStack extends cdk.Stack {
       walkResultsResource.addMethod(
         'POST',
         new apigateway.LambdaIntegration(createWalkResultFn),
-        cognitoAuthorized
-      );
-
-      // GET /api/v1/experience
-      // マスコットの経験値のもとになる実績の取得。ログイン後の画面からしか呼ばないため
-      // 認可を必須にする。Lambda は claims.sub で利用者を識別し、
-      // リクエストから userId を読まない（他人の実績を引けないようにする）。
-      const experienceResource = v1Resource.addResource('experience');
-      experienceResource.addMethod(
-        'GET',
-        new apigateway.LambdaIntegration(getUserExperienceFn),
         cognitoAuthorized
       );
 

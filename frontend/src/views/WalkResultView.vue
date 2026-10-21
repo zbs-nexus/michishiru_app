@@ -4,12 +4,10 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
-import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import WalkResultStats from '@/components/feature/walk/WalkResultStats.vue';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkResultSave } from '@/composables/useWalkResultSave';
-import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
 
@@ -25,7 +23,6 @@ import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
  * 案内画面側は `endWalk()` → `push` だけなので、保存を一切待たない。
  */
 const router = useRouter();
-const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
 const {
@@ -63,10 +60,6 @@ onMounted(async () => {
   if (!isSucceeded) {
     showMessage(saveErrorMessage.value ?? '実績を保存できませんでした');
   }
-
-  // 保存の後に取り直すことで、今終えた散歩の分を含めたレベルと経験値が見える。
-  // 保存に失敗した場合でも呼ぶ（値は前のままだが、取り直しても害はない）
-  await mascotStore.loadExperience();
 });
 
 /**
@@ -108,78 +101,51 @@ const handleReturnHome = () => {
         aria-hidden="true"
       />
 
-      <div class="result-body">
-        <MascotSpeechBubble
-          class="result-mascot"
-          :level="mascotStore.mascotLevel"
-          placement="stacked"
-          size="large"
-          has-level-label
-        >
-          <h2 class="result-title">
-            お疲れさまでした
-          </h2>
-          <p class="result-note">
-            {{ mascotSubMessage }}
-          </p>
-
-          <!-- 今終えた散歩の分を含めた経験値を出す（保存の直後に取り直している） -->
-          <template
-            v-if="mascotStore.hasExperience"
-            #experience
-          >
-            <MascotExperienceBar
-              :level-progress="mascotStore.levelProgress"
-              :total-experience-points="mascotStore.totalExperiencePoints"
-              size="large"
-            />
-          </template>
-        </MascotSpeechBubble>
-
-        <WalkResultStats
-          :distance-km="walkStore.totalDistanceKm"
-          :spot-count="walkStore.spotCount"
-          :duration-minutes="walkStore.elapsedMinutes"
-        />
-
-        <p
-          v-if="measurementNote"
-          class="hint"
-          role="status"
-        >
-          {{ measurementNote }}
+      <MascotSpeechBubble
+        class="result-mascot"
+        placement="stacked"
+        size="large"
+        has-level-label
+      >
+        <h2 class="result-title">
+          お疲れさまでした
+        </h2>
+        <p class="result-note">
+          {{ mascotSubMessage }}
         </p>
-      </div>
+      </MascotSpeechBubble>
+
+      <WalkResultStats
+        :distance-km="walkStore.totalDistanceKm"
+        :spot-count="walkStore.spotCount"
+        :duration-minutes="walkStore.elapsedMinutes"
+      />
+
+      <p
+        v-if="measurementNote"
+        class="hint"
+        role="status"
+      >
+        {{ measurementNote }}
+      </p>
     </div>
 
-    <!--
-      ボタンは画面に固定せず、本文の下に置く。
-      固定すると本文がボタンの裏へ回り込むため、その分の余白を本文に足す必要があり、
-      低い端末では余白のせいで画面がスクロールしていた。
-    -->
     <template #footer>
-      <div class="result-footer">
-        <BaseButton @click="handleReturnHome">
-          ホームに戻る
-        </BaseButton>
-      </div>
+      <BaseButton
+        is-full-width
+        @click="handleReturnHome"
+      >
+        ホームに戻る
+      </BaseButton>
     </template>
   </DefaultLayout>
 </template>
 
 <style scoped>
-/*
- * 上下の余りを均等に分けて、本文を画面の中央へ寄せる。
- * 収まりきらない場合は余りが0になり、上端から並ぶ（中央寄せで上端が切れるのを防ぐ）。
- */
-.result-body {
-  margin: auto 0;
-}
-
-/* 実績の一覧との間を空ける */
+/* 実績の一覧との間を空ける。下部の固定ボタンとも重ならないようにする */
 .result-mascot {
   position: relative;
-  margin-bottom: calc(10px + var(--fit) * 22);
+  margin-bottom: 32px;
 }
 
 /*
@@ -188,11 +154,11 @@ const handleReturnHome = () => {
  */
 .result-title {
   font-family: var(--font-display);
-  font-size: calc(18px + var(--fit) * 3);
+  font-size: 21px;
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--primary-color);
-  margin-bottom: calc(2px + var(--fit) * 4);
+  margin-bottom: 6px;
 }
 
 .result-note {
@@ -202,9 +168,8 @@ const handleReturnHome = () => {
   color: var(--text-gray);
 }
 
-/* 紙吹雪（.confetti）より手前に出すため、位置指定を持たせる */
-.result-footer {
-  position: relative;
-  padding: calc(4px + var(--fit) * 8) 20px calc(14px + var(--fit) * 14);
+/* 固定ボタンに最後の行が隠れないように空ける */
+.result-content {
+  padding-bottom: 110px;
 }
 </style>

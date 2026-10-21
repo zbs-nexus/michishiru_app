@@ -102,6 +102,6 @@ const handleLogin = async ({ username, password }) => {
 <style scoped>
 /* 2行並ぶため、2行目の余白を詰める */
 .auth-switch + .auth-switch {
-  margin-top: calc(4px + var(--fit) * 4);
+  margin-top: 8px;
 }
 </style>

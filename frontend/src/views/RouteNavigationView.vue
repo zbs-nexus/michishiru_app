@@ -5,7 +5,6 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
-import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
@@ -19,7 +18,6 @@ import { useReviewSpots } from '@/composables/useReviewSpots';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
-import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
 
@@ -30,8 +28,6 @@ import { useWalkStore } from '@/stores/walkStore';
  * 終了時は確認モーダルを挟んでから結果画面へ進む。
  */
 const router = useRouter();
-// 案内中もマスコットのレベルを出すため読むだけ。実績の取り直しはホームと結果画面で行う
-const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
 
@@ -151,9 +147,7 @@ const {
   distanceToNextM,
   visitedSpotIds,
   isCompleted,
-  canReturnToPreviousSpot,
-  advanceToNextSpot,
-  returnToPreviousSpot
+  advanceToNextSpot
 } = useRouteProgress({
   spots,
   currentLocation,
@@ -583,37 +577,7 @@ const handleConfirmEnd = () => {
       :spot-name="nextSpot?.name ?? null"
       :distance-to-next-m="distanceToNextM"
       :is-completed="isCompleted"
-      :mascot-level="mascotStore.mascotLevel"
-    >
-      <!--
-        バナーは role="status" の読み上げ範囲のため、バーは装飾として渡す。
-        距離が変わるたびに経験値まで読み直されるのを防ぐ。
-      -->
-      <template
-        v-if="mascotStore.hasExperience"
-        #experience
-      >
-        <MascotExperienceBar
-          :level-progress="mascotStore.levelProgress"
-          size="small"
-          is-decorative
-        />
-      </template>
-    </RouteNextSpotBanner>
-
-    <!--
-      誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
-      到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
-    -->
-    <button
-      v-if="canReturnToPreviousSpot"
-      class="previous-spot-btn"
-      type="button"
-      aria-label="前の目的地に戻る"
-      @click="returnToPreviousSpot"
-    >
-      ← 前の目的地
-    </button>
+    />
 
     <!--
       次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
@@ -649,28 +613,16 @@ const handleConfirmEnd = () => {
       @select-review-spot="handleSelectReviewSpot"
     />
 
-    <div
-      class="review-toggles"
-      role="group"
-      aria-label="口コミのピンの表示"
-    >
-      <span
-        class="review-toggles-label"
-        aria-hidden="true"
-      >
-        口コミ
-      </span>
-
+    <div class="review-toggles">
       <button
         class="review-toggle review-toggle-mine"
         :class="{ 'is-on': showMyReviews }"
         type="button"
         :aria-pressed="showMyReviews"
-        aria-label="自分の口コミ"
         @click="toggleMyReviews"
       >
         <span class="review-toggle-dot" />
-        自分
+        自分の口コミ
       </button>
 
       <button
@@ -678,11 +630,10 @@ const handleConfirmEnd = () => {
         :class="{ 'is-on': showOtherReviews }"
         type="button"
         :aria-pressed="showOtherReviews"
-        aria-label="みんなの口コミ"
         @click="toggleOtherReviews"
       >
         <span class="review-toggle-dot" />
-        みんな
+        みんなの口コミ
       </button>
     </div>
 
@@ -735,18 +686,13 @@ const handleConfirmEnd = () => {
  * 「次の目的地へ」ボタン。次の目的地バナーの右下に置く。
  * バナーは幅 calc(100% - 24px)・最大406pxで中央寄せのため、
  * 右端をバナーの右端（狭い画面では12px、広い画面では中央から203px）に揃える。
- * 大きさは前の目的地に戻るボタンと揃える。
- * 高さを固定して1段目の高さを確定させ、2段目の口コミのピルの位置を決められるようにする。
+ * 大きさは口コミの表示切り替えボタンと揃える。
  */
 .next-spot-btn {
   position: fixed;
   top: 84px;
   right: max(12px, calc(50% - 203px));
   z-index: 45;
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  box-sizing: border-box;
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
@@ -763,82 +709,37 @@ const handleConfirmEnd = () => {
 }
 
 /*
- * 「前の目的地」ボタン。次の目的地バナーの左下に置き、左端をバナーの左端に揃える。
- * 主操作の「次の目的地へ」と区別するため、白地に紫の文字・枠線にする。
- */
-.previous-spot-btn {
-  position: fixed;
-  top: 84px;
-  left: max(12px, calc(50% - 203px));
-  z-index: 45;
-  display: inline-flex;
-  align-items: center;
-  height: 32px;
-  box-sizing: border-box;
-  padding: 8px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary-color);
-  background: var(--white);
-  border: 1px solid var(--primary-color);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
-  cursor: pointer;
-}
-
-.previous-spot-btn:active {
-  background: var(--bg-light);
-}
-
-/*
- * 口コミピンの表示切り替え（自分・他の人の2つ）を1本のピルにまとめる。
- * バナーの左下・戻るボタンの下に置き、ズームコントロール（右上）と重ならないようにする。
- * top は 1段目（84px + 高さ32px）+ 間隔6px。戻るボタンが出ていないときも
- * 位置を動かさない（跳ねて誤タップするのを防ぐ）。
+ * 口コミピンの表示切り替えボタン（自分・他の人の2つ）。
+ * 次の目的地バナー（top: 12px・中央）とズームコントロール（右上）に重ならないよう左上に置く。
  */
 .review-toggles {
   position: fixed;
-  top: 122px;
-  left: max(12px, calc(50% - 203px));
+  top: 84px;
+  left: 12px;
   z-index: 45;
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 2px;
-  min-height: 32px;
-  box-sizing: border-box;
-  /* 上下の余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
-  padding: 0 0 0 10px;
-  background: var(--white);
-  border-radius: 999px;
-  box-shadow: var(--shadow);
-}
-
-.review-toggles-label {
-  margin-right: 2px;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-gray);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .review-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 4px 10px;
+  padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-gray);
-  background: transparent;
+  background: var(--white);
   border: none;
   border-radius: 999px;
+  box-shadow: var(--shadow);
   cursor: pointer;
 }
 
 .review-toggle.is-on {
   color: var(--text-dark);
-  background: var(--bg-light);
 }
 
 .review-toggle-dot {
