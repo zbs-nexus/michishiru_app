@@ -53,11 +53,19 @@ const isAlert = computed(() => props.variant === 'alert');
     class="mascot-speech"
     :class="[`is-${placement}`, { 'is-alert': isAlert }]"
   >
-    <MascotAvatar
-      :level="level"
-      :size="size"
-      :has-level-label="hasLevelLabel"
-    />
+    <!--
+      マスコットと、その下に差し込む経験値バーをまとめた入れ物。
+      スロットが空のときは余白も出ないため、バーを渡さない呼び出し元の見た目は変わらない。
+    -->
+    <div class="mascot-side">
+      <MascotAvatar
+        :level="level"
+        :size="size"
+        :has-level-label="hasLevelLabel"
+      />
+
+      <slot name="experience" />
+    </div>
 
     <!-- 文言が入れ替わるため読み上げの対象にする。注意のときだけ割り込ませる -->
     <div
@@ -73,6 +81,18 @@ const isAlert = computed(() => props.variant === 'alert');
 <style scoped>
 .mascot-speech {
   display: flex;
+}
+
+/*
+ * マスコットの側。立ち絵の下に経験値バーを縦に積む。
+ * 幅は立ち絵に合わせるため指定せず、バー側が100%で追従する。
+ */
+.mascot-side {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
 }
 
 /* 横並び。マスコットを左、吹き出しを右に置く */
@@ -92,18 +112,16 @@ const isAlert = computed(() => props.variant === 'alert');
 }
 
 /*
- * 吹き出し。羊皮紙の色にドット絵の枠で、巻物に書かれた言葉のように見せる。
+ * 吹き出し。羊皮紙の色に金の縁取りで、巻物に書かれた言葉のように見せる。
  * 三角のしっぽは縁取りの色と内側の色を2枚重ねて描く。
- * 枠（border-image）はしっぽの疑似要素には及ばないため、しっぽは三角のまま。
  * 余白と文字は画面の高さ（global.css の --fit）に合わせて詰める。
  */
 .speech-bubble {
   position: relative;
-  padding: calc(9px + var(--fit) * 5) 14px;
-  border: var(--pixel-frame-width) solid var(--border-ink);
-  border-image: var(--pixel-frame-ink);
+  padding: calc(9px + var(--fit) * 5) 16px;
+  border: 2px solid var(--border-gold);
+  border-radius: 18px;
   background: var(--surface);
-  background-clip: padding-box;
   box-shadow: var(--shadow);
   font-size: calc(13px + var(--fit) * 1);
   font-weight: 600;
@@ -135,7 +153,7 @@ const isAlert = computed(() => props.variant === 'alert');
   top: 20px;
   left: -12px;
   border-width: 11px 12px 11px 0;
-  border-color: transparent var(--border-ink) transparent transparent;
+  border-color: transparent var(--border-gold) transparent transparent;
 }
 
 .mascot-speech.is-side .speech-bubble::after {
@@ -151,7 +169,7 @@ const isAlert = computed(() => props.variant === 'alert');
   left: 50%;
   margin-left: -11px;
   border-width: 12px 11px 0;
-  border-color: var(--border-ink) transparent transparent;
+  border-color: var(--border-gold) transparent transparent;
 }
 
 .mascot-speech.is-stacked .speech-bubble::after {
@@ -165,9 +183,7 @@ const isAlert = computed(() => props.variant === 'alert');
 /* 注意。縁取りを赤へ変え、文字色も合わせて見分けられるようにする */
 .mascot-speech.is-alert .speech-bubble {
   border-color: var(--danger);
-  border-image: var(--pixel-frame-danger);
   background: var(--surface-alert);
-  background-clip: padding-box;
   color: var(--danger);
 }
 

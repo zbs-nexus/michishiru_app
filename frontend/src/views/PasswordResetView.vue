@@ -92,7 +92,7 @@ const handleResendCode = async () => {
 <template>
   <DefaultLayout>
     <template #background>
-      <div class="paper-map-bg" />
+      <div class="header-bg" />
     </template>
 
     <div class="logo-header">

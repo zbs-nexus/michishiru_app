@@ -1,11 +1,12 @@
 <script setup>
 import { useRouter } from 'vue-router';
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import logoImage from '@/assets/images/logo.png';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import SignOutMenu from '@/components/feature/auth/SignOutMenu.vue';
+import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteConditionForm from '@/components/feature/route/RouteConditionForm.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
@@ -13,6 +14,7 @@ import { useRouteConditionOptions } from '@/composables/useRouteConditionOptions
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { useAuthStore } from '@/stores/authStore';
+import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
@@ -21,6 +23,7 @@ import { useRouteStore } from '@/stores/routeStore';
  */
 const router = useRouter();
 const authStore = useAuthStore();
+const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const {
   isCreating,
@@ -43,6 +46,13 @@ const {
 
 // 初回描画前に読み込み中の状態へ入れるため、setup内で取得を開始する
 loadConditionOptions();
+
+// マスコットのレベルのもとになる実績を取得する。
+// この画面は必ず最初に通るため、ここで取っておけば以降の画面でも同じ値が読める。
+// 失敗してもストア側で握るため、条件の入力は妨げない
+onMounted(() => {
+  mascotStore.loadExperience();
+});
 
 /**
  * マスコットが話す文言。
@@ -109,24 +119,33 @@ const handleCreateRoute = async () => {
 const handleSignOut = async () => {
   await authStore.signOut();
   routeStore.resetConditions();
+  // 次の利用者に前の人のレベル・経験値が出ないようにする
+  mascotStore.resetExperience();
 
   router.push({ name: 'login' });
 };
 </script>
 
 <template>
-  <RouteLoadingOverlay v-if="isCreating" />
-
-  <!--
-    is-home は、この画面だけの見た目（見出しの扱い・下部の余白）を
-    global.css の .screen.is-home から当てるための目印。
-  -->
-  <DefaultLayout
-    v-else
-    class="is-home"
+  <RouteLoadingOverlay
+    v-if="isCreating"
+    :mascot-level="mascotStore.mascotLevel"
   >
+    <template
+      v-if="mascotStore.hasExperience"
+      #experience
+    >
+      <MascotExperienceBar
+        :level-progress="mascotStore.levelProgress"
+        :total-experience-points="mascotStore.totalExperiencePoints"
+        size="large"
+      />
+    </template>
+  </RouteLoadingOverlay>
+
+  <DefaultLayout v-else>
     <template #background>
-      <div class="paper-map-bg" />
+      <div class="header-bg" />
     </template>
 
     <BaseToast
@@ -158,9 +177,22 @@ const handleSignOut = async () => {
       class="home-mascot"
       :message="mascotMessage"
       :variant="mascotMessageVariant"
+      :level="mascotStore.mascotLevel"
       placement="side"
       size="medium"
-    />
+    >
+      <!-- 実績を取得できたときだけ経験値バーを出す（失敗時はLv.1でバー無し） -->
+      <template
+        v-if="mascotStore.hasExperience"
+        #experience
+      >
+        <MascotExperienceBar
+          :level-progress="mascotStore.levelProgress"
+          :total-experience-points="mascotStore.totalExperiencePoints"
+          size="medium"
+        />
+      </template>
+    </MascotSpeechBubble>
 
     <h2 class="section-title">
       お散歩ルートを作成
@@ -180,14 +212,8 @@ const handleSignOut = async () => {
         @toggle-distance-random="routeStore.toggleDistanceRandom"
       />
 
-      <!--
-        未選択でも押せるようにし、押下時にポップアップで不足を知らせる。
-        画面の下端に固定して、条件を見ながらいつでも押せるようにする。
-      -->
-      <BaseButton
-        is-full-width
-        @click="handleCreateRoute"
-      >
+      <!-- 未選択でも押せるようにし、押下時にポップアップで不足を知らせる -->
+      <BaseButton @click="handleCreateRoute">
         ルートを作成
       </BaseButton>
     </template>

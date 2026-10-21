@@ -624,11 +624,9 @@ const handleSubmit = () => {
   overflow-y: auto;
   padding: 0 20px 16px;
   background: var(--surface);
-  /* 地図の上に重なるシートなので、上辺と左右に茶の線を回して紙の端を見せる */
-  border: 2px solid var(--border-ink);
-  border-bottom: none;
-  border-radius: 10px 10px 0 0;
-  box-shadow: 0 -4px 0 rgba(92,68,48,0.25);
+  border-top: 2px solid var(--border-gold);
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.2);
   animation: review-form-slide-in 0.2s ease-out;
 }
 
@@ -662,7 +660,7 @@ const handleSubmit = () => {
   width: 40px;
   height: 4px;
   border-radius: 999px;
-  background: var(--border-ink);
+  background: var(--border-gold);
 }
 
 .review-form-header {
@@ -715,13 +713,11 @@ const handleSubmit = () => {
 /* 16px未満にするとiOSで入力時に画面が拡大されるため、下げない */
 .review-name-input {
   width: 100%;
-  padding: 10px 12px;
+  padding: 12px 14px;
   font-size: 16px;
-  border: var(--pixel-frame-width) solid var(--border-ink);
-  border-image: var(--pixel-frame-ink);
+  border: 1px solid var(--border-gold);
+  border-radius: 10px;
   background: var(--surface);
-  background-clip: padding-box;
-  box-shadow: var(--shadow);
 }
 
 .review-name-input:focus {
@@ -796,8 +792,8 @@ const handleSubmit = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 6px;
-  border: 2px solid var(--border-ink);
+  border-radius: 8px;
+  border: 1px solid #DDE3E8;
 }
 
 .kept-photo-remove {
@@ -873,8 +869,8 @@ const handleSubmit = () => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 6px;
-  border: 2px solid var(--border-ink);
+  border-radius: 8px;
+  border: 1px solid #DDE3E8;
 }
 
 /* 投稿ボタン押下時の未入力エラー */
@@ -882,7 +878,7 @@ const handleSubmit = () => {
   margin: 0 0 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--danger);
+  color: #D93025;
 }
 
 /* 評価と投稿ボタンを1行に並べ、全幅ボタンの分の高さを節約する */
