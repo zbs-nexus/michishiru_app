@@ -68,6 +68,24 @@ const isReviewFormVisible = ref(false);
 /** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
 const bannerRef = ref(null);
 
+/** 前の目的地・次の目的地へのボタンの段。地図のズームボタンをこの下へ逃がすために測る */
+const spotStepRowRef = ref(null);
+
+/** 測れるまでの、地図のズームボタンの上端（ピクセル）。名前が1行のときの段の下端＋余白 */
+const DEFAULT_MAP_CONTROLS_TOP_PX = 124;
+
+/** ボタンの段の下端からズームボタンまでの余白（ピクセル） */
+const MAP_CONTROLS_GAP_PX = 8;
+
+/**
+ * 地図のズームボタンを置く上端（ピクセル）。
+ * 目的地の名前が長いとバナーが伸びてボタンの段も下がるため、段の下端を測って追従させる。
+ */
+const mapControlsTopPx = ref(DEFAULT_MAP_CONTROLS_TOP_PX);
+
+/** バナーの高さの変化を見張る。ResizeObserver が無い環境ではnullのまま */
+let bannerResizeObserver = null;
+
 /** 口コミ投稿フォームの要素。可視範囲の下端を測るために参照する */
 const reviewFormRef = ref(null);
 
@@ -425,6 +443,41 @@ const measureVisibleCenterOffsetY = () => {
 };
 
 /**
+ * @description 前後のボタンの段の下端を測り、地図のズームボタンをその下へ置く。
+ * 段が描画されていない（測れない）ときは値を変えない。
+ * @returns {void}
+ */
+const measureMapControlsTop = () => {
+  const rowEl = spotStepRowRef.value;
+
+  if (!rowEl) {
+    return;
+  }
+
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準の下端をそのまま使える
+  mapControlsTopPx.value = Math.ceil(rowEl.getBoundingClientRect().bottom) + MAP_CONTROLS_GAP_PX;
+};
+
+// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、ズームボタンの位置を測り直す
+onMounted(() => {
+  measureMapControlsTop();
+
+  const bannerEl = bannerRef.value?.$el ?? null;
+
+  if (!bannerEl || typeof ResizeObserver === 'undefined') {
+    return;
+  }
+
+  bannerResizeObserver = new ResizeObserver(measureMapControlsTop);
+  bannerResizeObserver.observe(bannerEl);
+});
+
+onBeforeUnmount(() => {
+  bannerResizeObserver?.disconnect();
+  bannerResizeObserver = null;
+});
+
+/**
  * @description フォームの高さが変わったら、寄せ位置を測り直す。
  * 可視範囲が変わるため、そのままだと対象の場所がフォームに隠れる。
  * @returns {Promise<void>}
@@ -628,55 +681,106 @@ const handleConfirmEnd = async () => {
       @close="hideMessage"
     />
 
-    <RouteNextSpotBanner
-      ref="bannerRef"
-      :spot-name="nextSpot?.name ?? null"
-      :distance-to-next-m="distanceToNextM"
-      :is-completed="isCompleted"
-      :mascot-level="mascotStore.mascotLevel"
-    >
-      <!--
-        バナーは role="status" の読み上げ範囲のため、バーは装飾として渡す。
-        距離が変わるたびに経験値まで読み直されるのを防ぐ。
-      -->
-      <template
-        v-if="mascotStore.hasExperience"
-        #experience
+    <!--
+      画面上部の操作をまとめて縦に積む（バナー → 前後のボタン → 口コミの表示切り替え）。
+      目的地の名前が長くバナーが伸びても、下の段が押し下げられて重ならない。
+    -->
+    <div class="navigation-top">
+      <RouteNextSpotBanner
+        ref="bannerRef"
+        :spot-name="nextSpot?.name ?? null"
+        :distance-to-next-m="distanceToNextM"
+        :is-completed="isCompleted"
+        :mascot-level="mascotStore.mascotLevel"
       >
-        <MascotExperienceBar
-          :level-progress="mascotStore.levelProgress"
-          size="small"
-          is-decorative
-        />
-      </template>
-    </RouteNextSpotBanner>
+        <!--
+          バナーは role="status" の読み上げ範囲のため、バーは装飾として渡す。
+          距離が変わるたびに経験値まで読み直されるのを防ぐ。
+        -->
+        <template
+          v-if="mascotStore.hasExperience"
+          #experience
+        >
+          <MascotExperienceBar
+            :level-progress="mascotStore.levelProgress"
+            size="small"
+            is-decorative
+          />
+        </template>
+      </RouteNextSpotBanner>
 
-    <!--
-      誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
-      到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
-    -->
-    <button
-      v-if="canReturnToPreviousSpot"
-      class="previous-spot-btn"
-      type="button"
-      aria-label="前の目的地に戻る"
-      @click="returnToPreviousSpot"
-    >
-      ← 前の目的地
-    </button>
+      <!--
+        ボタンが片方だけでも段の高さを保ち、下の口コミの表示切り替えが跳ねないようにする
+      -->
+      <div
+        ref="spotStepRowRef"
+        class="spot-step-row"
+      >
+        <!--
+          誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
+          到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
+        -->
+        <button
+          v-if="canReturnToPreviousSpot"
+          class="previous-spot-btn"
+          type="button"
+          aria-label="前の目的地に戻る"
+          @click="returnToPreviousSpot"
+        >
+          ← 前の目的地
+        </button>
 
-    <!--
-      次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
-      押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
-    -->
-    <button
-      v-if="nextSpot"
-      class="next-spot-btn"
-      type="button"
-      @click="advanceToNextSpot"
-    >
-      次の目的地へ
-    </button>
+        <!--
+          次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
+          押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
+        -->
+        <button
+          v-if="nextSpot"
+          class="next-spot-btn"
+          type="button"
+          @click="advanceToNextSpot"
+        >
+          次の目的地へ
+        </button>
+      </div>
+
+      <div
+        class="review-toggles"
+        role="group"
+        aria-label="口コミのピンの表示"
+      >
+        <span
+          class="review-toggles-label"
+          aria-hidden="true"
+        >
+          口コミ
+        </span>
+
+        <button
+          class="review-toggle review-toggle-mine"
+          :class="{ 'is-on': showMyReviews }"
+          type="button"
+          :aria-pressed="showMyReviews"
+          aria-label="自分の口コミ"
+          @click="toggleMyReviews"
+        >
+          <span class="review-toggle-dot" />
+          自分
+        </button>
+
+        <button
+          class="review-toggle review-toggle-other"
+          :class="{ 'is-on': showOtherReviews }"
+          type="button"
+          :aria-pressed="showOtherReviews"
+          aria-label="みんなの口コミ"
+          @click="toggleOtherReviews"
+        >
+          <span class="review-toggle-dot" />
+          みんな
+        </button>
+      </div>
+    </div>
 
     <RouteNavigationMap
       :geometry="routeStore.currentRoute.geometry"
@@ -696,46 +800,10 @@ const handleConfirmEnd = async () => {
       :visited-spot-ids="visitedSpotIds"
       :selected-review-spot-id="selectedReviewSpotId"
       :leg-sections="legSections"
+      :controls-top-px="mapControlsTopPx"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
     />
-
-    <div
-      class="review-toggles"
-      role="group"
-      aria-label="口コミのピンの表示"
-    >
-      <span
-        class="review-toggles-label"
-        aria-hidden="true"
-      >
-        口コミ
-      </span>
-
-      <button
-        class="review-toggle review-toggle-mine"
-        :class="{ 'is-on': showMyReviews }"
-        type="button"
-        :aria-pressed="showMyReviews"
-        aria-label="自分の口コミ"
-        @click="toggleMyReviews"
-      >
-        <span class="review-toggle-dot" />
-        自分
-      </button>
-
-      <button
-        class="review-toggle review-toggle-other"
-        :class="{ 'is-on': showOtherReviews }"
-        type="button"
-        :aria-pressed="showOtherReviews"
-        aria-label="みんなの口コミ"
-        @click="toggleOtherReviews"
-      >
-        <span class="review-toggle-dot" />
-        みんな
-      </button>
-    </div>
 
     <ReviewPostForm
       v-if="isReviewFormVisible"
@@ -801,7 +869,7 @@ const handleConfirmEnd = async () => {
  * 終了後の保存・取り直し・判定を待つ間の「記録中…」の全画面表示。
  * 羊皮紙色の膜で地図と操作部をすべて覆い、待っている間の操作（終了の二度押しや
  * 地図の長押しなど）を物理的に塞ぐ。文字だけで、ロード画面の演出は流用しない。
- * 口コミトグル（z-index 45）や次の目的地ボタンより手前に出すため、それらより高くする。
+ * 画面上部の操作（z-index 45）より手前に出すため、それらより高くする。
  */
 .finishing-overlay {
   position: fixed;
@@ -824,17 +892,53 @@ const handleConfirmEnd = async () => {
 }
 
 /*
- * 「次の目的地へ」ボタン。次の目的地バナーの右下に置く。
- * バナーは幅 calc(100% - 24px)・最大406pxで中央寄せのため、
- * 右端をバナーの右端（狭い画面では12px、広い画面では中央から203px）に揃える。
+ * 画面上部の操作の入れ物。幅 calc(100% - 24px)・最大406pxで中央に寄せ、
+ * バナー・前後のボタン・口コミの表示切り替えを縦に積む。
+ * 以前はそれぞれを固定の top で置いていたため、目的地の名前でバナーが伸びると
+ * 下のボタンと重なっていた。積み上げにすると、伸びた分だけ下の段が下がる。
+ *
+ * 入れ物自体は地図の上に広がるため、空いている所では地図を操作できるよう
+ * pointer-events を切り、中の部品だけで受け付ける。
+ */
+.navigation-top {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: calc(100% - 24px);
+  max-width: 406px;
+  pointer-events: none;
+}
+
+.navigation-top > * {
+  pointer-events: auto;
+}
+
+/*
+ * 前の目的地（左）と次の目的地へ（右）の段。ボタンが無い所は地図を操作できるよう、
+ * 段自体は pointer-events を切る。高さはボタンに合わせて固定し、
+ * ボタンが片方・どちらも無いときも下の段の位置を変えない（跳ねて誤タップするのを防ぐ）。
+ */
+.navigation-top > .spot-step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  pointer-events: none;
+}
+
+/*
+ * 「次の目的地へ」ボタン。段の右端に置く（前の目的地が無いときも右に寄せたまま）。
  * 大きさは前の目的地に戻るボタンと揃える。
- * 高さを固定して1段目の高さを確定させ、2段目の口コミのピルの位置を決められるようにする。
  */
 .next-spot-btn {
-  position: fixed;
-  top: 84px;
-  right: max(12px, calc(50% - 203px));
-  z-index: 45;
+  margin-left: auto;
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   height: 32px;
@@ -856,15 +960,12 @@ const handleConfirmEnd = async () => {
 }
 
 /*
- * 「前の目的地」ボタン。次の目的地バナーの左下に置き、左端をバナーの左端に揃える。
+ * 「前の目的地」ボタン。段の左端に置き、左端をバナーの左端に揃える。
  * 枠・影・大きさは「次の目的地へ」と同じにする。
  * 主操作の「次の目的地へ」と区別するため、面だけ羊皮紙の色に紫の文字にする。
  */
 .previous-spot-btn {
-  position: fixed;
-  top: 84px;
-  left: max(12px, calc(50% - 203px));
-  z-index: 45;
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   height: 32px;
@@ -887,16 +988,12 @@ const handleConfirmEnd = async () => {
 
 /*
  * 口コミピンの表示切り替え（自分・他の人の2つ）を1本のピルにまとめる。
- * バナーの左下・戻るボタンの下に置き、ズームコントロール（右上）と重ならないようにする。
- * top は 1段目（84px + 高さ32px）+ 間隔6px。戻るボタンが出ていないときも
- * 位置を動かさない（跳ねて誤タップするのを防ぐ）。
+ * 前後のボタンの段の下・左端に置き、ズームコントロール（右）と重ならないようにする。
+ * 入れ物は幅いっぱいに広げるため、align-self で中身の幅に縮める。
  */
 .review-toggles {
   touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
-  position: fixed;
-  top: 122px;
-  left: max(12px, calc(50% - 203px));
-  z-index: 45;
+  align-self: flex-start;
   display: inline-flex;
   flex-direction: row;
   align-items: center;

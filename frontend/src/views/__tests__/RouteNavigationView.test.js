@@ -432,3 +432,82 @@ describe('RouteNavigationView の区間の描き分け', () => {
     expect(legSectionsOf(wrapper)).toBeNull();
   });
 });
+
+describe('RouteNavigationView の画面上部の並び', () => {
+  test('バナー・前後のボタン・口コミの表示切り替えを1つの入れ物に上から順に積む', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    // 前の目的地も出るよう、1つ進めておく
+    await wrapper.find('.next-spot-btn').trigger('click');
+
+    const top = wrapper.find('.navigation-top');
+    const bannerEl = wrapper.findComponent(RouteNextSpotBanner).element;
+    const rowEl = wrapper.find('.spot-step-row').element;
+    const togglesEl = wrapper.find('.review-toggles').element;
+
+    // 固定の top で個別に置くと、名前でバナーが伸びたときに重なるため、同じ入れ物で積む
+    expect([...top.element.children]).toEqual([bannerEl, rowEl, togglesEl]);
+
+    // 前後のボタンは同じ段に並べる（前が左、次が右）
+    const rowButtons = [...rowEl.querySelectorAll('button')].map((button) => button.className);
+    expect(rowButtons).toEqual(['previous-spot-btn', 'next-spot-btn']);
+  });
+
+  test('地図のズームボタンは、前後のボタンの段の下端＋余白に置く', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ bottom: 150.2 });
+
+    const wrapper = mountNavigationViewWithRoute();
+    // 描画後に測るため、測った値が地図へ渡るのは次の描画
+    await nextTick();
+
+    // 151（切り上げ）+ 余白8
+    expect(wrapper.findComponent(RouteNavigationMap).props('controlsTopPx')).toBe(159);
+  });
+
+  test('バナーの高さが変わったら、ズームボタンの位置を測り直し、画面を離れたら見張りをやめる', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 130 });
+    const observed = [];
+    const disconnect = vi.fn();
+    let resizeCallback = null;
+
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(callback) {
+          resizeCallback = callback;
+        }
+
+        observe(element) {
+          observed.push(element);
+        }
+
+        disconnect() {
+          disconnect();
+        }
+      }
+    );
+
+    try {
+      const wrapper = mountNavigationViewWithRoute();
+      const map = () => wrapper.findComponent(RouteNavigationMap);
+      await nextTick();
+
+      expect(observed).toEqual([wrapper.findComponent(RouteNextSpotBanner).element]);
+      expect(map().props('controlsTopPx')).toBe(138);
+
+      // 長い名前でバナーが伸び、段が下がった
+      rectSpy.mockReturnValue({ bottom: 170 });
+      resizeCallback();
+      await nextTick();
+
+      expect(map().props('controlsTopPx')).toBe(178);
+
+      wrapper.unmount();
+      expect(disconnect).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
