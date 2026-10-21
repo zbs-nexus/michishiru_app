@@ -814,6 +814,7 @@ const handleConfirmEnd = () => {
  * 位置を動かさない（跳ねて誤タップするのを防ぐ）。
  */
 .review-toggles {
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
   position: fixed;
   top: 122px;
   left: max(12px, calc(50% - 203px));
