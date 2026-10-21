@@ -608,6 +608,7 @@ const handleSubmit = () => {
  * ピンの寄せ位置を決めるため。途中の高さを測ると寄せ位置がずれる。
  */
 .review-form {
+  touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
   position: fixed;
   bottom: 0;
   left: 50%;
