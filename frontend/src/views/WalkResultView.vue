@@ -4,10 +4,12 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import WalkResultStats from '@/components/feature/walk/WalkResultStats.vue';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkResultSave } from '@/composables/useWalkResultSave';
+import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
 
@@ -23,6 +25,7 @@ import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
  * 案内画面側は `endWalk()` → `push` だけなので、保存を一切待たない。
  */
 const router = useRouter();
+const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const walkStore = useWalkStore();
 const {
@@ -60,6 +63,10 @@ onMounted(async () => {
   if (!isSucceeded) {
     showMessage(saveErrorMessage.value ?? '実績を保存できませんでした');
   }
+
+  // 保存の後に取り直すことで、今終えた散歩の分を含めたレベルと経験値が見える。
+  // 保存に失敗した場合でも呼ぶ（値は前のままだが、取り直しても害はない）
+  await mascotStore.loadExperience();
 });
 
 /**
@@ -104,6 +111,7 @@ const handleReturnHome = () => {
       <div class="result-body">
         <MascotSpeechBubble
           class="result-mascot"
+          :level="mascotStore.mascotLevel"
           placement="stacked"
           size="large"
           has-level-label
@@ -114,6 +122,18 @@ const handleReturnHome = () => {
           <p class="result-note">
             {{ mascotSubMessage }}
           </p>
+
+          <!-- 今終えた散歩の分を含めた経験値を出す（保存の直後に取り直している） -->
+          <template
+            v-if="mascotStore.hasExperience"
+            #experience
+          >
+            <MascotExperienceBar
+              :level-progress="mascotStore.levelProgress"
+              :total-experience-points="mascotStore.totalExperiencePoints"
+              size="large"
+            />
+          </template>
         </MascotSpeechBubble>
 
         <WalkResultStats
