@@ -53,6 +53,9 @@ const reviewTargetPosition = ref(null);
  */
 const isExistingSpotSelected = ref(false);
 
+/** 選択中の口コミの場所のID。該当するピンを大きく前面に出す。未選択はnull */
+const selectedReviewSpotId = ref(null);
+
 /** 口コミ投稿フォームを表示するかどうか */
 const isReviewFormVisible = ref(false);
 
@@ -430,6 +433,8 @@ const handleLongPressMap = async (position) => {
   resetReview();
 
   isExistingSpotSelected.value = false;
+  // 長押しの時点では投稿済みか分からないため、選択の強調はいったん外す
+  selectedReviewSpotId.value = null;
 
   // 解決は裏で進め、入力欄は先に出す
   const resolving = resolveReviewSpot(position);
@@ -444,7 +449,11 @@ const handleLongPressMap = async (position) => {
 
   if (!isResolved) {
     showMessage(reviewErrorMessage.value ?? '場所の確認に失敗しました');
+    return;
   }
+
+  // 長押し位置が既存の場所だったら、そのピンも選択中として強調する
+  selectedReviewSpotId.value = existingSpot.value?.spotId ?? null;
 };
 
 /**
@@ -453,11 +462,14 @@ const handleLongPressMap = async (position) => {
  *
  * 投稿済みと分かっているため、描く前に解決を終わらせる。
  * 先にフォームを出すと、解決までの間だけ新規投稿の入力欄が見えてしまう。
- * @param {{lng: number, lat: number}} position タップした場所の座標
+ * @param {{spotId: string, position: {lng: number, lat: number}}} selected タップした場所
  * @returns {Promise<void>}
  */
-const handleSelectReviewSpot = async (position) => {
+const handleSelectReviewSpot = async ({ spotId, position }) => {
   hideMessage();
+
+  // 押した瞬間にピンを大きく前面へ出す（解決の応答を待たないフィードバック）
+  selectedReviewSpotId.value = spotId;
 
   /*
    * 解決してから描く。フォームを開いていない場合は、内容が揃ってから現れる。
@@ -470,8 +482,9 @@ const handleSelectReviewSpot = async (position) => {
   const isResolved = await resolveReviewSpot(position);
 
   // 取得できないまま開くと新規投稿の画面になってしまうため、開かずに知らせる。
-  // 既に開いている場合は前の場所の表示をそのまま残す
+  // 選択の見た目は、既に開いている場所があればそれへ戻す（無ければ外す）
   if (!isResolved) {
+    selectedReviewSpotId.value = existingSpot.value?.spotId ?? null;
     showMessage(reviewErrorMessage.value ?? '口コミの取得に失敗しました');
     return;
   }
@@ -490,6 +503,7 @@ const handleCloseReview = () => {
   isReviewFormVisible.value = false;
   reviewTargetPosition.value = null;
   isExistingSpotSelected.value = false;
+  selectedReviewSpotId.value = null;
   focusOffsetY.value = 0;
   resetReview();
 };
@@ -594,6 +608,7 @@ const handleConfirmEnd = () => {
       :other-review-spots="otherReviewSpots"
       :show-other-reviews="showOtherReviews"
       :visited-spot-ids="visitedSpotIds"
+      :selected-review-spot-id="selectedReviewSpotId"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
     />

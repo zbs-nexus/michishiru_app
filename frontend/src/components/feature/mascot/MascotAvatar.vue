@@ -70,6 +70,9 @@ const mascotLabel = computed(
 /*
  * 画像の幅はサイズごとに --mascot-width で切り替える。
  * 画像は縦長（5:6）なので高さは自動にして比率を保つ。
+ * medium と large は画面の高さ（global.css の --fit）に合わせて縮め、
+ * 低い端末でも画面がスクロールせずに収まるようにする。
+ * small は案内画面のバナーに置く大きさで、これ以上縮めると姿が判別できないため固定する。
  */
 .mascot-avatar {
   position: relative;
@@ -85,11 +88,11 @@ const mascotLabel = computed(
 }
 
 .mascot-avatar.is-medium {
-  --mascot-width: 76px;
+  --mascot-width: calc(56px + var(--fit) * 20);
 }
 
 .mascot-avatar.is-large {
-  --mascot-width: 128px;
+  --mascot-width: calc(84px + var(--fit) * 44);
 }
 
 .mascot-image {

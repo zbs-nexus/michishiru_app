@@ -211,6 +211,6 @@ const handleSignOut = async () => {
 
 /* 見出しとの間を空け、案内役が最初に目に入るようにする */
 .home-mascot {
-  margin-bottom: 26px;
+  margin-bottom: calc(8px + var(--fit) * 18);
 }
 </style>

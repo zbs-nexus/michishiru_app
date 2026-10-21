@@ -121,6 +121,30 @@
    */
   --font-display: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
   --font-body: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
+  /*
+   * 画面の高さに合わせて寸法を伸び縮みさせる係数（0px〜1px）。
+   * どの端末でも全画面をスクロールせずに収めるために使う。
+   * 寸法は calc(低い画面での値 + var(--fit) * 伸び幅) の形で書く。
+   * 例: calc(12px + var(--fit) * 8) は、低い画面で 12px、高い画面で 20px になる。
+   * svh に対応していないブラウザでは、従来どおり高い画面の値で表示する。
+   */
+  --fit: 1px;
+}
+
+/*
+ * 表示領域の高さが 560px 以下で 0px、860px 以上で 1px になり、その間は高さに比例する。
+ * 560px は iPhone SE の Safari（ツールバー表示時 約548px）と 360×640 級の Android で
+ * 下限の値になるように決めた。
+ * 860px は、最も項目の多い状態（パスワード再設定で全項目にエラーが出たとき）でも、
+ * 画面が高くなった分より中身の伸びが小さくなるように決めた。この幅を狭めると、
+ * 中くらいの高さの端末で中身の伸びが画面の伸びを追い越し、はみ出す。
+ * 高さはツールバーを出した状態（svh）で測る。文書をスクロールさせない作りのため
+ * ツールバーは出たままになり、この状態で収まっていれば必ず収まる。
+ */
+@supports (height: 1svh) {
+  :root {
+    --fit: clamp(0px, calc((100svh - 560px) / 300), 1px);
+  }
 }
 
 /*
@@ -138,7 +162,13 @@ body {
   background-size: cover, cover, 40px 40px;
   background-attachment: fixed;
   color: var(--text-dark);
+  /*
+   * 100vh はスマホではツールバーを隠した状態の高さになり、表示中は
+   * ツールバーの分だけはみ出して画面がスクロールしてしまう。表示中の高さに追従する
+   * dvh を使う（dvh に対応していないブラウザ向けに vh を先に書いている）。
+   */
   min-height: 100vh;
+  min-height: 100dvh;
   max-width: 430px;
   margin: 0 auto;
   position: relative;
@@ -159,16 +189,37 @@ textarea {
   font-family: inherit;
 }
 
+/*
+ * MapLibre GL は自分のスタイルシートで地図コンテナへ
+ * `font: 12px/20px Helvetica Neue, Arial, ...` を当てる。
+ * 地図の中へ挿入する要素（スポットの番号・開始地点の目印・帰属表示）は
+ * これを受け継いでしまい、アプリの書体から外れる。そのため継承へ戻す。
+ *
+ * ここで直せるのはHTMLとして描かれる文字だけ。
+ * 地図そのものに写っている地名は、タイル画像に焼き込まれた絵なので
+ * CSSでは変えられない（ベクタタイルへ移行しない限り触れない）。
+ */
+.maplibregl-map {
+  font-family: inherit;
+}
+
 #app {
   min-height: 100vh;
+  min-height: 100dvh;
   position: relative;
 }
 
-/* 画面の切り替えはVue Routerが行うため、表示中の画面のみがマウントされる */
+/*
+ * 画面の骨格。画面の切り替えはVue Routerが行うため、表示中の画面のみがマウントされる。
+ * 表示領域の高さちょうどにして、文書そのものはスクロールさせない。
+ * 中身は .content が残りの高さを受け持ち、各部品が --fit で縮むことで収める。
+ */
 .screen {
   display: flex;
-  min-height: 100vh;
   flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 
 /*
@@ -198,9 +249,17 @@ textarea {
   background-repeat: no-repeat, no-repeat;
 }
 
+/*
+ * 画面の本文。フッターを除いた残りの高さを受け持つ。
+ * スクロールは最後の手段で、横向きや文字の拡大などで収まりきらない場合に限り、
+ * 文書ではなくこの中だけをスクロールさせる（フッターの操作は常に見えたままにする）。
+ */
 .content {
-  padding: 20px;
   flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(8px + var(--fit) * 12) 20px;
   position: relative;
   z-index: 1;
 }
@@ -233,13 +292,15 @@ textarea {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 30px;
-  padding-top: 10px;
+  margin-bottom: calc(4px + var(--fit) * 26);
+  padding-top: calc(var(--fit) * 10);
 }
 
 /* ロゴはドット絵の枠で囲み、紙に貼った封蝋のように見せる */
 .logo-icon img {
   display: block;
+  width: calc(30px + var(--fit) * 20);
+  height: calc(30px + var(--fit) * 20);
   border: var(--pixel-frame-width) solid var(--border-ink);
   border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
@@ -247,7 +308,7 @@ textarea {
 
 .logo-text h1 {
   font-family: var(--font-display);
-  font-size: 25px;
+  font-size: calc(19px + var(--fit) * 6);
   font-weight: 700;
   letter-spacing: 0.06em;
   color: var(--primary-color);
@@ -267,11 +328,12 @@ textarea {
  */
 .section-title {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: calc(17px + var(--fit) * 5);
   font-weight: 700;
+  line-height: 1.35;
   letter-spacing: 0.04em;
-  margin-bottom: 24px;
-  padding-bottom: 10px;
+  margin-bottom: calc(6px + var(--fit) * 18);
+  padding-bottom: calc(4px + var(--fit) * 6);
   color: var(--primary-color);
   text-shadow: var(--text-halo);
   background-image: linear-gradient(90deg, var(--accent-gold), rgba(184,134,43,0) 85%);
@@ -282,10 +344,10 @@ textarea {
 
 .page-title {
   font-family: var(--font-display);
-  font-size: 22px;
+  font-size: calc(18px + var(--fit) * 4);
   font-weight: 700;
   letter-spacing: 0.08em;
-  margin-bottom: 20px;
+  margin-bottom: calc(6px + var(--fit) * 14);
   color: var(--primary-color);
   text-shadow: var(--text-halo);
   text-align: center;
@@ -303,7 +365,7 @@ textarea {
 
 /* 入力セクション */
 .input-section {
-  margin-bottom: 24px;
+  margin-bottom: calc(10px + var(--fit) * 14);
 }
 
 /* 項目名は墨の色。見出し（紫のインク）と区別し、背景の絵からは紙の色で浮かせる */
@@ -330,7 +392,7 @@ textarea {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 14px 6px;
+  padding: calc(8px + var(--fit) * 8) 6px;
   border: var(--pixel-frame-width) solid var(--border-ink);
   border-image: var(--pixel-frame-ink);
   /* 欠けた角に背景が回り込まないよう、面は枠の内側だけに塗る */
@@ -358,8 +420,8 @@ textarea {
 }
 
 .btn-icon {
-  font-size: 24px;
-  margin-bottom: 6px;
+  font-size: calc(20px + var(--fit) * 4);
+  margin-bottom: calc(2px + var(--fit) * 4);
 }
 
 .select-btn span:last-child {
@@ -369,18 +431,19 @@ textarea {
 
 /* 距離スライダー */
 .slider-wrapper {
-  padding: 4px 0;
+  padding: calc(var(--fit) * 4) 0;
 }
 
 .distance-value {
   display: block;
   text-align: center;
   font-family: var(--font-display);
-  font-size: 30px;
+  font-size: calc(24px + var(--fit) * 6);
   font-weight: 700;
+  line-height: 1.3;
   color: var(--text-dark);
   text-shadow: var(--text-halo);
-  margin-bottom: 8px;
+  margin-bottom: calc(var(--fit) * 8);
 }
 
 .distance-value small {
@@ -461,18 +524,24 @@ textarea {
   line-height: 1.7;
   color: var(--text-dark);
   text-shadow: var(--text-halo);
-  margin-top: 8px;
+  margin-top: calc(4px + var(--fit) * 4);
 }
 
 /*
  * ボタン。紫のインクに茶の縁を回し、巻物の留め具のように見せる。
  * 字間を広げて、ボタンというより「宣言」に見せる。
  */
+/*
+ * 低い画面でも押しやすい高さ（44px 以上）が残るよう、縦の余白の下限を決めている。
+ * 行間を固定するのは、書体の読み込み前後や端末の書体の違いでボタンの高さが変わり、
+ * 画面に収まるかどうかが端末ごとにぶれるのを防ぐため。
+ */
 .primary-btn {
   width: 100%;
-  padding: 14px;
+  padding: calc(11px + var(--fit) * 5) 16px;
   font-family: var(--font-display);
-  font-size: 17px;
+  font-size: calc(16px + var(--fit) * 1);
+  line-height: 1.4;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--white);
@@ -500,10 +569,12 @@ textarea {
   z-index: 50;
 }
 
+/* 行間を固定する理由は .primary-btn と同じ */
 .secondary-btn {
-  padding: 12px 22px;
+  padding: calc(10px + var(--fit) * 4) 22px;
   font-family: var(--font-display);
   font-size: 15px;
+  line-height: 1.4;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--primary-color);
@@ -524,30 +595,36 @@ textarea {
 .auth-form {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: calc(6px + var(--fit) * 10);
 }
 
 .auth-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: calc(2px + var(--fit) * 4);
 }
 
 /* 背景に地図の絵を敷くため、灰色ではなく墨の色にして紙の色で縁取る */
 .auth-label {
   font-size: 14px;
   font-weight: 600;
+  line-height: 1.4;
   color: var(--text-dark);
   text-shadow: var(--text-halo);
 }
 
 /*
  * 入力欄。ドット絵の枠で囲み、紙に書き込む枠のように見せる。
- * 文字は16px未満にするとiOSで入力時に画面が拡大されるため、下げない。
+ * 16px未満にするとiOSで入力時に画面が拡大されるため、文字の大きさは下げない。
+ * 低い画面では上下の余白だけを詰める（高さ 38px を下限にして押しやすさを保つ）。
+ * 行間を固定するのは、入力欄の高さを書体に左右させないため。
+ * DotGothic16 の既定の行間は 1.5 倍で、固定しないと入力欄1つにつき約4px高くなり、
+ * 入力欄の多い画面（パスワード再設定など）が低い端末に収まらなくなる。
  */
 .auth-field input {
-  padding: 12px;
+  padding: calc(8px + var(--fit) * 6) 12px;
   font-size: 16px;
+  line-height: 1.25;
   border: var(--pixel-frame-width) solid var(--border-ink);
   border-image: var(--pixel-frame-ink);
   background: var(--surface);
@@ -594,23 +671,35 @@ textarea {
   display: none;
 }
 
+/*
+ * 入力欄ごとのエラーは全項目に同時に出ることがあるため、文字を小さめにして行間を詰める。
+ * 文字は画面の高さで変えずに 12px で固定する。全項目が未入力のときに出る文言のうち
+ * 最も長いもの（確認のため新しいパスワードをもう一度入力してください / 26文字）が、
+ * 幅の狭い端末（360px）でも1行に収まる大きさにしている。
+ */
 .auth-error {
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1.45;
   color: var(--danger);
   text-shadow: var(--text-halo);
 }
 
+/*
+ * 低い画面では文字と行間を詰める。
+ * 幅の狭い端末（360px）でパスワードの条件の文言が3行に折り返さないよう、文字は 12px まで下げる。
+ */
 .auth-note {
-  font-size: 13px;
-  line-height: 1.6;
+  font-size: calc(12px + var(--fit) * 1);
+  line-height: calc(17px + var(--fit) * 4);
   color: var(--text-dark);
   text-shadow: var(--text-halo);
 }
 
 /* 画面の下に置く「ログインへ」「登録へ」の行き先 */
 .auth-switch {
-  margin-top: 24px;
+  margin-top: calc(8px + var(--fit) * 16);
   font-size: 13px;
+  line-height: 1.5;
   text-align: center;
   color: var(--text-dark);
   text-shadow: var(--text-halo);
@@ -645,11 +734,11 @@ textarea {
 
 .loading-content h2 {
   font-family: var(--font-display);
-  font-size: 28px;
+  font-size: calc(24px + var(--fit) * 4);
   letter-spacing: 0.1em;
   color: var(--primary-color);
   text-shadow: var(--text-halo);
-  margin-bottom: 36px;
+  margin-bottom: calc(16px + var(--fit) * 20);
 }
 
 /* 吹き出しの中に入るため、画面見出しより小さくして行間を詰める */
@@ -674,7 +763,7 @@ textarea {
   display: flex;
   justify-content: center;
   gap: 10px;
-  margin-top: 30px;
+  margin-top: calc(16px + var(--fit) * 14);
 }
 
 /* 道に落ちた灯りのように、金色の点が順に光る */
@@ -705,7 +794,7 @@ textarea {
   border: var(--pixel-frame-width) solid var(--border-ink);
   border-image: var(--pixel-frame-ink);
   overflow: hidden;
-  margin-bottom: 16px;
+  margin-bottom: calc(8px + var(--fit) * 8);
   box-shadow: var(--shadow);
 }
 
@@ -918,33 +1007,46 @@ textarea {
 /*
  * 投稿済みの口コミのピン。形は location-pin と同じしずく型で、色だけを変える。
  * 押せることを支援技術へ伝えるためボタン要素で作るため、既定の見た目を打ち消す。
+ *
+ * サイズは --pin-size にまとめ、高さ・頭・持ち上げ量をそこから比率で出す。
+ * しずくは正方形を45°回しているため、角が箱の底辺より size × (√2−1)/2 外へ出る。
+ * MapLibre の anchor: 'bottom' が合わせる箱の底辺と先端を一致させるには、
+ * 高さに 1 + (√2−1)/2 ≒ 1.2071、持ち上げ量に (√2−1)/2 ≒ 0.2071 を掛ける。
+ * 定数で持つと選択時に拡大しても先端が座標からずれない。
  */
 .review-pin {
   /* relative にしないこと（理由は current-location-marker のコメント） */
   position: absolute;
-  width: 24px;
-  /* 先端の張り出しぶんを含めた高さ（location-pin と同じ理由） */
-  height: 29px;
+  --pin-size: 24px;
+  width: var(--pin-size);
+  /* 先端の張り出しぶんを含めた高さ */
+  height: calc(var(--pin-size) * 1.2071);
   padding: 0;
   background: none;
   border: none;
   cursor: pointer;
+  /* 選択時の拡大をなめらかに見せる */
+  transition: width 0.12s ease-out, height 0.12s ease-out;
 }
 
-/* 先端を座標に合わせるため5px持ち上げる（理由は location-pin-head のコメント） */
 .review-pin-head {
   position: absolute;
   left: 50%;
-  bottom: 5px;
-  width: 24px;
-  height: 24px;
-  margin-left: -12px;
+  /* 先端を座標に合わせるため張り出しぶんだけ持ち上げる */
+  bottom: calc(var(--pin-size) * 0.2071);
+  width: var(--pin-size);
+  height: var(--pin-size);
+  margin-left: calc(var(--pin-size) / -2);
   border: 3px solid var(--white);
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   transform-origin: center;
   /* 硬い影が使えない理由は .location-pin-head のコメントを参照 */
   box-shadow: var(--shadow-marker);
+  transition:
+    width 0.12s ease-out,
+    height 0.12s ease-out,
+    border-width 0.12s ease-out;
 }
 
 .review-pin-head::after {
@@ -957,6 +1059,21 @@ textarea {
   height: 7px;
   background: var(--white);
   border-radius: 50%;
+}
+
+/*
+ * 選択中のピン。
+ * 大きくし（A）、縁を太く・影を濃くして浮かせ（E）、重なっても隠れないよう前面へ出す。
+ * z-index はマーカー同士の兄弟要素に効く（MapLibre は重なり順を管理しないため）。
+ */
+.review-pin.is-selected {
+  --pin-size: 34px;
+  z-index: 1;
+}
+
+.review-pin.is-selected .review-pin-head {
+  border-width: 4px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 /* 自分が口コミ投稿済みの場所はオレンジ */
@@ -974,18 +1091,18 @@ textarea {
  * 画面の下端に敷く紙。上辺に金の罫線を引いて、地図と操作の境目を示す。
  */
 .bottom-actions {
-  padding: 20px 24px 28px;
+  padding: calc(10px + var(--fit) * 10) 20px calc(12px + var(--fit) * 16);
   background: var(--surface);
   border-top: 2px solid var(--border-ink);
   display: flex;
-  gap: 16px;
+  gap: 14px;
   align-items: center;
 }
 
 .distance-display {
   display: flex;
   flex-direction: column;
-  min-width: 80px;
+  min-width: 72px;
 }
 
 .distance-display .label {
@@ -1005,16 +1122,34 @@ textarea {
   font-weight: 400;
 }
 
+/*
+ * 主の操作（primary）を1段目に全幅で、従の操作（secondary）を2段目に横並びで置く。
+ * 3つを縦に積むと下部だけで画面の高さの3分の1を占め、低い端末では地図が見えなくなるため。
+ */
 .action-buttons {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .action-buttons .primary-btn,
 .action-buttons .secondary-btn {
   width: 100%;
+}
+
+.action-buttons .primary-btn {
+  grid-column: 1 / -1;
+}
+
+/* 半分の幅に「ホームに戻る」が1行で収まるよう、左右の余白と字間を詰める */
+.action-buttons .secondary-btn {
+  padding-left: 6px;
+  padding-right: 6px;
+  font-size: 14px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 /* ナビゲーション画面の地図 */
@@ -1107,18 +1242,23 @@ textarea {
  * 結果画面。
  * WalkResultView が .screen に is-result を付けて使う。
  * 旅を終えた記録の紙として、中央寄せの羊皮紙にする。
+ * 中央寄せは .result-content の中で行い、下部のボタンは流れの中に置く。
  */
 .screen.is-result {
-  justify-content: center;
-  align-items: center;
   text-align: center;
   position: relative;
-  overflow: hidden;
 }
 
+/* .content と同じく、残りの高さを受け持ち、収まらない場合だけ中をスクロールさせる */
 .result-content {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   width: 100%;
-  padding: 40px 20px;
+  padding: calc(12px + var(--fit) * 28) 20px calc(8px + var(--fit) * 12);
 }
 
 /*
@@ -1131,14 +1271,14 @@ textarea {
   border: var(--pixel-frame-width) solid var(--border-ink);
   border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
-  padding: 20px 24px;
+  padding: calc(6px + var(--fit) * 14) 24px;
   text-align: left;
 }
 
 .stat-item {
   display: flex;
   justify-content: space-between;
-  padding: 12px 0;
+  padding: calc(7px + var(--fit) * 5) 0;
   border-bottom: 1px solid var(--border-gold);
 }
 
@@ -1158,14 +1298,18 @@ textarea {
   color: var(--primary-color);
 }
 
-/* レスポンシブ調整 */
+/*
+ * レスポンシブ調整（幅の狭い端末）。
+ * 縦の大きさは --fit が画面の高さで決めるため、ここでは横方向だけを詰める。
+ */
 @media (max-width: 380px) {
   .button-grid {
     gap: 6px;
   }
   
   .select-btn {
-    padding: 12px 4px;
+    padding-left: 4px;
+    padding-right: 4px;
   }
   
   .btn-icon {
