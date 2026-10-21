@@ -134,7 +134,7 @@ const mascotLabel = computed(
   letter-spacing: 0.04em;
   color: var(--primary-color);
   background: var(--surface);
-  border: 2px solid var(--border-ink);
+  border: 1px solid var(--border-gold);
   border-radius: 999px;
   white-space: nowrap;
 }

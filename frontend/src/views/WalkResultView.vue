@@ -89,10 +89,6 @@ const handleReturnHome = () => {
     class="is-result"
     :has-content-padding="false"
   >
-    <template #background>
-      <div class="paper-map-bg" />
-    </template>
-
     <BaseToast
       v-if="toastMessage"
       :message="toastMessage"
@@ -100,6 +96,11 @@ const handleReturnHome = () => {
     />
 
     <div class="result-content">
+      <div
+        class="confetti"
+        aria-hidden="true"
+      />
+
       <div class="result-body">
         <MascotSpeechBubble
           class="result-mascot"
@@ -157,6 +158,7 @@ const handleReturnHome = () => {
 
 /* 実績の一覧との間を空ける */
 .result-mascot {
+  position: relative;
   margin-bottom: calc(10px + var(--fit) * 22);
 }
 
@@ -180,7 +182,9 @@ const handleReturnHome = () => {
   color: var(--text-gray);
 }
 
+/* 紙吹雪（.confetti）より手前に出すため、位置指定を持たせる */
 .result-footer {
+  position: relative;
   padding: calc(4px + var(--fit) * 8) 20px calc(14px + var(--fit) * 14);
 }
 </style>
