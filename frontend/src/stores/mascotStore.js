@@ -33,6 +33,14 @@ export const useMascotStore = defineStore('mascot', () => {
    */
   const hasExperience = ref(false);
 
+  /**
+   * 実績の取得を一度でも終えたか（成功・失敗を問わない）。
+   * ホーム画面は取得が終わるまでマスコットを出さず、取得前の Lv.1（卵）が
+   * 一瞬ちらつくのを防ぐ。失敗しても true になり、Lv.1 で表示へ進む
+   * （いつまでも何も出ない状態にしないため）。
+   */
+  const isExperienceLoaded = ref(false);
+
   /** 実績から求めた累計経験値 */
   const totalExperiencePoints = computed(() =>
     toExperiencePoints({
@@ -76,6 +84,10 @@ export const useMascotStore = defineStore('mascot', () => {
       cumulativeMinutes.value = 0;
       reviewCount.value = 0;
       hasExperience.value = false;
+    } finally {
+      // 成否にかかわらず「取得を終えた」ことを示す。
+      // ホームはこれを待ってからマスコットを出す（取得前のちらつきを防ぐ）
+      isExperienceLoaded.value = true;
     }
   };
 
@@ -89,6 +101,7 @@ export const useMascotStore = defineStore('mascot', () => {
     cumulativeMinutes.value = 0;
     reviewCount.value = 0;
     hasExperience.value = false;
+    isExperienceLoaded.value = false;
   };
 
   return {
@@ -96,6 +109,7 @@ export const useMascotStore = defineStore('mascot', () => {
     cumulativeMinutes,
     reviewCount,
     hasExperience,
+    isExperienceLoaded,
     totalExperiencePoints,
     levelProgress,
     mascotLevel,

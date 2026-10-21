@@ -7,8 +7,10 @@ import { DEFAULT_MASCOT_LEVEL } from '@/constants/mascotLevels';
  * 進行状況の判定は行わず、表示のみを担当する。
  * 待っている間の案内はマスコットが吹き出しで話す。
  *
- * レベルと経験値バーは親から受け取る（この部品は実績を取得しない）。
- * どちらも省略できるため、デザイン確認用の画面からは引数なしで呼べる。
+ * レベルは親から受け取る（この部品は実績を取得しない）。省略できるため、
+ * デザイン確認用の画面からは引数なしで呼べる。
+ * この画面ではレベル名（`Lv.5 まちの案内人`）だけを添え、経験値ゲージは出さない。
+ * 待機中に細かな進捗まで見せると情報が多く、待ち時間の体感が重くなるため。
  */
 defineProps({
   /** マスコットのレベル。実績を取得できていない場合は既定（Lv.1）のまま */
@@ -29,10 +31,12 @@ defineProps({
     <div class="loading-content">
       <h2>ミチシル</h2>
 
+      <!-- レベル名は添えるが、経験値ゲージは出さない（待機中は情報を絞る） -->
       <MascotSpeechBubble
         :level="mascotLevel"
         placement="stacked"
         size="large"
+        has-level-label
       >
         <h3 class="loading-text">
           ルートを作成中...
@@ -40,11 +44,6 @@ defineProps({
         <p class="loading-subtext">
           あなたにぴったりの<br>お散歩ルートを考えています
         </p>
-
-        <!-- 経験値バーは親が渡したときだけマスコットの下に出る -->
-        <template #experience>
-          <slot name="experience" />
-        </template>
       </MascotSpeechBubble>
 
       <div
