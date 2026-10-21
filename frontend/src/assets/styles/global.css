@@ -200,6 +200,21 @@ textarea {
 }
 
 /*
+ * 操作用のUI部品でダブルタップしても画面が拡大しないようにする。
+ * 口コミの切り替えなどを素早く2回押す誤操作で、画面が勝手に拡大して戻しにくくなるため。
+ * 止めるのはダブルタップ拡大だけで、ピンチ拡大は意図的に許可する（manipulation はパンとピンチを残す）。
+ * 視力が弱い人が拡大できなくなるのを避けるため、index.html の viewport にも
+ * user-scalable=no や maximum-scale は書かない（ページ全体の拡大が止まり、iOS はそもそも無視する）。
+ * 地図の canvas コンテナの中には付けない。地図の拡大縮小は MapLibre が自分で扱い、
+ * touch-action を設定するため上書きしない。スワイプ用の touch-action: none を持つ要素は
+ * 特異度を低く（:where）しているので、個別の指定が常に勝ち、変わらない。
+ * 非ボタンの重なり部品（トーストなど）には、各コンポーネントで同じ指定を足している。
+ */
+:where(button, a, label, summary, select, input, textarea, [role="button"]):not(.maplibregl-canvas-container *) {
+  touch-action: manipulation;
+}
+
+/*
  * MapLibre GL は自分のスタイルシートで地図コンテナへ
  * `font: 12px/20px Helvetica Neue, Arial, ...` を当てる。
  * 地図の中へ挿入する要素（スポットの番号・開始地点の目印・帰属表示）は
@@ -1116,6 +1131,7 @@ textarea {
  * 画面の下端に敷く紙。上辺に金の罫線を引いて、地図と操作の境目を示す。
  */
 .bottom-actions {
+  touch-action: manipulation; /* 理由は共通ルールのコメント */
   padding: calc(10px + var(--fit) * 10) 20px calc(12px + var(--fit) * 16);
   background: var(--surface);
   border-top: 2px solid var(--border-ink);
@@ -1190,6 +1206,7 @@ textarea {
 
 /* ポップアップ */
 .popup {
+  touch-action: manipulation; /* 理由は上の共通ルールのコメント */
   position: fixed;
   inset: 0;
   background: rgba(40,30,55,0.55);
