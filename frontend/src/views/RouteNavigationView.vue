@@ -752,8 +752,9 @@ const handleConfirmEnd = () => {
   font-weight: 600;
   color: var(--white);
   background: var(--primary-color);
-  border: none;
-  border-radius: 999px;
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
   cursor: pointer;
 }
@@ -809,8 +810,14 @@ const handleConfirmEnd = () => {
   box-sizing: border-box;
   /* 上下の余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
   padding: 0 0 0 10px;
-  background: var(--white);
-  border-radius: 999px;
+  /*
+   * 2つのトグルを1枚の札にまとめているため、ドット絵の枠はこの外枠にだけ付ける。
+   * 内側のトグルに付けると、枠（--pixel-frame-width × 2）の分だけ札の中で膨らむ。
+   */
+  background: var(--surface);
+  background-clip: padding-box;
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
   box-shadow: var(--shadow);
 }
 
@@ -832,7 +839,6 @@ const handleConfirmEnd = () => {
   color: var(--text-gray);
   background: transparent;
   border: none;
-  border-radius: 999px;
   cursor: pointer;
 }
 
