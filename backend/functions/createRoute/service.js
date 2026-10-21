@@ -73,17 +73,26 @@ const distanceBetweenM = (from, to) =>
   calculateDistanceM(toLngLat(from), toLngLat(to)) ?? Number.POSITIVE_INFINITY;
 
 /**
- * @description 現在地から選択された距離以内にある口コミの場所を、近い順に集める。
+ * @description 検索条件のジャンルに合い、現在地から選択された距離以内にある
+ * 口コミの場所を、近い順に集める。
+ *
+ * ジャンルは口コミの投稿時に選んだ genreId と、検索条件のジャンルID（おまかせなら選ばれた全件）を
+ * 突き合わせる。どちらも検索条件マスタの genreId なので同じ値で比べられる。
+ * ジャンルを持たない口コミの場所は、条件に合うか判断できないため候補にしない。
  *
  * 口コミの場所はルートの質を上げる付加的な候補のため、取得に失敗しても
  * ルート作成は止めず、口コミの場所なしで続行する。
  * @param {object} params パラメータ
  * @param {{lat: number, lng: number}} params.currentLocation 現在地
  * @param {number} params.radiusM 候補にする範囲（m）。選択された距離
+ * @param {string[]} params.genreIds 検索条件のジャンルID（英語。例: nature）
  * @param {object} repositories データ取得に使うリポジトリ
  * @returns {Promise<Array<{name: string, position: number[], isReviewSpot: true}>>} 近い順の口コミの場所
  */
-const collectReviewCandidateSpots = async ({ currentLocation, radiusM }, repositories) => {
+const collectReviewCandidateSpots = async (
+  { currentLocation, radiusM, genreIds },
+  repositories
+) => {
   let reviewSpots = [];
 
   try {
@@ -96,12 +105,14 @@ const collectReviewCandidateSpots = async ({ currentLocation, radiusM }, reposit
   }
 
   const origin = [currentLocation.lng, currentLocation.lat];
+  const targetGenreIds = new Set(genreIds.filter((genreId) => typeof genreId === 'string'));
 
   return reviewSpots
     .filter(
       (spot) =>
         typeof spot.name === 'string' &&
         spot.name !== '' &&
+        targetGenreIds.has(spot.genreId) &&
         Number.isFinite(spot.position?.[0]) &&
         Number.isFinite(spot.position?.[1])
     )
@@ -657,7 +668,12 @@ export const createRoute = async (
       repositories
     ),
     collectReviewCandidateSpots(
-      { currentLocation, radiusM: selectedDistanceKm * METERS_PER_KM },
+      {
+        currentLocation,
+        radiusM: selectedDistanceKm * METERS_PER_KM,
+        // 周辺検索と同じジャンル（おまかせなら選ばれたすべて）に合う口コミの場所だけを候補にする
+        genreIds: selectedGenres.map((genre) => genre.genreId)
+      },
       repositories
     )
   ]);
@@ -846,7 +862,7 @@ export const createRoute = async (
         name: spot.name,
         lng: snappedPosition[0],
         lat: snappedPosition[1],
-        // 地図で星の形に描き分けるための目印
+        // 地図で紫に描き分けるための目印
         isReviewSpot: spot.isReviewSpot === true
       };
     }),
