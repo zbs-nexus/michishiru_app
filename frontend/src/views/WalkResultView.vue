@@ -202,7 +202,9 @@ const handleReturnHome = () => {
   color: var(--text-gray);
 }
 
+/* 紙吹雪（.confetti）より手前に出すため、位置指定を持たせる */
 .result-footer {
+  position: relative;
   padding: calc(4px + var(--fit) * 8) 20px calc(14px + var(--fit) * 14);
 }
 </style>
