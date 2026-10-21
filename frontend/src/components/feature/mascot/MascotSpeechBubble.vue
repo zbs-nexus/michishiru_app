@@ -53,11 +53,19 @@ const isAlert = computed(() => props.variant === 'alert');
     class="mascot-speech"
     :class="[`is-${placement}`, { 'is-alert': isAlert }]"
   >
-    <MascotAvatar
-      :level="level"
-      :size="size"
-      :has-level-label="hasLevelLabel"
-    />
+    <!--
+      マスコットと、その下に差し込む経験値バーをまとめた入れ物。
+      スロットが空のときは余白も出ないため、バーを渡さない呼び出し元の見た目は変わらない。
+    -->
+    <div class="mascot-side">
+      <MascotAvatar
+        :level="level"
+        :size="size"
+        :has-level-label="hasLevelLabel"
+      />
+
+      <slot name="experience" />
+    </div>
 
     <!-- 文言が入れ替わるため読み上げの対象にする。注意のときだけ割り込ませる -->
     <div
@@ -75,10 +83,22 @@ const isAlert = computed(() => props.variant === 'alert');
   display: flex;
 }
 
+/*
+ * マスコットの側。立ち絵の下に経験値バーを縦に積む。
+ * 幅は立ち絵に合わせるため指定せず、バー側が100%で追従する。
+ */
+.mascot-side {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+}
+
 /* 横並び。マスコットを左、吹き出しを右に置く */
 .mascot-speech.is-side {
   align-items: flex-start;
-  gap: 14px;
+  gap: calc(10px + var(--fit) * 4);
 }
 
 /*
@@ -88,21 +108,22 @@ const isAlert = computed(() => props.variant === 'alert');
 .mascot-speech.is-stacked {
   flex-direction: column-reverse;
   align-items: center;
-  gap: 18px;
+  gap: calc(12px + var(--fit) * 6);
 }
 
 /*
  * 吹き出し。羊皮紙の色に金の縁取りで、巻物に書かれた言葉のように見せる。
  * 三角のしっぽは縁取りの色と内側の色を2枚重ねて描く。
+ * 余白と文字は画面の高さ（global.css の --fit）に合わせて詰める。
  */
 .speech-bubble {
   position: relative;
-  padding: 14px 16px;
+  padding: calc(9px + var(--fit) * 5) 16px;
   border: 2px solid var(--border-gold);
   border-radius: 18px;
   background: var(--surface);
   box-shadow: var(--shadow);
-  font-size: 14px;
+  font-size: calc(13px + var(--fit) * 1);
   font-weight: 600;
   line-height: 1.7;
   color: var(--text-dark);

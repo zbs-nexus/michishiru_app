@@ -4,11 +4,13 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
+import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
 
 /**
@@ -16,6 +18,7 @@ import { useRouteStore } from '@/stores/routeStore';
  * 決定で案内へ進み、再作成で同じ条件のまま作り直し、ホームに戻るで条件入力へ戻る。
  */
 const router = useRouter();
+const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
 const {
   isCreating,
@@ -103,7 +106,22 @@ const handleBackToHome = () => {
 </script>
 
 <template>
-  <RouteLoadingOverlay v-if="isCreating" />
+  <!-- 再作成中のロード画面。ホーム経由のときと同じ見え方にするため同じ値を渡す -->
+  <RouteLoadingOverlay
+    v-if="isCreating"
+    :mascot-level="mascotStore.mascotLevel"
+  >
+    <template
+      v-if="mascotStore.hasExperience"
+      #experience
+    >
+      <MascotExperienceBar
+        :level-progress="mascotStore.levelProgress"
+        :total-experience-points="mascotStore.totalExperiencePoints"
+        size="large"
+      />
+    </template>
+  </RouteLoadingOverlay>
 
   <DefaultLayout
     v-else-if="routeStore.currentRoute"
@@ -116,7 +134,7 @@ const handleBackToHome = () => {
       @close="hideMessage"
     />
 
-    <div class="content">
+    <div class="content suggestion-content">
       <h2 class="page-title">
         おすすめルート
       </h2>
@@ -162,3 +180,26 @@ const handleBackToHome = () => {
     </template>
   </DefaultLayout>
 </template>
+
+<style scoped>
+/*
+ * 見出し・地図・紹介文を縦に並べ、地図に残りの高さをすべて渡す。
+ * 端末の高さが変わっても、紹介文と下部のボタンを出したまま地図だけが伸び縮みする。
+ * 紹介文が長い場合は、地図が下限まで縮んで紹介文に高さを譲る。
+ * 下限まで縮んでも入りきらない分だけ、紹介文の説明の中をスクロールさせる（RouteInfoCard）。
+ */
+.suggestion-content {
+  display: flex;
+  flex-direction: column;
+}
+
+/*
+ * 地図の枠（RouteMapPreview のルート要素）。
+ * 下限は、ルート全体を収める余白（MAP_FIT_PADDING_PX の上下40px）を取っても
+ * 線が見える高さにしている。高い画面ほど下限も上げ、長い紹介文に地図が押し潰されないようにする。
+ */
+.suggestion-content .map-preview {
+  flex: 1 1 0;
+  min-height: calc(150px + var(--fit) * 100);
+}
+</style>
