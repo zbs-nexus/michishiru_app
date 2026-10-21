@@ -5,14 +5,17 @@ import { logError, logWarn } from '../../../shared/utils/logger.js';
 import {
   AWS_REGION,
   GSI_SPOT_LIST,
+  GSI_USER_REVIEW,
   REVIEW_SPOT_QUERY_LIMIT,
   REVIEW_SPOT_SORT_KEY,
-  REVIEW_TABLE_NAME
+  REVIEW_TABLE_NAME,
+  USER_REVIEW_QUERY_LIMIT
 } from '../constants.js';
 
 /**
- * @description 口コミが付いた場所をDynamoDBから取得する。
- * データの取得とアプリ形式への変換のみを行い、距離による絞り込みはService層が行う。
+ * @description 口コミが付いた場所と、利用者が口コミを投稿した場所をDynamoDBから取得する。
+ * データの取得とアプリ形式への変換のみを行い、距離による絞り込みや
+ * 自分の口コミかどうかの判定はService層が行う。
  */
 
 /** リトライ対象とするDynamoDBの例外名 */
@@ -53,10 +56,11 @@ const wait = (durationMs) =>
 /**
  * @description スロットリング時にリトライしながらコマンドを実行する
  * @param {object} command 実行するコマンド
+ * @param {string} failureMessage 失敗したときのログとエラーの文言
  * @returns {Promise<object>} DynamoDBの応答
  * @throws {ApplicationError} リトライしても失敗した場合
  */
-const sendWithRetry = async (command) => {
+const sendWithRetry = async (command, failureMessage) => {
   let lastError = null;
 
   for (let attempt = 1; attempt <= MAX_RETRY_COUNT; attempt += 1) {
@@ -79,13 +83,13 @@ const sendWithRetry = async (command) => {
   }
 
   // ApplicationError の context は上位でログに出ないため、ここで原因を残す
-  logError('口コミの場所の取得に失敗しました', {
-    indexName: GSI_SPOT_LIST,
+  logError(failureMessage, {
+    indexName: command.input.IndexName,
     errorName: lastError?.name,
     errorMessage: lastError?.message
   });
 
-  throw createDataSourceError('口コミの場所の取得に失敗しました', {
+  throw createDataSourceError(failureMessage, {
     errorName: lastError?.name
   });
 };
@@ -96,7 +100,7 @@ const sendWithRetry = async (command) => {
  * 場所メタ行は `sk = 'SPOT'` で揃っているため、GSI-SpotList（PK=sk）を使うと
  * Scan を使わずに Query 1回で引ける。現在地からの距離による絞り込みはService層が行う。
  * GSI-GeoCell（40m四方のセル）で数kmの範囲を引くと数千回の Query が必要になるため使わない。
- * @returns {Promise<Array<{name: string, genreId: string|null, position: number[], ratingAverage: number}>>} 口コミの場所の一覧
+ * @returns {Promise<Array<{spotId: string, name: string, genreId: string|null, position: number[], ratingAverage: number}>>} 口コミの場所の一覧
  * @throws {ApplicationError} データストアへのアクセスに失敗した場合
  */
 export const listReviewSpots = async () => {
@@ -110,7 +114,8 @@ export const listReviewSpots = async () => {
       // 新しい順に返す
       ScanIndexForward: false,
       Limit: REVIEW_SPOT_QUERY_LIMIT
-    })
+    }),
+    '口コミの場所の取得に失敗しました'
   );
 
   return (response.Items ?? []).map((item) => {
@@ -118,6 +123,8 @@ export const listReviewSpots = async () => {
     const ratingSum = Number(item.ratingSum ?? 0);
 
     return {
+      // 自分が口コミ投稿済みの場所かを、口コミ行の spotId と突き合わせて見分けるために使う
+      spotId: item.spotId,
       name: item.spotName,
       // 投稿時に選んだジャンル（検索条件マスタの genreId）。検索条件との突き合わせに使う
       genreId: typeof item.genreId === 'string' ? item.genreId : null,
@@ -127,4 +134,33 @@ export const listReviewSpots = async () => {
       ratingAverage: ratingCount === 0 ? 0 : ratingSum / ratingCount
     };
   });
+};
+
+/**
+ * @description 指定ユーザーが口コミを投稿した場所のIDを、新しい順に取得する。
+ *
+ * 口コミ行だけが userId を持つため、GSI-UserReview（PK=userId）を引くと
+ * そのユーザーの口コミ行だけが返る。件数は地図のオレンジのピン（getUserReviews）と揃える。
+ * @param {string} userId ユーザーID（Cognito の sub）
+ * @returns {Promise<string[]>} 口コミを投稿した場所のIDの一覧
+ * @throws {ApplicationError} データストアへのアクセスに失敗した場合
+ */
+export const queryReviewedSpotIdsByUserId = async (userId) => {
+  const response = await sendWithRetry(
+    new QueryCommand({
+      TableName: REVIEW_TABLE_NAME,
+      IndexName: GSI_USER_REVIEW,
+      KeyConditionExpression: '#userId = :userId',
+      ExpressionAttributeNames: { '#userId': 'userId', '#spotId': 'spotId' },
+      ExpressionAttributeValues: { ':userId': userId },
+      // 場所の見分けに使うのは spotId だけのため、ほかの属性は受け取らない
+      ProjectionExpression: '#spotId',
+      // 新しい順に返す
+      ScanIndexForward: false,
+      Limit: USER_REVIEW_QUERY_LIMIT
+    }),
+    '自分の口コミの取得に失敗しました'
+  );
+
+  return (response.Items ?? []).map((item) => item.spotId);
 };

@@ -85,6 +85,19 @@ export const REVIEW_SPOT_SORT_KEY = 'SPOT';
  */
 export const REVIEW_SPOT_QUERY_LIMIT = 200;
 
+/**
+ * ユーザーが投稿した口コミを新しい順に引くためのGSI名（getUserReviews と同じ索引）。
+ * ルートの口コミの場所のうち、自分が口コミ投稿済みの場所を見分けるために引く。
+ */
+export const GSI_USER_REVIEW = 'GSI-UserReview';
+
+/**
+ * 自分が口コミ投稿済みの場所を読み出す最大件数（新しい順）。
+ * 地図のオレンジのピン（getUserReviews の DEFAULT_QUERY_LIMIT）と同じ件数にそろえ、
+ * ピンとルートのスポットで「自分の口コミの場所」の判定を一致させる。
+ */
+export const USER_REVIEW_QUERY_LIMIT = 100;
+
 /** プロンプトへ渡す口コミの場所の最大件数。現在地に近い順に選ぶ */
 export const MAX_PROMPT_REVIEW_CANDIDATES = 5;
 
