@@ -72,9 +72,11 @@ inclusion: always
 | 所要時間 | duration | ルートの移動時間 |
 | 次の目的地 | nextSpot | 案内中にこれから向かうスポット |
 | 次の目的地までの距離 | distanceToNextM | 現在地から次の目的地までの直線距離（メートル） |
-| 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達後は未到達へ戻さない |
+| 到達済みのスポットID | visitedSpotIds | 到達したスポットのIDの一覧。到達した順に並ぶ。未到達へ戻すのは returnToPreviousSpot（末尾の1件ずつ）のみ |
 | 到達済みのスポット数 | visitedCount | 到達したスポットの個数 |
-| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。`useRouteProgress.js` の関数 |
+| 次の目的地へ進める | advanceToNextSpot | 利用者の操作で次の目的地を到達済みにし、その次へ切り替えること。次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。`useRouteProgress.js` の関数。誤って進めた場合は returnToPreviousSpot で戻す |
+| 前の目的地へ戻す | returnToPreviousSpot | 直前に到達済みにしたスポットを未到達へ戻し、次の目的地をそのスポットに戻すこと。足跡も消える。すべて巡った後も使える。`useRouteProgress.js` の関数 |
+| 前の目的地へ戻せるかどうか | canReturnToPreviousSpot | 到達済みのスポットが1件以上あるか。偽（1スポット目）のときは戻るボタンを出さない。`useRouteProgress.js` の computed |
 | 距離表示の丸め単位 | DISTANCE_ROUNDING_UNIT_M | 距離表示を丸める単位（メートル）。`RouteNextSpotBanner.vue` の定数 |
 | 採用する測位精度の上限 | MAX_ACCEPTABLE_ACCURACY_M | この値より精度が悪い測位は現在地に採用しない（メートル）。`useLocationTracking.js` の定数 |
 | 経路に沿った距離 | alongRouteDistanceM | 直線距離ではなく、経路の折れ線をたどった距離（メートル） |
@@ -415,4 +417,5 @@ inclusion: always
 | 2026/10/14 | 次の目的地の切り替えをボタン操作のみにし、現在地からの到達判定を廃止したことに伴い ARRIVAL_THRESHOLD_M を削除 |
 | 2026/10/14 | 到達済みのスタンプを「済」の文字から足跡の画像（`assets/images/spot-visited-stamp.png`）に変更したことに伴い VISITED_STAMP_LABEL を削除 |
 | 2026/10/14 | ビル群での現在地のずれ対策（速さによる飛びの除外・経路への吸着表示）に伴い「ルートとスポット」へ displayLocation / isSnappedToRoute / MAX_SNAP_DEVIATION_M / MAX_WALKING_SPEED_MPS / jumpCandidate / MAX_CONSECUTIVE_JUMP_COUNT を追加 |
+| 2026/10/21 | 案内中に前の目的地へ戻すボタンの追加に伴い「ルートとスポット」へ returnToPreviousSpot / canReturnToPreviousSpot を追加。visitedSpotIds の「到達後は未到達へ戻さない」を、returnToPreviousSpot でのみ戻す旨へ変更 |
 | 2026/10/21 | 口コミの場所を巡るルートの生成とチェーン店の優先度の引き下げに伴い「ルートとスポット」へ reviewCandidates / isReviewSpot / isChain を追加 |
