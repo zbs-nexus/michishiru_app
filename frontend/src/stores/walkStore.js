@@ -48,7 +48,7 @@ export const useWalkStore = defineStore('walk', () => {
   /**
    * 計測の欠落を検知したかどうか。
    * 画面を切られた・測位が途切れた場合に立てる。復帰しても欠けた区間は取り戻せないため、
-   * 一度立てたら戻さない（visitedSpotIds と同じラッチの方針）
+   * 一度立てたら戻さない
    */
   const hasMeasurementGap = ref(false);
 
@@ -161,7 +161,7 @@ export const useWalkStore = defineStore('walk', () => {
    * @returns {void}
    */
   const setVisitedSpotIds = (spotIds) => {
-    // 到達済みを未到達へ戻さないラッチは useRouteProgress 側が担保しているため、
+    // 到達状況の増減は useRouteProgress 側が決めるため、
     // ここでは判定せず渡された一覧をそのまま持つ
     visitedSpotIds.value = [...spotIds];
   };
