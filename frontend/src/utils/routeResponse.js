@@ -106,8 +106,11 @@ const toSpots = (items) => {
     lng: Number.isFinite(item.lng) ? item.lng : null,
     spotType: item.spotType ?? item.type ?? null,
     icon: item.icon ?? null,
-    // 口コミが付いた場所か。地図で星の形に描き分ける（古い応答には無いため false 扱い）
-    isReviewSpot: item.isReviewSpot === true
+    // 口コミが付いた場所か。地図で色を描き分ける（古い応答には無いため false 扱い）
+    isReviewSpot: item.isReviewSpot === true,
+    // 自分が口コミ投稿済みの場所か。口コミの場所のうち、自分の口コミはオレンジ・他の人の口コミは紫にする。
+    // 口コミの場所でないのに真になる値は受け取らない（古い応答には無いため false 扱い）
+    isMyReviewSpot: item.isReviewSpot === true && item.isMyReviewSpot === true
   }));
 };
 

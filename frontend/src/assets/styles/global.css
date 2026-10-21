@@ -41,8 +41,13 @@
   --route-walked-leg: #9AA0A6;
   /* 今の区間。トースト（次の目的地のバナー）の左枠と同じ緑。ROUTE_CURRENT_LEG_COLOR と同値にする */
   --route-current-leg: var(--accent-green);
-  /* 口コミの場所を示す紫。口コミのピン（紫）とルートの口コミのスポットで同じ値を使う */
+  /* 他の人の口コミの場所を示す紫。口コミのピン（紫）とルートの口コミのスポットで同じ値を使う */
   --review-purple: #8E44AD;
+  /*
+   * 自分が口コミ投稿済みの場所を示すオレンジ。口コミのピン（オレンジ）とルートの口コミのスポットで同じ値を使う。
+   * 明るい色のため、白い文字を重ねるとコントラストが足りない（約2.2:1）。文字を重ねるときは墨（--text-dark）にする
+   */
+  --review-orange: #F39C12;
   /* 羊皮紙。画面の地の色 */
   --bg-light: #FBF4E4;
   --bg-deep: #F1E3C8;
@@ -883,15 +888,27 @@ textarea {
 
 /*
  * 口コミが付いた場所のスポットマーカー。
- * 形・番号の文字・大きさ（26px）は通常のスポットと同じ丸のままにし、色だけを紫にする。
- * 紫は口コミのピン（他の人の口コミ）と同じ --review-purple で、「口コミの場所」を色で示す。
+ * 形・番号の文字・大きさ（26px）は通常のスポットと同じ丸のままにし、色だけを変える。
+ * 口コミのピンと同じ色で「誰の口コミの場所か」を示す。
+ *   紫（is-review）               他の人の口コミの場所（--review-purple）
+ *   オレンジ（is-review is-mine）  自分が口コミ投稿済みの場所（--review-orange）
  * 到達済み（is-visited）は背景をスタンプ画像に差し替えるため、こちらの色より後で上書きされる。
  */
 .spot-marker.is-review {
   background: var(--review-purple);
 }
 
-/* 到達済みは口コミの場所も通常と同じ足跡のスタンプにする（紫を残さない） */
+/*
+ * 自分が口コミ投稿済みの場所はオレンジ。
+ * 白い番号ではコントラストが足りない（約2.2:1）ため、番号の文字だけ墨（--text-dark、約6:1）にする。
+ * 到達済みの指定（.spot-marker.is-review.is-visited）と詳細度が同じため、必ずそれより前に置く。
+ */
+.spot-marker.is-review.is-mine {
+  background: var(--review-orange);
+  color: var(--text-dark);
+}
+
+/* 到達済みは口コミの場所も通常と同じ足跡のスタンプにする（紫・オレンジを残さない） */
 .spot-marker.is-review.is-visited {
   background: url('../images/spot-visited-stamp.png') center / cover no-repeat;
 }
@@ -972,6 +989,7 @@ textarea {
  *   オレンジ（review-pin-mine）  自分が口コミ投稿済みの場所
  *   紫（review-pin-other）      他の人の口コミ投稿の場所
  * ルートのスポット（青）・開始地点（緑）とも色で見分ける。
+ * ルートのスポットのうち口コミの場所（.spot-marker.is-review）も、同じ意味で紫・オレンジに塗り分ける。
  */
 
 /*
@@ -1103,7 +1121,7 @@ textarea {
 
 /* 自分が口コミ投稿済みの場所はオレンジ */
 .review-pin-mine .review-pin-head {
-  background: #F39C12;
+  background: var(--review-orange);
 }
 
 /* 他の人の口コミ投稿の場所は紫 */

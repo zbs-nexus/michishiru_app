@@ -3,7 +3,7 @@ import { toRoute } from '@/utils/routeResponse';
 
 /**
  * @description ルート作成APIの応答を画面の形へ変換する処理のテスト。
- * 口コミの場所の目印（isReviewSpot）が地図まで届くかを確かめる。
+ * 口コミの場所の目印（isReviewSpot / isMyReviewSpot）が地図まで届くかを確かめる。
  */
 
 /**
@@ -66,9 +66,51 @@ describe('toRoute（口コミの場所の目印）', () => {
       lng: 139.7045,
       spotType: null,
       icon: null,
-      isReviewSpot: true
+      isReviewSpot: true,
+      isMyReviewSpot: false
     });
     expect(route.distanceKm).toBe(3);
+  });
+});
+
+describe('toRoute（自分の口コミの場所の目印）', () => {
+  test('口コミの場所のうち isMyReviewSpot が true のものだけを自分の口コミの場所として渡す', () => {
+    const route = toRoute(
+      buildPayload([
+        { name: '自分の口コミ', lng: 139.7045, lat: 35.6872, isReviewSpot: true, isMyReviewSpot: true },
+        { name: '他の人の口コミ', lng: 139.706, lat: 35.688, isReviewSpot: true, isMyReviewSpot: false },
+        { name: '公園', lng: 139.703, lat: 35.686, isReviewSpot: false, isMyReviewSpot: false }
+      ])
+    );
+
+    expect(
+      route.spots.map((spot) => [spot.name, spot.isReviewSpot, spot.isMyReviewSpot])
+    ).toEqual([
+      ['自分の口コミ', true, true],
+      ['他の人の口コミ', true, false],
+      ['公園', false, false]
+    ]);
+  });
+
+  test('口コミの場所でないのに isMyReviewSpot が true の値は、自分の口コミの場所として扱わない', () => {
+    const route = toRoute(
+      buildPayload([
+        { name: '公園', lng: 139.703, lat: 35.686, isReviewSpot: false, isMyReviewSpot: true }
+      ])
+    );
+
+    expect(route.spots[0].isMyReviewSpot).toBe(false);
+  });
+
+  test('isMyReviewSpot を持たない古い応答・true 以外の値は、他の人の口コミの場所として扱う', () => {
+    const route = toRoute(
+      buildPayload([
+        { name: '古い応答', lng: 139.7045, lat: 35.6872, isReviewSpot: true },
+        { name: '文字列', lng: 139.706, lat: 35.688, isReviewSpot: true, isMyReviewSpot: 'true' }
+      ])
+    );
+
+    expect(route.spots.map((spot) => spot.isMyReviewSpot)).toEqual([false, false]);
   });
 });
 
