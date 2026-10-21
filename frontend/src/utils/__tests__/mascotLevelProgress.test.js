@@ -74,7 +74,7 @@ describe('toMascotLevelProgress', () => {
   });
 
   test('上限レベルでは次の必要経験値を持たず割合は1になる', () => {
-    const progress = toMascotLevelProgress(32015);
+    const progress = toMascotLevelProgress(32080);
 
     expect(progress).toEqual({
       mascotLevel: 10,
