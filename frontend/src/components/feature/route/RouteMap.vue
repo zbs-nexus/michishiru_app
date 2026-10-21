@@ -275,13 +275,13 @@ const renderOriginMarker = () => {
  * スタイルは global.css に置いている。
  * @param {number} order 巡る順序（1始まり）
  * @param {boolean} isVisited 到達済みかどうか
- * @param {boolean} [isReviewSpot] 口コミが付いた場所か（形を星にする）
+ * @param {boolean} [isReviewSpot] 口コミが付いた場所か（色を紫にする）
  * @returns {HTMLElement} マーカーとして使う要素
  */
 const createSpotMarkerElement = (order, isVisited, isReviewSpot = false) => {
   const element = document.createElement('div');
   element.className = 'spot-marker';
-  // 口コミの場所は形だけを星にする（文字・色・大きさは他のスポットと同じ）
+  // 口コミの場所は色だけを紫にする（形・文字・大きさは他のスポットと同じ丸）
   element.classList.toggle('is-review', isReviewSpot);
   applySpotMarkerState(element, order, isVisited, isReviewSpot);
   return element;
@@ -302,7 +302,7 @@ const applySpotMarkerState = (element, order, isVisited, isReviewSpot = false) =
   element.textContent = isVisited ? '' : String(order);
 
   // 見た目からは番号も到達済みかどうかも読み取れないため、読み上げで補う。
-  // 星の形の意味も、形だけでは伝わらないため添える
+  // 紫の意味も、色だけでは伝わらないため添える
   const reviewLabel = isReviewSpot ? '・口コミの場所' : '';
   element.setAttribute(
     'aria-label',
