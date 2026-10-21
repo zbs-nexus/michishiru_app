@@ -3,8 +3,6 @@ import { createPinia, setActivePinia } from 'pinia';
 import { nextTick } from 'vue';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
-import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
-import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
 
 /**
@@ -97,32 +95,6 @@ const recoverTracking = () => receivePosition();
  * @returns {object} マウントした wrapper
  */
 const mountNavigationView = () => mount(RouteNavigationView, { shallow: true });
-
-/** 案内に使う3スポット。巡る順に並べる */
-const NAVIGATION_SPOTS = [
-  { spotId: 'spot-1', name: 'A', lat: 35.69, lng: 139.7 },
-  { spotId: 'spot-2', name: 'B', lat: 35.691, lng: 139.701 },
-  { spotId: 'spot-3', name: 'C', lat: 35.692, lng: 139.702 }
-];
-
-/**
- * @description ルートを用意して案内画面を shallow で描画する。
- * shallow のままでは DefaultLayout のスロットが描画されず画面内のボタンを押せないため、
- * スロットだけを描画するスタブに差し替える
- * @returns {object} マウントした wrapper
- */
-const mountNavigationViewWithRoute = () => {
-  useRouteStore().setCurrentRoute({ spots: NAVIGATION_SPOTS, geometry: null });
-
-  return mount(RouteNavigationView, {
-    shallow: true,
-    global: {
-      stubs: {
-        DefaultLayout: { template: '<div><slot /><slot name="footer" /></div>' }
-      }
-    }
-  });
-};
 
 beforeEach(() => {
   setActivePinia(createPinia());
@@ -299,62 +271,5 @@ describe('RouteNavigationView の画面の切り替えによる欠落の記録',
 
     // 購読が残っていると、案内していない間の画面の切り替えで欠落が記録される
     expect(walkStore.hasMeasurementGap).toBe(false);
-  });
-});
-
-describe('RouteNavigationView の前の目的地に戻るボタン', () => {
-  test('開始直後（1スポット目）は戻るボタンを出さない', () => {
-    const wrapper = mountNavigationViewWithRoute();
-
-    expect(wrapper.find('.previous-spot-btn').exists()).toBe(false);
-    expect(wrapper.find('.next-spot-btn').exists()).toBe(true);
-  });
-
-  test('進めると戻るボタンが出て、押すと1つ前の目的地に戻り足跡の元データも消える', async () => {
-    const walkStore = useWalkStore();
-    const wrapper = mountNavigationViewWithRoute();
-
-    await wrapper.find('.next-spot-btn').trigger('click');
-
-    expect(wrapper.find('.previous-spot-btn').exists()).toBe(true);
-    expect(walkStore.visitedSpotIds).toEqual(['spot-1']);
-    expect(wrapper.findComponent(RouteNextSpotBanner).props('spotName')).toBe('B');
-
-    await wrapper.find('.previous-spot-btn').trigger('click');
-
-    expect(wrapper.find('.previous-spot-btn').exists()).toBe(false);
-    expect(walkStore.visitedSpotIds).toEqual([]);
-    expect(wrapper.findComponent(RouteNextSpotBanner).props('spotName')).toBe('A');
-  });
-
-  test('すべて巡った後も戻るボタンを出し、押すと最後のスポットの案内に戻る', async () => {
-    const wrapper = mountNavigationViewWithRoute();
-
-    for (let count = 0; count < NAVIGATION_SPOTS.length; count += 1) {
-      await wrapper.find('.next-spot-btn').trigger('click');
-    }
-
-    expect(wrapper.find('.next-spot-btn').exists()).toBe(false);
-    expect(wrapper.find('.previous-spot-btn').exists()).toBe(true);
-
-    await wrapper.find('.previous-spot-btn').trigger('click');
-
-    expect(wrapper.find('.next-spot-btn').exists()).toBe(true);
-    expect(wrapper.findComponent(RouteNextSpotBanner).props('spotName')).toBe('C');
-  });
-
-  test('1本にまとめた口コミの切り替えが、それぞれの表示状態を持つ', async () => {
-    const wrapper = mountNavigationViewWithRoute();
-    const mineToggle = wrapper.find('.review-toggle-mine');
-    const otherToggle = wrapper.find('.review-toggle-other');
-
-    expect(mineToggle.attributes('aria-pressed')).toBe('true');
-    expect(otherToggle.attributes('aria-pressed')).toBe('true');
-
-    await mineToggle.trigger('click');
-
-    expect(mineToggle.attributes('aria-pressed')).toBe('false');
-    expect(mineToggle.classes()).not.toContain('is-on');
-    expect(otherToggle.attributes('aria-pressed')).toBe('true');
   });
 });

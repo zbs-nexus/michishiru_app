@@ -135,7 +135,7 @@ const distanceScaleLabels = computed(() => [
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: calc(6px + var(--fit) * 6);
+  margin-bottom: 12px;
 }
 
 /* 見出しの下余白は .section-header が持つため、横並びの中央揃えを崩さないよう消す */
@@ -143,13 +143,10 @@ const distanceScaleLabels = computed(() => [
   margin-bottom: 0;
 }
 
-/*
- * おまかせの札。選ぶと紫のインクで塗られる。
- * 見出しの行の高さを決めるため、低い画面では少し小さくする（28〜32px）。
- */
+/* おまかせの札。選ぶと紫のインクで塗られる */
 .random-icon-btn {
-  width: calc(28px + var(--fit) * 4);
-  height: calc(28px + var(--fit) * 4);
+  width: 2rem;
+  height: 2rem;
   border: 2px solid var(--border-gold);
   border-radius: 50%;
   background-color: var(--surface);

@@ -70,12 +70,6 @@ const mascotLabel = computed(
 /*
  * 画像の幅はサイズごとに --mascot-width で切り替える。
  * 画像は縦長（5:6）なので高さは自動にして比率を保つ。
- * medium と large は画面の高さ（global.css の --fit）に合わせて縮め、
- * 低い端末でも画面がスクロールせずに収まるようにする。
- * small は案内画面のバナーに置く大きさで、これ以上縮めると姿が判別できないため固定する。
- *
- * レベルごとの画像は縦横比を 5:6 に揃えて差し替える前提のため、幅を固定しても
- * 姿によって背の高さがばらつかない。
  */
 .mascot-avatar {
   position: relative;
@@ -91,22 +85,17 @@ const mascotLabel = computed(
 }
 
 .mascot-avatar.is-medium {
-  --mascot-width: calc(56px + var(--fit) * 20);
+  --mascot-width: 76px;
 }
 
 .mascot-avatar.is-large {
-  --mascot-width: calc(84px + var(--fit) * 44);
+  --mascot-width: 128px;
 }
 
 .mascot-image {
   display: block;
   width: var(--mascot-width);
   height: auto;
-  /*
-   * 画像はドット絵なので、拡大・縮小でぼかされると輪郭が濁る。
-   * 補間を切って、ドットの角をそのまま残す（アプリの書体がドットなのと揃える）。
-   */
-  image-rendering: pixelated;
   /* ふわりと浮いて見せる。地面の影は画像側に描いてある */
   animation: mascot-float 4.5s ease-in-out infinite;
 }

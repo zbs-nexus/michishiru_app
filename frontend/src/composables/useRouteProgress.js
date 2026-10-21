@@ -12,7 +12,7 @@ import {
  * 現在地からの自動判定は行わない。GPSの誤差で、立ち寄っていないスポットが
  * 到達済みになったり、立ち寄ったのに到達にならなかったりするのを避けるため。
  *
- * 到達済みのスポットは、利用者が returnToPreviousSpot で戻した場合（直前の1件ずつ）にのみ未到達へ戻す。
+ * 到達済みのスポットは未到達へ戻さない。切り替えは一方向にのみ進める。
  *
  * 現在地は次の目的地までの距離の表示にだけ使う。
  * 距離は経路の折れ線に沿って測り、測れない場合は直線距離で代替する。
@@ -30,14 +30,14 @@ const MAX_ROUTE_DEVIATION_M = 100;
  * @param {import('vue').Ref<object[]>} sources.spots 巡る順に並んだスポットの一覧
  * @param {import('vue').Ref<{lat: number, lng: number}>} sources.currentLocation 現在地（距離の表示に使う）
  * @param {import('vue').Ref<object|null>} [sources.geometry] 経路の形（GeoJSONのLineString）
- * @returns {object} 次の目的地・距離・到達状況・次の目的地へ進める関数・前の目的地へ戻す関数
+ * @returns {object} 次の目的地・距離・到達状況・次の目的地へ進める関数
  */
 export const useRouteProgress = ({
   spots,
   currentLocation,
   geometry = ref(null)
 }) => {
-  /** 到達済みのスポットID。ボタン操作で末尾に追加し、戻す操作で末尾から取り除く */
+  /** 到達済みのスポットID。ボタン操作で末尾にのみ追加する */
   const visitedSpotIds = ref([]);
 
   /** 次に向かう目的地。すべて到達済みの場合はnull */
@@ -119,32 +119,12 @@ export const useRouteProgress = ({
     visitedSpotIds.value = [...visitedSpotIds.value, nextSpot.value.spotId];
   };
 
-  /** 前の目的地へ戻せるかどうか。到達済みが1件以上あるとき真 */
-  const canReturnToPreviousSpot = computed(() => visitedSpotIds.value.length > 0);
-
-  /**
-   * @description 利用者の操作で前の目的地へ戻す。
-   * 直前に到達済みにしたスポットを未到達へ戻し、次の目的地をそのスポットに戻す。
-   * 足跡（到達済みのスタンプ）も消える。すべて巡った後も使える。
-   * 配列は丸ごと差し替える（呼び出し側の watch が deep なしで拾えるようにするため）。
-   * @returns {void}
-   */
-  const returnToPreviousSpot = () => {
-    if (!canReturnToPreviousSpot.value) {
-      return;
-    }
-
-    visitedSpotIds.value = visitedSpotIds.value.slice(0, -1);
-  };
-
   return {
     nextSpot,
     distanceToNextM,
     visitedSpotIds,
     visitedCount,
     isCompleted,
-    canReturnToPreviousSpot,
-    advanceToNextSpot,
-    returnToPreviousSpot
+    advanceToNextSpot
   };
 };

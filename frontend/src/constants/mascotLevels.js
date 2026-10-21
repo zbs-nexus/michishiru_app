@@ -1,22 +1,13 @@
-import mascotLv01Image from '@/assets/images/mascot/mascot-lv01.png';
-import mascotLv02Image from '@/assets/images/mascot/mascot-lv02.png';
-import mascotLv03Image from '@/assets/images/mascot/mascot-lv03.png';
-import mascotLv04Image from '@/assets/images/mascot/mascot-lv04.png';
-import mascotLv05Image from '@/assets/images/mascot/mascot-lv05.png';
-import mascotLv06Image from '@/assets/images/mascot/mascot-lv06.png';
-import mascotLv07Image from '@/assets/images/mascot/mascot-lv07.png';
-import mascotLv08Image from '@/assets/images/mascot/mascot-lv08.png';
-import mascotLv09Image from '@/assets/images/mascot/mascot-lv09.png';
-import mascotLv10Image from '@/assets/images/mascot/mascot-lv10.png';
+import mascotLv01Image from '@/assets/images/mascot/mascot-lv01.svg';
 
 /**
  * @description マスコット（案内役のフクロウ）のレベルごとの定義。
  *
- * レベルはユーザーの実績（累計距離・累計時間・口コミの投稿件数）から求めた
- * 経験値で1〜10まで上がる。実績の取得と経験値の計算は mascotStore が行う。
+ * レベルはユーザーの実績に応じて1〜10まで上がる想定だが、実績の集計と保存は
+ * まだ無いため、現時点では全画面が DEFAULT_MASCOT_LEVEL（Lv.1）を表示する。
  *
- * 画像はLv.1〜Lv.10まで用意済み。画像が未用意のレベルは mascotImage を null に
- * しておけば、getMascotLevel() が用意済みの姿で代替する（姿を増やすときのための備え）。
+ * 画像が未用意のレベルは mascotImage を null にしておく。
+ * 姿が増えたら画像を追加して null を差し替えるだけでよく、呼び出し側は変えない。
  */
 
 /** マスコットのレベルの下限 */
@@ -26,8 +17,8 @@ export const MASCOT_MIN_LEVEL = 1;
 export const MASCOT_MAX_LEVEL = 10;
 
 /**
- * 実績を取得できていないときに使う既定のレベル。
- * 取得に失敗した状態で高いレベルを出さないよう、下限に合わせている。
+ * 実績連動が入るまで全画面で使う固定のレベル。
+ * 実績から求めたレベルを渡せるようになったら、この値は初期値としてのみ使う。
  */
 export const DEFAULT_MASCOT_LEVEL = MASCOT_MIN_LEVEL;
 
@@ -37,15 +28,15 @@ export const DEFAULT_MASCOT_LEVEL = MASCOT_MIN_LEVEL;
  */
 export const MASCOT_LEVELS = [
   { level: 1, mascotName: 'ミチのタマゴ', mascotImage: mascotLv01Image },
-  { level: 2, mascotName: 'よちよちヒナ', mascotImage: mascotLv02Image },
-  { level: 3, mascotName: 'てくてくフクロウ', mascotImage: mascotLv03Image },
-  { level: 4, mascotName: 'みならいガイド', mascotImage: mascotLv04Image },
-  { level: 5, mascotName: 'まちの案内人', mascotImage: mascotLv05Image },
-  { level: 6, mascotName: 'みちしるべの使者', mascotImage: mascotLv06Image },
-  { level: 7, mascotName: 'たびびとフクロウ', mascotImage: mascotLv07Image },
-  { level: 8, mascotName: '星導の賢者', mascotImage: mascotLv08Image },
-  { level: 9, mascotName: '大樹の道標', mascotImage: mascotLv09Image },
-  { level: 10, mascotName: '極・ミチシル', mascotImage: mascotLv10Image }
+  { level: 2, mascotName: 'よちよちヒナ', mascotImage: null },
+  { level: 3, mascotName: 'てくてくフクロウ', mascotImage: null },
+  { level: 4, mascotName: 'みならいガイド', mascotImage: null },
+  { level: 5, mascotName: 'まちの案内人', mascotImage: null },
+  { level: 6, mascotName: 'みちしるべの使者', mascotImage: null },
+  { level: 7, mascotName: 'たびびとフクロウ', mascotImage: null },
+  { level: 8, mascotName: '星導の賢者', mascotImage: null },
+  { level: 9, mascotName: '大樹の道標', mascotImage: null },
+  { level: 10, mascotName: '極・ミチシル', mascotImage: null }
 ];
 
 /** 画像が用意されているレベルの定義。レベルの昇順 */
