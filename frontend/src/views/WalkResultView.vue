@@ -99,11 +99,13 @@ const measurementNote = computed(() => {
 const mascotSubMessage = computed(() => {
   // チュートリアルは実績を計測しないため、記録した体の文言は出さない。
   // 下部固定の専用部品はやめ、この画面の案内役（result-mascot）に今のステップの文言を話させる。
+  // 実績でマスコットが育つことを伝えるため、ステップの文言に一言添える。
   if (tutorialStore.isActive) {
-    return (
+    const baseMessage =
       tutorialStore.currentMessage ??
-      'これでチュートリアルはおしまい。実際の散歩でも、この調子でね！'
-    );
+      'これでチュートリアルはおしまい。実際の散歩でも、この調子でね！';
+
+    return `${baseMessage} 実際は、歩いた実績に応じてぼくが進化するよ！`;
   }
 
   return walkStore.hasLocationFix

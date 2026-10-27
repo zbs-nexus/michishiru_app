@@ -682,6 +682,12 @@ const handleSelectReviewSpot = async ({ spotId, position }) => {
 
     if (tutorialStore.isStep(tutorialStore.STEP.OPEN_REVIEW)) {
       tutorialStore.completeStep(tutorialStore.STEP.OPEN_REVIEW);
+
+      // ステップが評価（RATE_REVIEW）へ進むと、フォーム上部に案内文が足されて
+      // フォームの高さが変わる。先に測った寄せ位置のままだと対象のピンが中央から
+      // ずれるため、高さが変わってから測り直して寄せ直す。
+      await nextTick();
+      focusOffsetY.value = measureVisibleCenterOffsetY();
     }
     return;
   }
