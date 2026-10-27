@@ -77,6 +77,14 @@ const isReviewFormVisible = ref(false);
 /** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
 const bannerRef = ref(null);
 
+/**
+ * 画面上部の操作をまとめた入れ物の要素。
+ * バナー・前後のボタン・口コミ切替に加え、チュートリアル中はマスコットの吹き出しも含む。
+ * 口コミの場所を可視範囲の中央へ寄せるとき、この下端を上端のインセットに使う
+ * （バナー下端だけだと、下に積んだマスコットの吹き出しに対象がかぶる）。
+ */
+const navigationTopRef = ref(null);
+
 /** 前の目的地・次の目的地へのボタンの段。地図のズームボタンをこの下へ逃がすために測る */
 const spotStepRowRef = ref(null);
 
@@ -231,9 +239,16 @@ const isTutorialAdvanceStep = computed(() =>
   tutorialStore.isStep(tutorialStore.STEP.ADVANCE_SPOT)
 );
 
-/** チュートリアルで「終了」をハイライトする段階かどうか */
-const isTutorialEndStep = computed(() =>
-  tutorialStore.isStep(tutorialStore.STEP.REQUEST_END)
+/**
+ * チュートリアルで「終了」をハイライトする段階かどうか。
+ * 「終了」を押すと終了確認（CONFIRM_END）へ進むが、そこでキャンセルすると
+ * モーダルだけ閉じてステップは CONFIRM_END のまま残る。このとき終了ボタンを
+ * 押し直せるよう、REQUEST_END だけでなく CONFIRM_END の間もハイライト（操作可）にする。
+ */
+const isTutorialEndStep = computed(
+  () =>
+    tutorialStore.isStep(tutorialStore.STEP.REQUEST_END) ||
+    tutorialStore.isStep(tutorialStore.STEP.CONFIRM_END)
 );
 
 /**
@@ -509,11 +524,14 @@ const toggleOtherReviews = () => {
  * @returns {number} 地図中央からの縦のずれ（下方向が正）
  */
 const measureVisibleCenterOffsetY = () => {
-  const bannerEl = bannerRef.value?.$el ?? null;
+  // 上端は画面上部の操作全体（バナー・前後のボタン・口コミ切替・チュートリアルの吹き出し）の
+  // 下端にする。バナー下端だけだと、下に積んだマスコットの吹き出しに対象の場所がかぶる。
+  // navigation-top が取れないときはバナー下端で代替する。
+  const topEl = navigationTopRef.value ?? bannerRef.value?.$el ?? null;
   const formEl = reviewFormRef.value?.$el ?? null;
 
   // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
-  const topInsetPx = bannerEl ? bannerEl.getBoundingClientRect().bottom : 0;
+  const topInsetPx = topEl ? topEl.getBoundingClientRect().bottom : 0;
   const bottomInsetPx = formEl ? formEl.offsetHeight : 0;
 
   return (topInsetPx - bottomInsetPx) / 2;
@@ -843,7 +861,10 @@ const handleConfirmEnd = async () => {
       画面上部の操作をまとめて縦に積む（バナー → 前後のボタン → 口コミの表示切り替え）。
       目的地の名前が長くバナーが伸びても、下の段が押し下げられて重ならない。
     -->
-    <div class="navigation-top">
+    <div
+      ref="navigationTopRef"
+      class="navigation-top"
+    >
       <RouteNextSpotBanner
         ref="bannerRef"
         :spot-name="nextSpot?.name ?? null"

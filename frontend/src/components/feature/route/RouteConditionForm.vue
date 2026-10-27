@@ -257,12 +257,11 @@ const isGenreButtonLocked = (value) => {
 
 /*
  * チュートリアルで選ばせる対象のジャンルのボタン。
- * 周りが淡くなる中で、枠と影で浮かせて目を引く。
+ * 枠は足さず通常表示のままにする。周りのロック対象（半透明）との対比で際立たせる。
  */
 .select-btn.is-tutorial-target {
   position: relative;
   z-index: 1;
-  box-shadow: 0 0 0 3px var(--primary-light), var(--shadow);
 }
 
 /*
@@ -275,11 +274,13 @@ const isGenreButtonLocked = (value) => {
   pointer-events: none;
 }
 
-/* チュートリアルで操作させる距離の区画。枠で浮かせて目を引く */
+/*
+ * チュートリアルで操作させる距離の区画。枠は足さず通常表示のままにする。
+ * 以前は紫の枠（box-shadow）で囲んでいたが、区画の下辺に紺色の線が残って見えるため取りやめた。
+ * ジャンルの区画がロック（半透明）される対比で、距離の区画が際立つ。
+ */
 .input-section.is-tutorial-target {
   position: relative;
   z-index: 1;
-  border-radius: 12px;
-  box-shadow: 0 0 0 3px var(--primary-light);
 }
 </style>
