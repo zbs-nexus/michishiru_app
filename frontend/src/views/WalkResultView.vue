@@ -220,7 +220,6 @@ const handleReturnHome = () => {
         </TutorialSpotlight>
       </div>
     </template>
-
   </DefaultLayout>
 </template>
 

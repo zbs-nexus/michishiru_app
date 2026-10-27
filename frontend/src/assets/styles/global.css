@@ -605,6 +605,22 @@ textarea {
   transform: translateY(-1px);
 }
 
+/*
+ * 無効時。押せないことを見た目でも示すため淡くし、ホバーの持ち上げも効かせない。
+ * チュートリアルの「ルートを作成」ボタンが、作成の段階に進むまで無効になる場面で使う。
+ */
+.primary-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+
+.primary-btn:disabled:hover {
+  filter: none;
+  transform: none;
+}
+
 .primary-btn.full-width {
   position: fixed;
   bottom: 20px;

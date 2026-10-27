@@ -348,7 +348,6 @@ const isTutorialCreateStep = computed(() =>
     >
       再読み込み
     </BaseButton>
-
   </DefaultLayout>
 </template>
 

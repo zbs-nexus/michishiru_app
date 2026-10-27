@@ -526,9 +526,13 @@ const focusOnPosition = () => {
     return;
   }
 
+  // 口コミフォームを開く流れでは、フォームの高さが段階的に変わって寄せ直しが
+  // 続けて走る。アニメーションさせると前後の easeTo が競合して最後のずれが効き切らず、
+  // 対象のピンが可視範囲の中央に収まらないため、寄せは即時（duration: 0）にする。
   map.easeTo({
     center: [props.focusPosition.lng, props.focusPosition.lat],
-    offset: [0, props.focusOffsetY]
+    offset: [0, props.focusOffsetY],
+    duration: 0
   });
 };
 

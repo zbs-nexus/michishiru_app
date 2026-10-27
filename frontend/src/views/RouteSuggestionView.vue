@@ -215,7 +215,6 @@ const handleBackToHome = () => {
         </div>
       </div>
     </template>
-
   </DefaultLayout>
 </template>
 
