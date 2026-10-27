@@ -10,7 +10,6 @@ import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteConditionForm from '@/components/feature/route/RouteConditionForm.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
-import TutorialMascot from '@/components/feature/tutorial/TutorialMascot.vue';
 import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useRouteConditionOptions } from '@/composables/useRouteConditionOptions';
 import { useRouteCreation } from '@/composables/useRouteCreation';
@@ -80,6 +79,34 @@ const mascotMessage = computed(() => {
 const mascotMessageVariant = computed(() =>
   hasConditionOptions.value ? 'normal' : 'alert'
 );
+
+/**
+ * 案内役が話す文言。
+ * チュートリアル中は今のステップの文言を優先し、通常時はこの画面の案内文を話す。
+ * 下部固定の専用部品はやめ、通常時と同じ home-mascot の位置で文言だけ切り替える。
+ */
+const displayMascotMessage = computed(() =>
+  tutorialStore.isActive && tutorialStore.currentMessage
+    ? tutorialStore.currentMessage
+    : mascotMessage.value
+);
+
+/**
+ * 案内役の吹き出しを出すかどうか。
+ * 読み込み中（条件マスタ・実績）は出さず、両方そろってから出す。
+ * チュートリアル中は条件マスタの読み込みが終わっていれば、今のステップの文言を出す。
+ */
+const isMascotVisible = computed(() => {
+  if (isLoadingOptions.value) {
+    return false;
+  }
+
+  if (tutorialStore.isActive) {
+    return Boolean(tutorialStore.currentMessage);
+  }
+
+  return mascotStore.isExperienceLoaded;
+});
 
 /**
  * @description 選択されたジャンルを、表示名と合わせてストアへ保存する。
@@ -250,18 +277,21 @@ const isTutorialCreateStep = computed(() =>
       has-level-label で `Lv.5 まちの案内人` のようにレベルと名前を添える。
     -->
     <MascotSpeechBubble
-      v-if="mascotStore.isExperienceLoaded && !isLoadingOptions && !tutorialStore.isActive"
+      v-if="isMascotVisible"
       class="home-mascot"
-      :message="mascotMessage"
-      :variant="mascotMessageVariant"
+      :message="displayMascotMessage"
+      :variant="tutorialStore.isActive ? 'normal' : mascotMessageVariant"
       :level="mascotStore.mascotLevel"
       placement="side"
       size="medium"
-      has-level-label
+      :has-level-label="!tutorialStore.isActive"
     >
-      <!-- 実績を取得できたときだけ経験値バーを出す（失敗時はLv.1でバー無し） -->
+      <!--
+        実績を取得できたときだけ経験値バーを出す（失敗時はLv.1でバー無し）。
+        チュートリアル中はレベル表示・バーを出さず、案内の文言だけに集中させる。
+      -->
       <template
-        v-if="mascotStore.hasExperience"
+        v-if="mascotStore.hasExperience && !tutorialStore.isActive"
         #experience
       >
         <MascotExperienceBar
@@ -320,12 +350,6 @@ const isTutorialCreateStep = computed(() =>
       再読み込み
     </BaseButton>
 
-    <!-- チュートリアル中の案内役。今のステップの文言を画面下部で話す -->
-    <TutorialMascot
-      v-if="tutorialStore.isActive && tutorialStore.currentMessage"
-      :message="tutorialStore.currentMessage"
-      :level="mascotStore.mascotLevel"
-    />
   </DefaultLayout>
 </template>
 

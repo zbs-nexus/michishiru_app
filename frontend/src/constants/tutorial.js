@@ -8,7 +8,7 @@
 import { DEFAULT_CURRENT_LOCATION } from '@/constants/routeConditions';
 
 /** チュートリアルで選ばせるジャンル（genreId）。表示上は「写真」のジャンル */
-export const TUTORIAL_GENRE_ID = 'city';
+export const TUTORIAL_GENRE_ID = 'photo';
 
 /** チュートリアルで合わせさせる距離（km） */
 export const TUTORIAL_DISTANCE_KM = 5;
@@ -34,7 +34,7 @@ const toPosition = (lngOffset, latOffset) => [
 /**
  * ダミールートのスポット。
  * 案内を短く終わらせるため2スポットにする（「次の目的地へ」は1回で終端に着く）。
- * 写真(city)ジャンルらしい、撮り歩きの立ち寄り先にしている。
+ * 写真ジャンルらしい、撮り歩きの立ち寄り先にしている。
  */
 const TUTORIAL_SPOTS = [
   {
@@ -42,7 +42,7 @@ const TUTORIAL_SPOTS = [
     name: '光が差し込む並木道',
     lng: ORIGIN.lng + 0.004,
     lat: ORIGIN.lat + 0.003,
-    spotType: 'city',
+    spotType: 'photo',
     icon: null,
     isReviewSpot: false,
     isMyReviewSpot: false,
@@ -54,7 +54,7 @@ const TUTORIAL_SPOTS = [
     name: '街を見渡せる歩道橋',
     lng: ORIGIN.lng + 0.007,
     lat: ORIGIN.lat - 0.001,
-    spotType: 'city',
+    spotType: 'photo',
     icon: null,
     isReviewSpot: false,
     isMyReviewSpot: false,

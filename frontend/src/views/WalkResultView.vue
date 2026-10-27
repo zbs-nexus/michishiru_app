@@ -7,7 +7,6 @@ import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar
 import MascotLevelUpCelebration from '@/components/feature/mascot/MascotLevelUpCelebration.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import WalkResultStats from '@/components/feature/walk/WalkResultStats.vue';
-import TutorialMascot from '@/components/feature/tutorial/TutorialMascot.vue';
 import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
@@ -98,9 +97,13 @@ const measurementNote = computed(() => {
  * 位置情報を取得できなかった場合は実績が空になるため、文言を変える。
  */
 const mascotSubMessage = computed(() => {
-  // チュートリアルは実績を計測しないため、記録した体の文言は出さない
+  // チュートリアルは実績を計測しないため、記録した体の文言は出さない。
+  // 下部固定の専用部品はやめ、この画面の案内役（result-mascot）に今のステップの文言を話させる。
   if (tutorialStore.isActive) {
-    return 'これでチュートリアルはおしまい。実際の散歩でも、この調子でね！';
+    return (
+      tutorialStore.currentMessage ??
+      'これでチュートリアルはおしまい。実際の散歩でも、この調子でね！'
+    );
   }
 
   return walkStore.hasLocationFix
@@ -157,7 +160,7 @@ const handleReturnHome = () => {
           :level="mascotStore.mascotLevel"
           placement="stacked"
           size="large"
-          has-level-label
+          :has-level-label="!tutorialStore.isActive"
         >
           <h2 class="result-title">
             お疲れさまでした
@@ -216,15 +219,6 @@ const handleReturnHome = () => {
       </div>
     </template>
 
-    <!--
-      チュートリアル中の案内役。お祝い演出は出さないため、演出中かどうかに関わらず出す。
-      ただし本文を隠す演出が無いチュートリアルでは、結果の本体と一緒に見える。
-    -->
-    <TutorialMascot
-      v-if="tutorialStore.isActive && tutorialStore.currentMessage"
-      :message="tutorialStore.currentMessage"
-      :level="mascotStore.mascotLevel"
-    />
   </DefaultLayout>
 </template>
 
