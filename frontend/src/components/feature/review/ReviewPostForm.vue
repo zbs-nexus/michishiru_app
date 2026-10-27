@@ -608,10 +608,7 @@ const handleSubmit = () => {
     </p>
 
     <div class="review-footer">
-      <div
-        class="review-rating"
-        :class="{ 'is-tutorial-target': tutorialHighlight === 'rating' }"
-      >
+      <div class="review-rating">
         <span class="review-label review-label-inline">評価</span>
         <ReviewRatingInput
           :model-value="rating"
@@ -971,8 +968,11 @@ const handleSubmit = () => {
   background-clip: padding-box;
 }
 
-/* チュートリアルで操作させる要素（評価・投稿ボタン）を枠で浮かせる */
-.review-rating.is-tutorial-target,
+/*
+ * チュートリアルで操作させる投稿ボタンを枠で浮かせる。
+ * 評価（★）には枠を付けない（星の周りに枠が出て見た目が悪いため）。
+ * 評価の段階はフォーム上部の案内文（review-tutorial-hint）で「★をタップ」と誘導する。
+ */
 .review-submit.is-tutorial-target.primary-btn {
   border-radius: 10px;
   box-shadow: 0 0 0 3px var(--primary-light);

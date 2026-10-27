@@ -53,34 +53,30 @@ defineProps({
 }
 
 /*
- * ロック中・ハイライト中は、まとまりとして暗転・浮き上がりを効かせるため
- * display: contents を解除してブロックに戻す。
+ * ロック中は、まとまりとして半透明を効かせるため display: contents を解除して
+ * ブロックに戻す。ハイライト中は見た目を変えないので素通し（display: contents）のままにし、
+ * 中のボタンの固定配置（position: fixed）やレイアウトに一切干渉しない。
  */
-.tutorial-spotlight.is-locked,
-.tutorial-spotlight.is-highlighted {
+.tutorial-spotlight.is-locked {
   display: block;
 }
 
 /*
- * ロック対象。半透明にして触れないようにする。
+ * ロック対象。半透明にして触れないようにする（ホーム画面のジャンル選択と同じ見た目）。
  * pointer-events: none で、中のボタンやスライダーの操作をすべて止める。
+ * 画面全体へ暗い膜はかけない。押せない要素だけを淡くする。
  */
 .tutorial-spotlight.is-locked {
-  opacity: 0.35;
+  opacity: 0.4;
   pointer-events: none;
-  filter: grayscale(0.4);
+  filter: grayscale(0.5);
 }
 
 /*
- * ハイライト対象。羊皮紙色の台紙に乗せて浮かせ、周りの暗い部分から際立たせる。
- * position と z-index で、同じ画面の暗転した要素より手前に出す。
+ * ハイライト対象。中身はそのまま通常表示にし、暗転も枠も足さない。
+ * 周りのロック対象が淡くなることで相対的に際立つため、ここでは見た目を変えない。
+ * 以前は position: relative と全画面オーバーレイで浮かせていたが、
+ * 画面下部に固定したボタン（.primary-btn.full-width）の位置が崩れ、
+ * 暗い膜が地図や結果画面にかぶるため取りやめた。
  */
-.tutorial-spotlight.is-highlighted {
-  position: relative;
-  z-index: 60;
-  border-radius: 12px;
-  box-shadow:
-    0 0 0 4px var(--primary-light),
-    0 0 0 9999px rgba(43, 28, 74, 0.45);
-}
 </style>
