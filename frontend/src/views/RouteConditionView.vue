@@ -10,7 +10,6 @@ import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteConditionForm from '@/components/feature/route/RouteConditionForm.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
-import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useRouteConditionOptions } from '@/composables/useRouteConditionOptions';
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
@@ -326,19 +325,19 @@ const isTutorialCreateStep = computed(() =>
       <!--
         未選択でも押せるようにし、押下時にポップアップで不足を知らせる。
         画面の下端に固定して、条件を見ながらいつでも押せるようにする。
-        チュートリアル中は、作成の段階でだけハイライトして押せるようにする。
+        チュートリアル中は、作成の段階（CREATE_ROUTE）でだけ押せるようにし、
+        それ以外の段階では is-disabled で無効にする。
+        TutorialSpotlight でラップしないのは、ロック時に親へかかる filter が
+        包含ブロックを作り、固定表示（position: fixed）のこのボタンの位置を崩すため。
+        無効表示（disabled）なら固定位置を保ったまま、作成段階以外の押下を防げる。
       -->
-      <TutorialSpotlight
-        :is-active="tutorialStore.isActive"
-        :is-highlighted="isTutorialCreateStep"
+      <BaseButton
+        is-full-width
+        :is-disabled="tutorialStore.isActive && !isTutorialCreateStep"
+        @click="handleCreateRoute"
       >
-        <BaseButton
-          is-full-width
-          @click="handleCreateRoute"
-        >
-          ルートを作成
-        </BaseButton>
-      </TutorialSpotlight>
+        ルートを作成
+      </BaseButton>
     </template>
 
     <!-- 失敗の理由は吹き出しで伝えるため、ここは操作のみ置く -->
