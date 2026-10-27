@@ -7,9 +7,13 @@ import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar
 import MascotLevelUpCelebration from '@/components/feature/mascot/MascotLevelUpCelebration.vue';
 import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import WalkResultStats from '@/components/feature/walk/WalkResultStats.vue';
+import TutorialMascot from '@/components/feature/tutorial/TutorialMascot.vue';
+import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
 import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
+import { TUTORIAL_WALK_RESULT } from '@/constants/tutorial';
 
 /**
  * @description 散歩結果を表示する画面。
@@ -26,14 +30,33 @@ import { MEASUREMENT_STATUS, useWalkStore } from '@/stores/walkStore';
 const router = useRouter();
 const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
+const tutorialStore = useTutorialStore();
 const walkStore = useWalkStore();
 
 /**
  * お祝い演出を表示中かどうか。
  * 遷移前に積まれたレベルアップ（pendingLevelUpLevels）があれば、最初から表示する。
  * 演出を出している間は結果の本体を隠し、「演出 → 結果」の順に見せる。
+ * チュートリアルは経験値を動かさないため、演出は出さない。
  */
-const isCelebrationVisible = ref(mascotStore.pendingLevelUpLevels.length > 0);
+const isCelebrationVisible = ref(
+  !tutorialStore.isActive && mascotStore.pendingLevelUpLevels.length > 0
+);
+
+/** 結果に表示する総距離（km）。チュートリアル中はダミーの固定値を使う */
+const resultDistanceKm = computed(() =>
+  tutorialStore.isActive ? TUTORIAL_WALK_RESULT.totalDistanceKm : walkStore.totalDistanceKm
+);
+
+/** 結果に表示するスポット数。チュートリアル中はダミーの固定値を使う */
+const resultSpotCount = computed(() =>
+  tutorialStore.isActive ? TUTORIAL_WALK_RESULT.spotCount : walkStore.spotCount
+);
+
+/** 結果に表示する所要時間（分）。チュートリアル中はダミーの固定値を使う */
+const resultDurationMinutes = computed(() =>
+  tutorialStore.isActive ? TUTORIAL_WALK_RESULT.durationMinutes : walkStore.elapsedMinutes
+);
 
 /** 演出で順に見せるレベルの一覧（経由レベルを含む昇順）。遷移前に積まれたものを読む */
 const celebrationLevels = computed(() => mascotStore.pendingLevelUpLevels);
@@ -54,6 +77,11 @@ const closeCelebration = () => {
  * 足りない可能性をこの注記で補う
  */
 const measurementNote = computed(() => {
+  // チュートリアルはダミーの固定値を見せるため、計測の注記は出さない
+  if (tutorialStore.isActive) {
+    return null;
+  }
+
   if (walkStore.measurementStatus === MEASUREMENT_STATUS.UNAVAILABLE) {
     return '位置情報を取得できなかったため、実績を計測できませんでした';
   }
@@ -69,17 +97,28 @@ const measurementNote = computed(() => {
  * マスコットが話す労いの言葉。
  * 位置情報を取得できなかった場合は実績が空になるため、文言を変える。
  */
-const mascotSubMessage = computed(() =>
-  walkStore.hasLocationFix
+const mascotSubMessage = computed(() => {
+  // チュートリアルは実績を計測しないため、記録した体の文言は出さない
+  if (tutorialStore.isActive) {
+    return 'これでチュートリアルはおしまい。実際の散歩でも、この調子でね！';
+  }
+
+  return walkStore.hasLocationFix
     ? '今日の道のりを記録しておいたよ'
-    : '位置情報を取得できなかったから、実績は記録できなかったよ'
-);
+    : '位置情報を取得できなかったから、実績は記録できなかったよ';
+});
 
 /**
  * @description 条件と実績をリセットして条件入力画面へ戻る
  * @returns {void}
  */
 const handleReturnHome = () => {
+  // チュートリアルはここで完了。ダミールートが残らないよう条件・実績も初期化する
+  if (tutorialStore.isActive) {
+    tutorialStore.completeStep(tutorialStore.STEP.RETURN_HOME);
+    tutorialStore.finish();
+  }
+
   routeStore.resetConditions();
   walkStore.resetWalk();
   router.push({ name: 'route-condition' });
@@ -127,9 +166,12 @@ const handleReturnHome = () => {
             {{ mascotSubMessage }}
           </p>
 
-          <!-- 今終えた散歩の分を含めた経験値を出す（遷移前に取り直し済み） -->
+          <!--
+            今終えた散歩の分を含めた経験値を出す（遷移前に取り直し済み）。
+            チュートリアルは経験値を動かさないため、バーは出さない。
+          -->
           <template
-            v-if="mascotStore.hasExperience"
+            v-if="mascotStore.hasExperience && !tutorialStore.isActive"
             #experience
           >
             <MascotExperienceBar
@@ -141,9 +183,9 @@ const handleReturnHome = () => {
         </MascotSpeechBubble>
 
         <WalkResultStats
-          :distance-km="walkStore.totalDistanceKm"
-          :spot-count="walkStore.spotCount"
-          :duration-minutes="walkStore.elapsedMinutes"
+          :distance-km="resultDistanceKm"
+          :spot-count="resultSpotCount"
+          :duration-minutes="resultDurationMinutes"
         />
 
         <p
@@ -163,11 +205,26 @@ const handleReturnHome = () => {
     -->
     <template #footer>
       <div class="result-footer">
-        <BaseButton @click="handleReturnHome">
-          ホームに戻る
-        </BaseButton>
+        <TutorialSpotlight
+          :is-active="tutorialStore.isActive"
+          :is-highlighted="tutorialStore.isStep(tutorialStore.STEP.RETURN_HOME)"
+        >
+          <BaseButton @click="handleReturnHome">
+            ホームに戻る
+          </BaseButton>
+        </TutorialSpotlight>
       </div>
     </template>
+
+    <!--
+      チュートリアル中の案内役。お祝い演出は出さないため、演出中かどうかに関わらず出す。
+      ただし本文を隠す演出が無いチュートリアルでは、結果の本体と一緒に見える。
+    -->
+    <TutorialMascot
+      v-if="tutorialStore.isActive && tutorialStore.currentMessage"
+      :message="tutorialStore.currentMessage"
+      :level="mascotStore.mascotLevel"
+    />
   </DefaultLayout>
 </template>
 
