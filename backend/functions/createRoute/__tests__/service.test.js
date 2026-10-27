@@ -405,7 +405,7 @@ describe('createRoute', () => {
     /** おまかせで参照するマスタ（ジャンル3件・距離1〜10km・無効ジャンル1件） */
     const conditionItems = [
       { pk: 'GENRE#ALL', genreId: 'nature', genreName: '自然', isActive: true },
-      { pk: 'GENRE#ALL', genreId: 'city', genreName: '街歩き', isActive: true },
+      { pk: 'GENRE#ALL', genreId: 'photo', genreName: '写真', isActive: true },
       { pk: 'GENRE#ALL', genreId: 'history', genreName: '歴史', isActive: true },
       { pk: 'GENRE#ALL', genreId: 'disabled', genreName: '無効', isActive: false },
       { pk: 'DISTANCE#ALL', distanceKm: 1, isActive: true },
@@ -450,7 +450,7 @@ describe('createRoute', () => {
 
         const selectedIds = result.selectedGenres.map((genre) => genre.genreId);
         assert.ok(selectedIds.length >= 1 && selectedIds.length <= 3);
-        assert.ok(selectedIds.every((id) => ['nature', 'city', 'history'].includes(id)));
+        assert.ok(selectedIds.every((id) => ['nature', 'photo', 'history'].includes(id)));
         assert.equal(new Set(selectedIds).size, selectedIds.length);
         assert.deepEqual([...queriedGenreIds].sort(), [...selectedIds].sort());
         assert.equal(result.selectedDistanceKm, undefined);
@@ -935,15 +935,15 @@ describe('createRoute（口コミの場所とジャンル）', () => {
     const stub = createRepositoryStub({
       reviewSpots: [
         createReviewSpot('自然の口コミ', 'nature'),
-        createReviewSpot('街歩きの口コミ', 'city'),
+        createReviewSpot('写真の口コミ', 'photo'),
         createReviewSpot('グルメの口コミ', 'gourmet')
       ]
     });
 
-    // おまかせで選べるジャンルを nature と city の2つに限り、必ず両方が選ばれる状況を作る
+    // おまかせで選べるジャンルを nature と photo の2つに限り、必ず両方が選ばれる状況を作る
     stub.repositories.listConditions = async () => [
       { pk: 'GENRE#ALL', genreId: 'nature', genreName: '自然', isActive: true },
-      { pk: 'GENRE#ALL', genreId: 'city', genreName: '街歩き', isActive: true }
+      { pk: 'GENRE#ALL', genreId: 'photo', genreName: '写真', isActive: true }
     ];
     stub.repositories.queryGenreNumberByGenreId = async (genreId) => genreId;
 
@@ -958,7 +958,7 @@ describe('createRoute（口コミの場所とジャンル）', () => {
       const selectedIds = result.selectedGenres.map((genre) => genre.genreId);
       const expectedNames = [
         ['自然の口コミ', 'nature'],
-        ['街歩きの口コミ', 'city']
+        ['写真の口コミ', 'photo']
       ]
         .filter(([, genreId]) => selectedIds.includes(genreId))
         .map(([name]) => name);

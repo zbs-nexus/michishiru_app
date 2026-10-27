@@ -4,10 +4,10 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
-import TutorialMascot from '@/components/feature/tutorial/TutorialMascot.vue';
 import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
@@ -144,6 +144,20 @@ const handleBackToHome = () => {
         おすすめルート
       </h2>
 
+      <!--
+        チュートリアル中の案内役。通常マスコットの定位置が無いため、
+        見出しの下・地図の上の空き場所に流し込みで置く（地図やボタンに重ねない）。
+        レベル表示・経験値バーは出さず、案内の文言だけを話す。
+      -->
+      <MascotSpeechBubble
+        v-if="tutorialStore.isActive && tutorialStore.currentMessage"
+        class="tutorial-mascot-inline"
+        :message="tutorialStore.currentMessage"
+        :level="mascotStore.mascotLevel"
+        placement="side"
+        size="small"
+      />
+
       <RouteMapPreview
         :geometry="routeStore.currentRoute.geometry"
         :spots="routeStore.currentRoute.spots"
@@ -202,12 +216,6 @@ const handleBackToHome = () => {
       </div>
     </template>
 
-    <!-- チュートリアル中の案内役 -->
-    <TutorialMascot
-      v-if="tutorialStore.isActive && tutorialStore.currentMessage"
-      :message="tutorialStore.currentMessage"
-      :level="mascotStore.mascotLevel"
-    />
   </DefaultLayout>
 </template>
 
@@ -221,6 +229,12 @@ const handleBackToHome = () => {
 .suggestion-content {
   display: flex;
   flex-direction: column;
+}
+
+/* チュートリアルの案内役。見出しと地図の間に流し込みで置き、下に余白を取る */
+.tutorial-mascot-inline {
+  flex-shrink: 0;
+  margin-bottom: calc(6px + var(--fit) * 8);
 }
 
 /*

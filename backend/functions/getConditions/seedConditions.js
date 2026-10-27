@@ -49,9 +49,9 @@ export const SEED_CONDITIONS = [
   },
   {
     pk: 'GENRE#ALL',
-    genreId: 'city',
-    genreName: '街歩き',
-    iconEmoji: '🏙️',
+    genreId: 'photo',
+    genreName: '写真',
+    iconEmoji: '📷',
     sortOrder: 2,
     isActive: true
   },

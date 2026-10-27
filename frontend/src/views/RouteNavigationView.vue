@@ -6,6 +6,7 @@ import BaseModal from '@/components/base/BaseModal.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
+import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
@@ -20,7 +21,6 @@ import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkResultSave } from '@/composables/useWalkResultSave';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
-import TutorialMascot from '@/components/feature/tutorial/TutorialMascot.vue';
 import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
@@ -943,6 +943,21 @@ const handleConfirmEnd = async () => {
           みんな
         </button>
       </div>
+
+      <!--
+        チュートリアル中の案内役。地図は全画面で通常マスコットの定位置が無いため、
+        画面上部の操作（バナー・前後のボタン・口コミ切替）の下の空き位置に積む。
+        固定オーバーレイでは置かず、.navigation-top の流れに乗せて地図操作を塞がない。
+        口コミフォーム（評価・投稿）の段階ではフォーム上部に案内を出すため、ここには出さない。
+      -->
+      <MascotSpeechBubble
+        v-if="tutorialStore.isActive && tutorialStore.currentMessage && !isReviewFormVisible"
+        class="tutorial-mascot-inline"
+        :message="tutorialStore.currentMessage"
+        :level="mascotStore.mascotLevel"
+        placement="side"
+        size="small"
+      />
     </div>
 
     <RouteNavigationMap
@@ -1008,16 +1023,6 @@ const handleConfirmEnd = async () => {
         @cancel="handleCancelEnd"
       />
     </template>
-
-    <!--
-      チュートリアル中の案内役。口コミフォーム（z-index 150）が開く段階では
-      フォームに隠れるため、フォームが開いていないときだけ下部に出す。
-    -->
-    <TutorialMascot
-      v-if="tutorialStore.isActive && tutorialStore.currentMessage && !isReviewFormVisible"
-      :message="tutorialStore.currentMessage"
-      :level="mascotStore.mascotLevel"
-    />
 
     <!--
       終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。

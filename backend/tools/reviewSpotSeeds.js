@@ -22,7 +22,7 @@ export const SEED_AREA = {
 /** ジャンルIDと表示名（検索条件マスタの genreId / genreName と揃える） */
 export const SEED_GENRES = {
   nature: '自然',
-  city: '街歩き',
+  photo: '写真',
   history: '歴史',
   gourmet: 'グルメ'
 };
@@ -44,20 +44,20 @@ export const REVIEW_SPOT_SEEDS = [
   { name: '水の音で仕事の疲れが溶ける噴水', genreId: 'nature' },
   { name: '秋に銀杏の香りが攻めてくる通り', genreId: 'nature' },
 
-  // 街歩き
-  { name: '地下通路で必ず迷子になる入口', genreId: 'city' },
-  { name: 'スーツの人波をぼんやり眺める交差点', genreId: 'city' },
-  { name: '夜景がやたらエモい歩道橋', genreId: 'city' },
-  { name: 'ガラス張りに空が映るビルの足元', genreId: 'city' },
-  { name: '映画のロケっぽさ満点の石畳', genreId: 'city' },
-  { name: '自販機のラインナップが攻めてる角', genreId: 'city' },
-  { name: 'エスカレーターが長すぎる地下広場', genreId: 'city' },
-  { name: '雨でも濡れずに歩ける最強ルート', genreId: 'city' },
-  { name: '早朝だけ誰もいない静かな広場', genreId: 'city' },
-  { name: 'ビルの隙間から月が見える場所', genreId: 'city' },
-  { name: '撮ると妙に映えるレンガ風の壁', genreId: 'city' },
-  { name: '信号待ちで考え事がはかどる角', genreId: 'city' },
-  { name: '休日だけ時間がゆっくり流れる広場', genreId: 'city' },
+  // 写真
+  { name: '地下通路で必ず迷子になる入口', genreId: 'photo' },
+  { name: 'スーツの人波をぼんやり眺める交差点', genreId: 'photo' },
+  { name: '夜景がやたらエモい歩道橋', genreId: 'photo' },
+  { name: 'ガラス張りに空が映るビルの足元', genreId: 'photo' },
+  { name: '映画のロケっぽさ満点の石畳', genreId: 'photo' },
+  { name: '自販機のラインナップが攻めてる角', genreId: 'photo' },
+  { name: 'エスカレーターが長すぎる地下広場', genreId: 'photo' },
+  { name: '雨でも濡れずに歩ける最強ルート', genreId: 'photo' },
+  { name: '早朝だけ誰もいない静かな広場', genreId: 'photo' },
+  { name: 'ビルの隙間から月が見える場所', genreId: 'photo' },
+  { name: '撮ると妙に映えるレンガ風の壁', genreId: 'photo' },
+  { name: '信号待ちで考え事がはかどる角', genreId: 'photo' },
+  { name: '休日だけ時間がゆっくり流れる広場', genreId: 'photo' },
 
   // 歴史
   { name: '古い石垣っぽい何かが残る坂', genreId: 'history' },
