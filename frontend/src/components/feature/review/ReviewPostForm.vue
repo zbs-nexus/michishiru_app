@@ -55,10 +55,26 @@ const props = defineProps({
   isPosting: {
     type: Boolean,
     default: false
+  },
+  /**
+   * チュートリアルの案内文。チュートリアル中のみ渡し、フォーム上部に案内として出す。
+   * 渡されない（null）ときはチュートリアル表示を一切行わない。
+   */
+  tutorialMessage: {
+    type: String,
+    default: null
+  },
+  /**
+   * チュートリアルで強調する要素。
+   * 'rating' は評価の★を、'submit' は投稿ボタンを目立たせる。チュートリアル外ではnull。
+   */
+  tutorialHighlight: {
+    type: String,
+    default: null
   }
 });
 
-const emit = defineEmits(['submitReview', 'close', 'changeExpanded']);
+const emit = defineEmits(['submitReview', 'close', 'changeExpanded', 'changeRating']);
 
 /** ロケーション名の最大文字数 */
 const SPOT_NAME_MAX_LENGTH = 30;
@@ -309,6 +325,17 @@ const handleSelectGenre = (genreId) => {
 };
 
 /**
+ * @description 利用者が★で評価を付けたときに、値を反映して親へ通知する。
+ * initialRating の反映（watch）とは別に、操作による変更だけをここで知らせる。
+ * @param {number} value 選択された評価（1〜5）
+ * @returns {void}
+ */
+const handleChangeRating = (value) => {
+  rating.value = value;
+  emit('changeRating', value);
+};
+
+/**
  * @description 残す既存写真から1枚を取り除く（本人編集）
  * @param {number} index 取り除く位置
  * @returns {void}
@@ -408,6 +435,15 @@ const handleSubmit = () => {
     >
       <span class="review-form-handle-bar" />
     </button>
+
+    <!-- チュートリアル中の案内。フォーム上部に出し、評価・投稿へ誘導する -->
+    <p
+      v-if="tutorialMessage"
+      class="review-tutorial-hint"
+      role="status"
+    >
+      {{ tutorialMessage }}
+    </p>
 
     <div class="review-form-header">
       <h3 class="review-form-title">
@@ -572,13 +608,20 @@ const handleSubmit = () => {
     </p>
 
     <div class="review-footer">
-      <div class="review-rating">
+      <div
+        class="review-rating"
+        :class="{ 'is-tutorial-target': tutorialHighlight === 'rating' }"
+      >
         <span class="review-label review-label-inline">評価</span>
-        <ReviewRatingInput v-model="rating" />
+        <ReviewRatingInput
+          :model-value="rating"
+          @update:model-value="handleChangeRating"
+        />
       </div>
 
       <BaseButton
         class="review-submit"
+        :class="{ 'is-tutorial-target': tutorialHighlight === 'submit' }"
         :is-disabled="isBusy"
         @click="handleSubmit"
       >
@@ -909,6 +952,30 @@ const handleSubmit = () => {
   width: auto;
   min-width: 88px;
   padding: 12px 20px;
+}
+
+/* チュートリアルの案内。フォーム上部に羊皮紙色の帯で出す */
+.review-tutorial-hint {
+  position: sticky;
+  top: 28px;
+  z-index: 1;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  color: var(--primary-color);
+  background: var(--bg-light);
+  border: var(--pixel-frame-width) solid var(--border-ink);
+  border-image: var(--pixel-frame-ink);
+  background-clip: padding-box;
+}
+
+/* チュートリアルで操作させる要素（評価・投稿ボタン）を枠で浮かせる */
+.review-rating.is-tutorial-target,
+.review-submit.is-tutorial-target.primary-btn {
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 @keyframes review-form-slide-in {

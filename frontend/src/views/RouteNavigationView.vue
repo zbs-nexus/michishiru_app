@@ -20,10 +20,18 @@ import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkResultSave } from '@/composables/useWalkResultSave';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
+import TutorialMascot from '@/components/feature/tutorial/TutorialMascot.vue';
+import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
 import { useWalkStore } from '@/stores/walkStore';
 import { toRouteLegSections } from '@/utils/routeLegs';
+import {
+  TUTORIAL_OTHER_REVIEW_SPOT,
+  TUTORIAL_RESOLVED_REVIEW_SPOT,
+  TUTORIAL_REVIEW_SPOT_ID
+} from '@/constants/tutorial';
 
 /**
  * @description ルート案内を表示する画面。
@@ -35,6 +43,7 @@ const router = useRouter();
 // 案内中もマスコットのレベルを出すため読むだけ。実績の取り直しはホームと結果画面で行う
 const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
+const tutorialStore = useTutorialStore();
 const walkStore = useWalkStore();
 
 /**
@@ -105,6 +114,7 @@ const { genreOptions, loadGenreOptions } = useGenreOptions();
 
 // 口コミの場所解決と投稿
 const {
+  resolvedSpot,
   existingSpot,
   isOwner,
   userRating,
@@ -134,6 +144,11 @@ const showOtherReviews = ref(true);
  * 一覧には自分が投稿済みの場所も含まれるため、オレンジピンと重ならないよう取り除く。
  */
 const otherReviewSpots = computed(() => {
+  // チュートリアルは実APIを呼ばないため、評価を付けさせるダミーの紫ピンを1つだけ出す
+  if (tutorialStore.isActive) {
+    return [TUTORIAL_OTHER_REVIEW_SPOT];
+  }
+
   const myReviewedSpotIds = new Set(myReviews.value.map((review) => review.spotId));
 
   return reviewSpots.value.filter((spot) => !myReviewedSpotIds.has(spot.spotId));
@@ -210,6 +225,58 @@ const legSections = computed(() =>
 // 地図の現在地マーカーだけを経路へ吸着させる。
 // 距離の計算（useRouteProgress / useWalkRecord）には吸着前の currentLocation を渡す
 const { displayLocation } = useRouteSnapping({ currentLocation, geometry });
+
+/** チュートリアルで「次の目的地へ」をハイライトする段階かどうか */
+const isTutorialAdvanceStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.ADVANCE_SPOT)
+);
+
+/** チュートリアルで「終了」をハイライトする段階かどうか */
+const isTutorialEndStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.REQUEST_END)
+);
+
+/**
+ * チュートリアルで地図の紫ピンをタップさせる段階かどうか。
+ * この段階だけ紫ピンのタップを受け付け、それ以外では地図の操作（ピンのタップ・長押し）を止める。
+ */
+const isTutorialReviewOpenStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.OPEN_REVIEW)
+);
+
+/**
+ * 口コミフォームに渡すチュートリアルの案内文。
+ * 評価・投稿の段階ではフォームに隠れて下部の案内が見えないため、フォーム上部に出す。
+ * フォームを操作させない段階ではnull（通常表示）。
+ */
+const reviewFormTutorialMessage = computed(() => {
+  if (
+    tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW) ||
+    tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)
+  ) {
+    return tutorialStore.currentMessage;
+  }
+
+  return null;
+});
+
+/**
+ * 口コミフォームで強調する要素。
+ * 評価の段階は★、投稿の段階は投稿ボタンを目立たせる。それ以外はnull。
+ */
+const reviewFormTutorialHighlight = computed(() => {
+  if (tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW)) {
+    return 'rating';
+  }
+
+  if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
+    return 'submit';
+  }
+
+  return null;
+});
+
+
 
 // 距離の積算は公開する状態を持たず、現在地のwatchでwalkStoreへ直接書き込む
 useWalkRecord({ currentLocation, accuracy });
@@ -391,6 +458,16 @@ const handleVisibilityChange = () => {
 onMounted(() => {
   // 初期化は追跡より先に行う。順序が逆だと初回の測位で積んだ距離がリセットで消える
   walkStore.startWalk();
+
+  // チュートリアルは挙動を安定させるため、現在地の追跡・口コミの取得（実API）を行わない。
+  // 紫ピンはダミーを使い、実績もダミーを結果画面で見せる
+  if (tutorialStore.isActive) {
+    loadGenreOptions();
+    requestScreenWakeLock();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return;
+  }
+
   startTracking();
   // フォームを開いたときに待たせないよう、先にジャンルを取得しておく
   loadGenreOptions();
@@ -516,6 +593,11 @@ const showReviewFormAt = async (position) => {
  * @returns {Promise<void>}
  */
 const handleLongPressMap = async (position) => {
+  // チュートリアル中は新規のロケーション投稿を操作させない（文章の説明にとどめる）
+  if (tutorialStore.isActive) {
+    return;
+  }
+
   // 前の場所のメッセージ・解決結果を持ち越さない
   hideMessage();
   resetReview();
@@ -554,10 +636,37 @@ const handleLongPressMap = async (position) => {
  * @returns {Promise<void>}
  */
 const handleSelectReviewSpot = async ({ spotId, position }) => {
+  // チュートリアル中は、口コミに関わる段階（ピンを開く・評価・投稿）で、
+  // 対象のダミーピンだけを受け付ける。フォームを一度閉じても、対象ピンを押し直せば再開できる。
+  // それ以外の段階・ピンでは何もしない（地図操作を一本道に保つ）
+  if (tutorialStore.isActive) {
+    const isReviewPhase =
+      isTutorialReviewOpenStep.value ||
+      tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW) ||
+      tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW);
+
+    if (!(isReviewPhase && spotId === TUTORIAL_REVIEW_SPOT_ID)) {
+      return;
+    }
+  }
+
   hideMessage();
 
   // 押した瞬間にピンを大きく前面へ出す（解決の応答を待たないフィードバック）
   selectedReviewSpotId.value = spotId;
+
+  // チュートリアルは実APIを呼ばず、ダミーの既存の場所（評価のみモード）でフォームを開く。
+  // 対象の紫ピン以外は上のガードで弾くため、ここに来るのは対象のピンのみ
+  if (tutorialStore.isActive) {
+    resolvedSpot.value = TUTORIAL_RESOLVED_REVIEW_SPOT;
+    isExistingSpotSelected.value = true;
+    await showReviewFormAt(position);
+
+    if (tutorialStore.isStep(tutorialStore.STEP.OPEN_REVIEW)) {
+      tutorialStore.completeStep(tutorialStore.STEP.OPEN_REVIEW);
+    }
+    return;
+  }
 
   /*
    * 解決してから描く。フォームを開いていない場合は、内容が揃ってから現れる。
@@ -597,12 +706,35 @@ const handleCloseReview = () => {
 };
 
 /**
+ * @description 口コミの★評価が付いたとき、チュートリアルの評価ステップを進める。
+ * 評価の値そのものはフォーム内で保持する。チュートリアルでは進行の合図にだけ使う。
+ * @returns {void}
+ */
+const handleChangeReviewRating = () => {
+  if (tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW)) {
+    tutorialStore.completeStep(tutorialStore.STEP.RATE_REVIEW);
+  }
+};
+
+/**
  * @description 口コミを投稿する。
  * 成功したらフォームを閉じて知らせ、失敗したらフォームを残してエラーを出す。
  * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
  * @returns {Promise<void>}
  */
 const handleSubmitReview = async (review) => {
+  // チュートリアルは実際に送信せず、投稿できた体験だけを見せる。
+  // ダミーのスポットに本物の口コミが残らないようにする
+  if (tutorialStore.isActive) {
+    handleCloseReview();
+    showMessage('口コミを投稿しました', 'success');
+
+    if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
+      tutorialStore.completeStep(tutorialStore.STEP.SUBMIT_REVIEW);
+    }
+    return;
+  }
+
   const result = await postReviewContent({
     position: reviewTargetPosition.value,
     ...review
@@ -621,11 +753,28 @@ const handleSubmitReview = async (review) => {
 };
 
 /**
- * @description 終了確認を表示する
+ * @description 次の目的地へ進める。チュートリアル中は口コミ評価のステップへ進める。
+ * 進める操作そのものは useRouteProgress が担う。
+ * @returns {void}
+ */
+const handleAdvanceToNextSpot = () => {
+  advanceToNextSpot();
+
+  if (tutorialStore.isStep(tutorialStore.STEP.ADVANCE_SPOT)) {
+    tutorialStore.completeStep(tutorialStore.STEP.ADVANCE_SPOT);
+  }
+};
+
+/**
+ * @description 終了確認を表示する。チュートリアル中は終了確認のステップへ進める。
  * @returns {void}
  */
 const handleRequestEnd = () => {
   isEndConfirmVisible.value = true;
+
+  if (tutorialStore.isStep(tutorialStore.STEP.REQUEST_END)) {
+    tutorialStore.completeStep(tutorialStore.STEP.REQUEST_END);
+  }
 };
 
 /**
@@ -646,6 +795,15 @@ const handleConfirmEnd = async () => {
   }
 
   isEndConfirmVisible.value = false;
+
+  // チュートリアルは実績を保存・計測しないため、保存や取り直しを行わず結果画面へ進める。
+  // 結果画面はチュートリアル中、ダミーの実績を表示する
+  if (tutorialStore.isStep(tutorialStore.STEP.CONFIRM_END)) {
+    tutorialStore.completeStep(tutorialStore.STEP.CONFIRM_END);
+    router.push({ name: 'walk-result' });
+    return;
+  }
+
   isFinishing.value = true;
 
   // 結果画面が所要時間を読むため、保存の前に終了時刻を確定させる
@@ -734,14 +892,19 @@ const handleConfirmEnd = async () => {
           次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
           押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
         -->
-        <button
+        <TutorialSpotlight
           v-if="nextSpot"
-          class="next-spot-btn"
-          type="button"
-          @click="advanceToNextSpot"
+          :is-active="tutorialStore.isActive"
+          :is-highlighted="isTutorialAdvanceStep"
         >
-          次の目的地へ
-        </button>
+          <button
+            class="next-spot-btn"
+            type="button"
+            @click="handleAdvanceToNextSpot"
+          >
+            次の目的地へ
+          </button>
+        </TutorialSpotlight>
       </div>
 
       <div
@@ -816,18 +979,26 @@ const handleConfirmEnd = async () => {
       :existing-photos="existingPhotos"
       :is-resolving="isResolving"
       :is-posting="isPosting"
+      :tutorial-message="reviewFormTutorialMessage"
+      :tutorial-highlight="reviewFormTutorialHighlight"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
       @change-expanded="handleChangeReviewFormExpanded"
+      @change-rating="handleChangeReviewRating"
     />
 
     <template #footer>
-      <BaseButton
-        is-full-width
-        @click="handleRequestEnd"
+      <TutorialSpotlight
+        :is-active="tutorialStore.isActive"
+        :is-highlighted="isTutorialEndStep"
       >
-        終 了
-      </BaseButton>
+        <BaseButton
+          is-full-width
+          @click="handleRequestEnd"
+        >
+          終 了
+        </BaseButton>
+      </TutorialSpotlight>
 
       <BaseModal
         v-if="isEndConfirmVisible"
@@ -837,6 +1008,16 @@ const handleConfirmEnd = async () => {
         @cancel="handleCancelEnd"
       />
     </template>
+
+    <!--
+      チュートリアル中の案内役。口コミフォーム（z-index 150）が開く段階では
+      フォームに隠れるため、フォームが開いていないときだけ下部に出す。
+    -->
+    <TutorialMascot
+      v-if="tutorialStore.isActive && tutorialStore.currentMessage && !isReviewFormVisible"
+      :message="tutorialStore.currentMessage"
+      :level="mascotStore.mascotLevel"
+    />
 
     <!--
       終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。

@@ -37,6 +37,32 @@ const props = defineProps({
   distanceRange: {
     type: Object,
     required: true
+  },
+  /**
+   * チュートリアル中かどうか。
+   * 真のとき、tutorialGenreValue で指定したジャンル以外のボタンとおまかせを無効化し、
+   * tutorialSection で指定した区画（ジャンル or 距離）だけを操作可能にする。
+   */
+  isTutorial: {
+    type: Boolean,
+    default: false
+  },
+  /**
+   * チュートリアルで操作させる区画。
+   * 'genre' はジャンルの選択だけ、'distance' は距離の調整だけを有効にする。
+   * それ以外（null 等）のときはどちらも無効にする（作成ボタンへ誘導する段階）。
+   */
+  tutorialSection: {
+    type: String,
+    default: null
+  },
+  /**
+   * チュートリアルで選ばせるジャンルの値（genreId）。
+   * ジャンルの区画が有効なとき、この値のボタンだけを押せるようにする。
+   */
+  tutorialGenreValue: {
+    type: String,
+    default: null
   }
 });
 
@@ -47,6 +73,32 @@ const distanceScaleLabels = computed(() => [
   props.distanceRange.minLabel,
   props.distanceRange.maxLabel
 ]);
+
+/** チュートリアルでジャンルの区画を操作させる段階かどうか */
+const isTutorialGenreActive = computed(
+  () => props.isTutorial && props.tutorialSection === 'genre'
+);
+
+/** チュートリアルで距離の区画を操作させる段階かどうか */
+const isTutorialDistanceActive = computed(
+  () => props.isTutorial && props.tutorialSection === 'distance'
+);
+
+/**
+ * @description チュートリアル中に、指定したジャンルのボタンを押せないようにするか判定する。
+ * ジャンルの区画が有効で、かつ対象のジャンル（tutorialGenreValue）でないボタンを無効にする。
+ * チュートリアル外では常に押せる。
+ * @param {string} value ジャンルの値（genreId）
+ * @returns {boolean} 無効にする場合はtrue
+ */
+const isGenreButtonLocked = (value) => {
+  if (!props.isTutorial) {
+    return false;
+  }
+
+  // ジャンルの区画が有効なときだけ、対象のジャンル以外を押せるようにする
+  return !(isTutorialGenreActive.value && value === props.tutorialGenreValue);
+};
 </script>
 
 <template>
@@ -60,6 +112,7 @@ const distanceScaleLabels = computed(() => [
           type="button"
           :aria-pressed="isGenreRandom"
           aria-label="ジャンルをおまかせで選ぶ"
+          :disabled="isTutorial"
           @click="$emit('toggleGenreRandom')"
         >
           ？
@@ -73,9 +126,15 @@ const distanceScaleLabels = computed(() => [
           v-for="option in genreOptions"
           :key="option.value"
           class="select-btn"
-          :class="{ selected: genre === option.value }"
+          :class="{
+            selected: genre === option.value,
+            'is-tutorial-locked': isGenreButtonLocked(option.value),
+            'is-tutorial-target':
+              isTutorialGenreActive && option.value === tutorialGenreValue
+          }"
           type="button"
           :aria-pressed="genre === option.value"
+          :disabled="isGenreButtonLocked(option.value)"
           @click="$emit('selectGenre', option.value)"
         >
           <span class="btn-icon">{{ option.icon }}</span>
@@ -90,7 +149,13 @@ const distanceScaleLabels = computed(() => [
       </p>
     </div>
 
-    <div class="input-section">
+    <div
+      class="input-section"
+      :class="{
+        'is-tutorial-locked': isTutorial && !isTutorialDistanceActive,
+        'is-tutorial-target': isTutorialDistanceActive
+      }"
+    >
       <div class="section-header">
         <h3 id="distance-label">
           距離
@@ -101,6 +166,7 @@ const distanceScaleLabels = computed(() => [
           type="button"
           :aria-pressed="isDistanceRandom"
           aria-label="距離をおまかせで選ぶ"
+          :disabled="isTutorial"
           @click="$emit('toggleDistanceRandom')"
         >
           ？
@@ -176,5 +242,44 @@ const distanceScaleLabels = computed(() => [
 .random-message {
   color: var(--primary-color);
   font-weight: bold;
+}
+
+/*
+ * チュートリアルでロックするジャンルのボタン。
+ * 操作できないことを見た目でも示すため、暗く・淡くする。
+ * disabled と合わせて使い、押下そのものも止める。
+ */
+.select-btn.is-tutorial-locked {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+/*
+ * チュートリアルで選ばせる対象のジャンルのボタン。
+ * 周りが淡くなる中で、枠と影で浮かせて目を引く。
+ */
+.select-btn.is-tutorial-target {
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 0 0 3px var(--primary-light), var(--shadow);
+}
+
+/*
+ * チュートリアルでロックする距離の区画。
+ * ジャンルの段階では距離を触らせないため、区画ごと淡くして操作を止める。
+ */
+.input-section.is-tutorial-locked {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  pointer-events: none;
+}
+
+/* チュートリアルで操作させる距離の区画。枠で浮かせて目を引く */
+.input-section.is-tutorial-target {
+  position: relative;
+  z-index: 1;
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 </style>

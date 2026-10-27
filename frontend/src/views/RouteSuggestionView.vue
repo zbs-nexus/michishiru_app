@@ -7,10 +7,13 @@ import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
+import TutorialMascot from '@/components/feature/tutorial/TutorialMascot.vue';
+import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
 
 /**
  * @description 提案されたルートを確認する画面。
@@ -19,6 +22,7 @@ import { useRouteStore } from '@/stores/routeStore';
 const router = useRouter();
 const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
+const tutorialStore = useTutorialStore();
 const {
   isCreating,
   errorMessage: creationErrorMessage,
@@ -78,6 +82,11 @@ onMounted(() => {
  * @returns {void}
  */
 const handleConfirm = () => {
+  // チュートリアル中は、決定で案内の最初のステップ（次の目的地へ）へ進める
+  if (tutorialStore.isStep(tutorialStore.STEP.CONFIRM_ROUTE)) {
+    tutorialStore.completeStep(tutorialStore.STEP.CONFIRM_ROUTE);
+  }
+
   router.push({ name: 'route-navigation' });
 };
 
@@ -157,24 +166,48 @@ const handleBackToHome = () => {
           </span>
         </div>
         <div class="action-buttons">
-          <BaseButton @click="handleConfirm">
-            決定
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            @click="handleRegenerate"
+          <!-- チュートリアル中は「決定」だけハイライトして押せるようにする -->
+          <TutorialSpotlight
+            :is-active="tutorialStore.isActive"
+            :is-highlighted="tutorialStore.isStep(tutorialStore.STEP.CONFIRM_ROUTE)"
           >
-            再作成
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            @click="handleBackToHome"
+            <BaseButton @click="handleConfirm">
+              決定
+            </BaseButton>
+          </TutorialSpotlight>
+          <!-- 再作成・ホームに戻るはチュートリアルを一本道にするためロックする -->
+          <TutorialSpotlight
+            :is-active="tutorialStore.isActive"
+            :is-highlighted="false"
           >
-            ホームに戻る
-          </BaseButton>
+            <BaseButton
+              variant="secondary"
+              @click="handleRegenerate"
+            >
+              再作成
+            </BaseButton>
+          </TutorialSpotlight>
+          <TutorialSpotlight
+            :is-active="tutorialStore.isActive"
+            :is-highlighted="false"
+          >
+            <BaseButton
+              variant="secondary"
+              @click="handleBackToHome"
+            >
+              ホームに戻る
+            </BaseButton>
+          </TutorialSpotlight>
         </div>
       </div>
     </template>
+
+    <!-- チュートリアル中の案内役 -->
+    <TutorialMascot
+      v-if="tutorialStore.isActive && tutorialStore.currentMessage"
+      :message="tutorialStore.currentMessage"
+      :level="mascotStore.mascotLevel"
+    />
   </DefaultLayout>
 </template>
 

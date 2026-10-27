@@ -3,12 +3,13 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 /**
  * @description ヘッダー右上のハンバーガーメニュー。
- * 開閉の状態だけを自分で持ち、ログアウトの処理は親へ委ねる。
+ * 開閉の状態だけを自分で持ち、各項目の処理は親へ委ねる。
  *
- * 表示上の文言は「ログアウト」、コード上の名前は signOut に統一している
- * （Cognito と認証ライブラリのAPI名が signOut のため）。
+ * 「ログアウト」の表示上の文言とコード上の名前（signOut）が揃っていないのは、
+ * Cognito と認証ライブラリのAPI名が signOut のため。
+ * 「チュートリアル」は親でチュートリアルを開始するために startTutorial を通知する。
  */
-const emit = defineEmits(['signOut']);
+const emit = defineEmits(['signOut', 'startTutorial']);
 
 /** メニューを開いているかどうか */
 const isOpen = ref(false);
@@ -40,6 +41,16 @@ const closeMenu = () => {
 const handleSignOut = () => {
   closeMenu();
   emit('signOut');
+};
+
+/**
+ * @description チュートリアルの開始を親へ通知する。
+ * ログアウトと同じく、通知の前にメニューを閉じる。
+ * @returns {void}
+ */
+const handleStartTutorial = () => {
+  closeMenu();
+  emit('startTutorial');
 };
 
 /**
@@ -117,6 +128,15 @@ onBeforeUnmount(() => {
       id="signout-menu-list"
       class="menu-list"
     >
+      <li>
+        <button
+          class="menu-item"
+          type="button"
+          @click="handleStartTutorial"
+        >
+          チュートリアル
+        </button>
+      </li>
       <li>
         <button
           class="menu-item"
