@@ -106,6 +106,19 @@ const MAP_CONTROLS_GAP_PX = 8;
  */
 const mapControlsTopPx = ref(DEFAULT_MAP_CONTROLS_TOP_PX);
 
+/** 終了ボタン。地図の下側が隠れている高さを測るために参照する */
+const endButtonRef = ref(null);
+
+/**
+ * 地図の上端から、画面上部の操作（バナー・前後のボタン・口コミの表示切り替え・
+ * チュートリアルの吹き出し）で隠れている高さ（ピクセル）。
+ * 案内開始時にスタート地点を、現在地へ戻るときに現在地を、見えている範囲の中央へ置くために地図へ渡す
+ */
+const mapTopInsetPx = ref(0);
+
+/** 地図の下端から、終了ボタンで隠れている高さ（ピクセル）。使い方は mapTopInsetPx と同じ */
+const mapBottomInsetPx = ref(0);
+
 /** バナーの高さの変化を見張る。ResizeObserver が無い環境ではnullのまま */
 let bannerResizeObserver = null;
 
@@ -560,9 +573,41 @@ const measureMapControlsTop = () => {
     Math.ceil(togglesEl.getBoundingClientRect().bottom) + MAP_CONTROLS_GAP_PX;
 };
 
-// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、現在地へ戻るボタンの位置を測り直す
-onMounted(() => {
+/**
+ * @description 画面上部の操作と終了ボタンで、地図の上下がどれだけ隠れているかを測る。
+ * 測れない（描画されていない）ほうは値を変えない。
+ * @returns {void}
+ */
+const measureMapInsets = () => {
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
+  const topBottomPx = navigationTopRef.value?.getBoundingClientRect().bottom;
+
+  if (Number.isFinite(topBottomPx)) {
+    mapTopInsetPx.value = Math.ceil(topBottomPx);
+  }
+
+  // 終了ボタンは画面下に固定して地図に重ねているため、画面の下端からボタンの上端までが隠れる
+  const endButtonTopPx = endButtonRef.value?.$el?.getBoundingClientRect?.().top;
+
+  if (Number.isFinite(endButtonTopPx)) {
+    mapBottomInsetPx.value = Math.max(0, Math.ceil(window.innerHeight - endButtonTopPx));
+  }
+};
+
+/**
+ * @description 画面上部の操作の大きさに合わせて、地図に渡す位置を測り直す
+ * @returns {void}
+ */
+const measureMapLayout = () => {
   measureMapControlsTop();
+  measureMapInsets();
+};
+
+// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、現在地へ戻るボタンの位置と
+// 地図の隠れている高さを測り直す。
+// 案内開始時の寄せ（スタート地点を中央）は地図の読み込み完了時に行い、ここで測った値を使う
+onMounted(() => {
+  measureMapLayout();
 
   const bannerEl = bannerRef.value?.$el ?? null;
 
@@ -570,7 +615,7 @@ onMounted(() => {
     return;
   }
 
-  bannerResizeObserver = new ResizeObserver(measureMapControlsTop);
+  bannerResizeObserver = new ResizeObserver(measureMapLayout);
   bannerResizeObserver.observe(bannerEl);
 });
 
@@ -1015,6 +1060,8 @@ const handleConfirmEnd = async () => {
       :selected-review-spot-id="selectedReviewSpotId"
       :leg-sections="legSections"
       :controls-top-px="mapControlsTopPx"
+      :top-inset-px="mapTopInsetPx"
+      :bottom-inset-px="mapBottomInsetPx"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
     />
@@ -1044,6 +1091,7 @@ const handleConfirmEnd = async () => {
         :is-highlighted="isTutorialEndStep"
       >
         <BaseButton
+          ref="endButtonRef"
           is-full-width
           @click="handleRequestEnd"
         >
