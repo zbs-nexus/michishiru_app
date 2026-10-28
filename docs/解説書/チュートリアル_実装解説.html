@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チュートリアル - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>チュートリアル - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-28<br>
+            <strong>📅 マージ日:</strong> 2026-10-28（7回。00:26 〜 14:10）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-287, feature/NZ-318<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>adc6934</code>（本体の追加）,
+            <code>769e5c2</code>（表示不具合の修正）,
+            <code>62ae3dc</code>（ハイライトの簡素化）,
+            <code>2ece117</code>（表示と動作の改善）,
+            <code>c1b34cf</code>（ボタン無効化と地図スクロール）,
+            <code>16b753f</code>（口コミフォームへの吹き出し統合・スライダー制限）,
+            <code>fdf8fb1</code>（スライダーの頭打ち・終了処理）,
+            <code>ff7282d</code>（口コミのピンを既定で非表示。チュートリアル中だけ紫ピンを表示）
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>Pinia のストア</strong><br>
+            複数の画面から同じ値を読み書きするための「共有の入れ物」です。チュートリアルは
+            ホーム → 提案 → 案内 → 結果の4画面をまたぐので、「今どの段階か」をストア（<code>tutorialStore</code>）に置いています。
+            ストアはメモリ上にあるだけなので、<strong>ブラウザを再読み込みするとチュートリアルの状態は消えます</strong>。
+        </div>
+        <div class="prereq">
+            <strong>ダミーデータ</strong><br>
+            本物のAPIを呼ばずに、画面に見せるための作り物のデータです。チュートリアルでは
+            ルート・口コミの場所・散歩の実績をすべて <code>constants/tutorial.js</code> の固定値で済ませ、AWS には一切通信しません。
+        </div>
+        <div class="prereq">
+            <strong>pointer-events と disabled</strong><br>
+            CSS の <code>pointer-events: none</code> は「その要素をクリックできなくする」指定です。
+            ただし子要素側で <code>pointer-events: auto</code> が指定されていると子は押せてしまうため、
+            確実に止めたいボタンには HTML の <code>disabled</code> 属性を併用しています。
+        </div>
+        <div class="prereq">
+            <strong>マスコットの吹き出し</strong><br>
+            各画面の案内役（フクロウ）が話す部品 <code>MascotSpeechBubble</code> です。チュートリアルの説明文もこの吹き出しで話させています。
+            部品の詳細は <a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a> を参照してください。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            ホーム画面右上のメニューから「チュートリアル」を選ぶと、マスコットの案内に沿って
+            <strong>ルート作成 → 決定 → 案内 → 口コミの評価 → 終了 → 結果</strong> までを一通り体験できる機能です。
+            各段階では「今押してほしい要素」だけが操作でき、それ以外は淡く表示されて押せません。
+        </p>
+        <p>
+            チュートリアル中は本物のAPIを呼ばず、GPSでの現在地の追跡もしません。どこで誰が試しても、
+            同じダミーのルート（新宿駅周辺・スポット2か所・5km）で同じ流れをたどります。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            ミチシルは「条件を選ぶ → ルートを確かめる → 歩きながら次へ進める → 口コミを残す → 結果を見る」と、
+            画面と操作が多いアプリです。初めての人が実際に外を歩きながら操作を覚えるのは大変なので、
+            室内でも安全に一通りの操作を練習できるようにしました。
+        </p>
+        <p>
+            チュートリアルがたどる流れは、前提条件書の画面遷移（US-1 → US-2 → US-3 → US-4/US-6 → US-7 → US-8）そのものです。
+            加えて口コミ（評価）の付け方も練習させます。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <p>段階（ステップ）は <code>constants/tutorialSteps.js</code> の配列の並び順で一本道に進みます。</p>
+        <table>
+            <tr><th>#</th><th>ステップ名</th><th>画面</th><th>利用者にさせる操作</th></tr>
+            <tr><td>1</td><td><code>select-genre</code></td><td>ホーム</td><td>ジャンルで「写真」を選ぶ</td></tr>
+            <tr><td>2</td><td><code>select-distance</code></td><td>ホーム</td><td>距離スライダーをちょうど 5km に合わせる</td></tr>
+            <tr><td>3</td><td><code>create-route</code></td><td>ホーム</td><td>「ルートを作成」を押す（APIは呼ばずダミールートを入れる）</td></tr>
+            <tr><td>4</td><td><code>confirm-route</code></td><td>ルート提案</td><td>「決定」を押す</td></tr>
+            <tr><td>5</td><td><code>advance-spot</code></td><td>案内</td><td>「次の目的地へ」を押す</td></tr>
+            <tr><td>6</td><td><code>open-review</code></td><td>案内</td><td>地図の紫ピン（ダミーの口コミの場所）をタップする</td></tr>
+            <tr><td>7</td><td><code>rate-review</code></td><td>案内</td><td>口コミフォームで★を付ける</td></tr>
+            <tr><td>8</td><td><code>submit-review</code></td><td>案内</td><td>「投稿」を押す（実際には送信しない）</td></tr>
+            <tr><td>9</td><td><code>request-end</code></td><td>案内</td><td>「終了」を押す</td></tr>
+            <tr><td>10</td><td><code>confirm-end</code></td><td>案内</td><td>終了確認で「終了する」を押す</td></tr>
+            <tr><td>11</td><td><code>return-home</code></td><td>散歩結果</td><td>「ホームに戻る」を押してチュートリアル完了</td></tr>
+        </table>
+
+        <div class="flow-step">
+            <strong>Step 1: 開始</strong><br>
+            <code>SignOutMenu</code>（ホーム右上のメニュー）の「チュートリアル」を押すと <code>startTutorial</code> が通知され、
+            <code>RouteConditionView</code> の <code>handleStartTutorial</code> が条件を初期化してから <code>tutorialStore.start()</code> を呼びます。
+            チュートリアル中のメニューは「チュートリアルを終了」に差し替わり、途中でやめられます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: ホーム画面（1〜3）</strong><br>
+            フォーム（<code>RouteConditionForm</code>）は <code>tutorialSection</code> で「今触れる区画」を受け取り、
+            ジャンルの段階では「写真」以外のボタンとおまかせを無効にします。距離の段階ではスライダーが 5km で頭打ちになり、
+            ちょうど 5km になったときだけ次へ進みます。「ルートを作成」は作成の段階だけ押せます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: ルート提案画面（4）</strong><br>
+            画面全体に暗い膜（<code>tutorial-dim-overlay</code>）を敷き、「決定」と吹き出しだけを膜の手前に出します。
+            「再作成」「ホームに戻る」はロックされます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 案内画面（5〜10）</strong><br>
+            現在地の追跡・口コミの取得（実API）を行わず、地図の操作（ドラッグ・拡大）も止めます。
+            紫ピンはダミーを1つだけ出し、タップの段階になると地図がそのピンへ滑らかに移動します。
+            口コミフォームではフォーム内の吹き出しが説明し、★→投稿の順に目立たせます。投稿は送信せず成功扱いにします。
+            終了の確認後は、実績の保存やレベルアップ判定を飛ばして結果画面へ進みます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: 散歩結果画面（11）</strong><br>
+            総距離・スポット数・所要時間はダミーの固定値（5km・2か所・60分）を表示し、レベルアップ演出も出しません。
+            「ホームに戻る」で <code>tutorialStore.finish()</code> を呼び、チュートリアルを終えます。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/stores/tutorialStore.js</h3>
+        <p>「チュートリアル中か」「今何番目のステップか」だけを持つ小さなストアです。</p>
+        <div class="code-block"><pre>const completeStep = (step) => {
+  if (!isActive.value || currentStep.value !== step) {
+    return;
+  }
+
+  if (stepIndex.value &lt; TUTORIAL_STEPS.length - 1) {
+    stepIndex.value += 1;
+  }
+};</pre></div>
+        <ul>
+            <li><strong>入力:</strong> 完了したとみなすステップ名</li>
+            <li><strong>動き:</strong> 今のステップと一致したときだけ1つ進めます。順番を飛ばした操作では何も起きないので、一本道が崩れません</li>
+            <li><code>revertStep</code> は逆に1つ戻します。案内画面で「前の目的地へ」を押したとき、<code>open-review</code> から <code>advance-spot</code> へ戻すために使います</li>
+            <li><code>isStep(step)</code> は「今そのステップか」を返し、各画面がハイライト対象を決めるのに使います</li>
+            <li>ステップ名の定数を <code>STEP</code> として再公開しているので、画面側は <code>tutorialStore.STEP.SELECT_GENRE</code> のように書けます</li>
+        </ul>
+
+        <h3>frontend/src/constants/tutorialSteps.js / tutorial.js</h3>
+        <p>
+            <code>tutorialSteps.js</code> は「ステップ名・どの画面か・マスコットの文言」の表です。文言を変えたいときはここだけ直します。
+            <code>tutorial.js</code> はダミーデータ置き場で、主なものは次のとおりです。
+        </p>
+        <table>
+            <tr><th>名前</th><th>中身</th></tr>
+            <tr><td><code>TUTORIAL_GENRE_ID</code> / <code>TUTORIAL_DISTANCE_KM</code></td><td>選ばせるジャンル（<code>photo</code>）と距離（5km）</td></tr>
+            <tr><td><code>createTutorialRoute()</code></td><td>ダミーのルート。画面用のルートの形（<code>toRoute</code> の戻り値と同じ）で、スポット2か所・区間（<code>legs</code>）3本を持つ。呼ぶたびに複製して返す</td></tr>
+            <tr><td><code>TUTORIAL_OTHER_REVIEW_SPOT</code></td><td>地図に出すダミーの紫ピン（他の人の口コミの場所）</td></tr>
+            <tr><td><code>TUTORIAL_RESOLVED_REVIEW_SPOT</code></td><td>紫ピンを押したときにフォームへ渡す「既存の場所」。作成者ではない（評価のみモード）</td></tr>
+            <tr><td><code>TUTORIAL_WALK_RESULT</code></td><td>結果画面に出す固定の実績</td></tr>
+        </table>
+        <div class="code-block"><pre>export const createTutorialRoute = () => ({
+  routeId: 'tutorial-route',
+  routeName: 'はじめての写真さんぽ',
+  ...
+  spots: TUTORIAL_SPOTS.map((spot) => ({ ...spot })),
+  ...
+});</pre></div>
+        <p>
+            ストアへ入れたオブジェクトは画面から書き換えられることがあるため、元の定数を汚さないよう毎回コピーを返しています。
+        </p>
+
+        <h3>frontend/src/components/feature/tutorial/TutorialSpotlight.vue</h3>
+        <p>中身を包んで「ロック（淡く・押せない）」か「ハイライト（そのまま）」を切り替えるだけの部品です。</p>
+        <div class="code-block"><pre>&lt;div
+  class="tutorial-spotlight"
+  :class="{
+    'is-locked': isActive &amp;&amp; !isHighlighted,
+    'is-highlighted': isActive &amp;&amp; isHighlighted
+  }"
+&gt;
+  &lt;slot /&gt;
+&lt;/div&gt;</pre></div>
+        <ul>
+            <li>通常は <code>display: contents</code> で、包んでいてもレイアウトに影響しません</li>
+            <li>ロック中は <code>opacity: 0.4</code>・<code>pointer-events: none</code>・少し灰色にします</li>
+            <li>要素の位置を測らないので、端末の画面サイズが変わっても崩れません</li>
+        </ul>
+
+        <h3>frontend/src/components/base/BaseSlider.vue（<code>valueMaxValue</code>）</h3>
+        <p>
+            目盛りの上限（10km）は本番と同じに見せたまま、選べる値だけを 5km で止めるための props が追加されました。
+        </p>
+        <div class="code-block"><pre>const handleInput = (event) => {
+  const clamped = clampValue(Number(event.target.value));
+
+  // つまみを頭打ちの位置へ戻す（ドラッグし続けても超えて見えないようにする）
+  if (Number(event.target.value) !== clamped) {
+    event.target.value = String(clamped);
+  }
+
+  emit('update:modelValue', clamped);
+};</pre></div>
+        <p>
+            スライダーはドラッグ中もブラウザが内部でつまみを動かすため、値を親へ返すだけでは戻りきらない端末があります。
+            そこで <code>input</code> 要素の値そのものも書き戻して、つまみを押し戻しています。
+        </p>
+
+        <h3>frontend/src/views/RouteNavigationView.vue（案内画面）</h3>
+        <p>チュートリアルの分岐がいちばん多い画面です。主な分岐は次のとおりです。</p>
+        <table>
+            <tr><th>場所</th><th>チュートリアル中の動き</th></tr>
+            <tr><td><code>onMounted</code></td><td><code>startTracking()</code>・<code>loadMyReviews()</code>・<code>loadReviewSpots()</code> を呼ばない</td></tr>
+            <tr><td><code>otherReviewSpots</code></td><td>ダミーの紫ピン1つだけを返す</td></tr>
+            <tr><td><code>showOtherReviews</code></td><td>既定は非表示だが、チュートリアル中だけ表示で始める（紫ピンをタップさせる段階があるため）</td></tr>
+            <tr><td><code>isMapInteractive</code></td><td>地図のドラッグ・拡大を止める（紫ピンのタップはマーカー自身が受けるので動く）</td></tr>
+            <tr><td><code>handleLongPressMap</code></td><td>長押しによる新規投稿はさせない</td></tr>
+            <tr><td><code>sendReview</code></td><td>送信せずに成功（<code>true</code>）を返す</td></tr>
+            <tr><td><code>handleConfirmEnd</code></td><td>実績の保存・レベルアップ判定をせずに結果画面へ進む</td></tr>
+        </table>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>画面下に固定したボタンは TutorialSpotlight で包まない</strong><br>
+            ロック時に親へかかる <code>filter</code> が、<code>position: fixed</code> の基準を親に変えてしまい、ボタンの位置が崩れます。
+            ホームの「ルートを作成」は包まずに <code>is-disabled</code> で止めています。初期実装では全画面の膜と <code>position: relative</code>
+            で浮かせていましたが、同じ理由で取りやめた経緯があります（<code>62ae3dc</code> / <code>c1b34cf</code>）。
+        </div>
+        <div class="important">
+            <strong>新しい画面・操作を足すときはチュートリアルの分岐も確認する</strong><br>
+            実APIを呼ぶ処理を案内画面に足した場合、チュートリアル中に呼ばれないかを必ず確認してください。
+            呼ばれると、ダミーのルートIDで本物のAPIを叩くことになります。
+        </div>
+        <div class="important">
+            <strong>「チュートリアル」は用語辞書に未登録</strong><br>
+            <code>tutorial</code> / <code>TutorialSpotlight</code> / <code>tutorialStore</code> などの語は
+            <code>naming-glossary.md</code> にまだ載っていません。新しい語を足すときは、先に辞書への登録をチームで決めてください。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>リポジトリのルートで <code>npm run dev</code> を実行し、フロントとローカルAPIを起動する</li>
+            <li>ログインしてホーム画面を開き、右上のメニューから「チュートリアル」を選ぶ</li>
+            <li>マスコットの指示に従い、「写真」→ 5km →「ルートを作成」→「決定」と進める。指示以外のボタンが押せないことを確かめる</li>
+            <li>案内画面で「次の目的地へ」→ 紫ピン → ★ →「投稿」→「終了」→「終了する」と進める。地図がドラッグできないこと、紫ピンへ自動で移動することを確かめる</li>
+            <li>結果画面に 5km・2か所・60分が出て、「ホームに戻る」で通常のホームへ戻ることを確かめる</li>
+            <li>途中でメニューの「チュートリアルを終了」を押し、条件が初期化されて通常のホームへ戻ることも確かめる</li>
+            <li>案内画面のテストは <code>frontend</code> で <code>npm test</code>（<code>src/views/__tests__/RouteNavigationView.test.js</code> にチュートリアル中の口コミピン表示の確認がある）</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>frontend/src/stores/tutorialStore.js</code></td><td>チュートリアル中か・今のステップを持つ。<code>revertStep</code> は <code>16b753f</code> で追加</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/constants/tutorialSteps.js</code></td><td>ステップの並びとマスコットの文言</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/constants/tutorial.js</code></td><td>ダミーのルート・紫ピン・実績</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/components/feature/tutorial/TutorialSpotlight.vue</code></td><td>要素のロック／ハイライト</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/components/base/BaseSlider.vue</code></td><td>選べる値の頭打ち（<code>valueMaxValue</code>）</td><td>feature/NZ-287（<code>fdf8fb1</code>）</td></tr>
+                <tr><td><code>frontend/src/components/feature/auth/SignOutMenu.vue</code></td><td>メニューに「チュートリアル」「チュートリアルを終了」を追加</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteConditionForm.vue</code></td><td>区画ごとの操作制限、対象ジャンルの強調</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/components/feature/review/ReviewPostForm.vue</code></td><td>フォーム内の吹き出し（<code>tutorialMessage</code>）と強調（<code>tutorialHighlight</code>）</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteMap.vue</code> / <code>RouteNavigationMap.vue</code></td><td>地図の操作停止（<code>isInteractive</code>）と、紫ピンへの滑らかな移動（<code>smoothCenterPosition</code>）</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/views/RouteConditionView.vue</code></td><td>開始・終了、ホームの1〜3段階</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/views/RouteSuggestionView.vue</code></td><td>暗い膜と「決定」のハイライト</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td>案内画面の5〜10段階、実APIの停止。口コミのピンを既定で非表示にする変更は <code>ff7282d</code></td><td>feature/NZ-287, feature/NZ-318</td></tr>
+                <tr><td><code>frontend/src/views/WalkResultView.vue</code></td><td>ダミーの実績表示と完了処理</td><td>feature/NZ-287</td></tr>
+                <tr><td><code>frontend/src/assets/styles/global.css</code></td><td>無効にした「ルートを作成」ボタン（<code>.primary-btn:disabled</code>）の見た目と、画面下に固定したボタンの中央寄せを保つ指定。ジャンル・距離のロック／強調（<code>is-tutorial-locked</code> / <code>is-tutorial-target</code>）は <code>RouteConditionForm.vue</code> の scoped スタイルにある</td><td>feature/NZ-287</td></tr>
+            </table>
+            <p><small>※ 初期実装（<code>adc6934</code>）にあった <code>TutorialMascot.vue</code>（下部固定の専用の案内役）は <code>769e5c2</code> で削除され、各画面の既存のマスコットが話す形に変わりました。</small></p>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>チュートリアルがたどる画面遷移（US-1〜US-8）と各受け入れ条件</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>本文に出てくる用語（showOtherReviews / advanceToNextSpot など）の定義</td></tr>
+            <tr><td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td><td>案内画面の「次の目的地へ」「前の目的地へ」の仕組み</td></tr>
+            <tr><td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td><td>チュートリアルで練習する口コミフォームと紫ピンの本来の動き</td></tr>
+            <tr><td><a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a></td><td>チュートリアル中は出さないレベル表示・経験値バー・レベルアップ演出</td></tr>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン画面 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>ログイン画面 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-09-30<br>
+            <strong>📅 マージ日:</strong> 2026-09-30（10:29 / 11:14）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-166<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>2e069cd</code>（ログイン画面の作成。Amplify の導入・ルーターガード）,
+            <code>194f15e</code>（CI: Cognito の接続情報をビルドへ渡す）<br>
+            <small>※ ユーザープールは当初コンソールで手作りし、接続情報を GitHub の Variables に登録する方式でした。
+            同じ日の <code>411c27d</code> で CDK 管理に移り、接続情報は <code>cdk deploy</code> の出力から渡す方式に変わっています（<a href="./NZ-189_ユーザー登録画面_実装解説.html">ユーザー登録画面</a> で解説）。
+            入力チェック・パスワード表示ボタン・文言の見直しは <a href="./パスワード再設定の改善_実装解説.html">パスワード再設定の改善</a>、ログアウトは <a href="./NZ-203_サインアウト機能_実装解説.html">サインアウト機能</a> を参照してください。</small>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>Amazon Cognito のユーザープール</strong><br>
+            ユーザー名とパスワードを預かり、ログインの確認と「ログイン済みの証明（トークン）」の発行を代わりにやってくれる AWS のサービスです。
+            ミチシルはユーザー名でサインインし、ログイン画面はアプリ内に自作しています（Cognito が用意するログイン画面は使わない）。
+        </div>
+        <div class="prereq">
+            <strong>Amplify（aws-amplify/auth）</strong><br>
+            ブラウザから Cognito を呼ぶためのライブラリです。前提条件書は「ホスティングに AWS Amplify を使わない」と決めていますが、これは配信サービスの話で、
+            このライブラリ（認証のクライアント部品）は使っています。ログイン状態はブラウザの保存領域に残るので、再読み込みしてもログインしたままです。
+        </div>
+        <div class="prereq">
+            <strong>SRP</strong><br>
+            パスワードそのものをネットワークに流さずに「正しいパスワードを知っている」ことを証明する方式です。Amplify の <code>signIn</code> が既定で使います。
+        </div>
+        <div class="prereq">
+            <strong>VITE_ で始まる環境変数</strong><br>
+            Vite はビルド時に <code>VITE_</code> で始まる環境変数を成果物へ埋め込みます。実行時には読みに行かないため、ビルドのときに値が揃っていないと「空のまま配信」されます。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            ユーザー名とパスワードでログインする画面（<code>/login</code>、ルート名 <code>login</code>）です。
+            ログインしていない人はどの画面を開いてもログイン画面へ送られ、ログイン済みの人がログイン画面を開くとホームへ送られます。
+            ログイン画面からはユーザー登録とパスワードの再設定へ進めます。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            口コミ・散歩の実績・マスコットのレベルなど、利用者ごとのデータを扱うには「誰が使っているか」を確かめる必要があります。
+            また、API を呼べる人をログイン済みの人に限ることで、ルート作成（AI と地図サービスの利用料がかかる）を第三者に勝手に使われないようにします
+            （<a href="./APIの認可_実装解説.html">APIの認可</a>）。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 起動時に Cognito の設定を渡す（main.js）</strong><br>
+            <code>constants/authConfig.js</code> がビルド時の環境変数からユーザープールIDとアプリクライアントIDを読み、
+            揃っていれば <code>Amplify.configure({ Auth: AUTH_CONFIG })</code> を最初の画面を描く前に呼びます。揃っていなければコンソールにエラーを出します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 画面を開くたびにログイン状態を確かめる（router/index.js）</strong><br>
+            <code>beforeEach</code> が、再読み込み直後なら一度だけ <code>authStore.restoreSession()</code> でセッションを復元し、
+            公開画面（<code>meta.isPublic</code>）以外は未ログインならログイン画面へ送ります。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 入力してログイン（LoginForm → LoginView → authStore → authService）</strong><br>
+            <code>LoginForm</code> が <code>submitLogin</code> を emit し、<code>LoginView</code> が <code>authStore.signIn()</code> を呼びます。
+            ストアは <code>signInWithPassword()</code> で Cognito に問い合わせ、成功したらユーザー名を控えます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 結果</strong><br>
+            成功したらホーム（<code>route-condition</code>）へ進みます。失敗したら Cognito の例外名を日本語の文言に変換してフォームに表示します。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/services/authService.js</h3>
+        <div class="code-block"><pre>export const signInWithPassword = async (username, password) => {
+  const { isSignedIn, nextStep } = await cognitoSignIn({ username, password });
+
+  if (isSignedIn) {
+    return;
+  }
+
+  // 未確認のユーザー・MFA・初回パスワード変更など、追加の手続きを求められた場合。
+  // 対応する画面を用意していないため、失敗として上位へ返す
+  const error = new Error(`サインインが完了しませんでした: ${nextStep.signInStep}`);
+  error.name =
+    SIGN_IN_STEP_ERROR_NAMES[nextStep.signInStep] ?? nextStep.signInStep;
+  throw error;
+};</pre></div>
+        <ul>
+            <li>Amplify v6 は、追加の手続きが要るときに例外ではなく「次の手続き（<code>nextStep</code>）」として返します。この関数はそれを例外に変え、呼び出し側が成功・失敗だけを見れば済むようにしています</li>
+            <li>例外名と画面の文言の対応は <code>ERROR_MESSAGES</code> にまとめています（例: <code>NotAuthorizedException</code> と <code>UserNotFoundException</code> はどちらも「ユーザー名またはパスワードが違います」。ユーザーの有無を言い当てないため）</li>
+            <li>ログイン状態の確認は <code>fetchSignedInUsername()</code>、API用のトークンは <code>fetchIdToken()</code> が返します</li>
+        </ul>
+
+        <h3>frontend/src/stores/authStore.js</h3>
+        <table>
+            <tr><th>名前</th><th>役割</th></tr>
+            <tr><td><code>username</code> / <code>isSignedIn</code></td><td>ログイン中のユーザー名と、ログイン済みか（ユーザー名があれば真）</td></tr>
+            <tr><td><code>isSessionRestored</code></td><td>再読み込み後にセッションを確認済みか。ルーターガードが二重に確かめないようにする</td></tr>
+            <tr><td><code>isSigningIn</code></td><td>通信中か。ボタンの二度押しを防ぐ</td></tr>
+            <tr><td><code>errorMessage</code></td><td>直近の失敗の文言。画面を移るときに <code>clearErrorMessage()</code> で消す</td></tr>
+            <tr><td><code>signIn()</code> / <code>restoreSession()</code> / <code>signOut()</code></td><td>ログイン・復元・ログアウト</td></tr>
+        </table>
+
+        <h3>frontend/src/router/index.js（ガード）</h3>
+        <div class="code-block"><pre>if (!authStore.isSessionRestored) {
+  await authStore.restoreSession();
+}
+
+if (to.meta.isPublic) {
+  // ログイン済みならログイン画面には留まらせず、ホームへ送る
+  return authStore.isSignedIn ? { name: 'route-condition' } : true;
+}
+
+if (!authStore.isSignedIn) {
+  return { name: 'login' };
+}</pre></div>
+        <p>公開画面はログイン・ユーザー登録・パスワード再設定の3つです。開発サーバーのデザイン確認画面（<code>/design-preview</code>）だけは判定より先に通します。</p>
+
+        <h3>CI（.github/workflows/deploy.yml）— <code>194f15e</code> 時点</h3>
+        <p>
+            当初は、GitHub の Variables に登録した <code>VITE_COGNITO_USER_POOL_ID</code> / <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code> をビルドへ渡し、空ならデプロイを止めていました。
+            現在は <code>cdk deploy --outputs-file</code> の出力から <code>tools/exportCognitoOutputs.js</code> が取り出して渡す方式です（Variables への登録は不要）。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>ユーザープールIDはシークレットではない</strong><br>
+            ユーザープールIDとアプリクライアントIDはビルド成果物に含まれ、誰でも見られます。SPA 用のアプリクライアントはクライアントシークレットを持たないため、
+            見られても認証を突破する材料にはなりません。ただし環境ごとに値が違うので、コードに直書きしないでください（前提条件書のルール）。
+        </div>
+        <div class="important">
+            <strong>追加の手続きには画面が無い</strong><br>
+            MFA や初回のパスワード変更（仮パスワード）を求められるユーザーは、このアプリではログインできず「管理者に連絡してください」と出ます。
+            また、確認コードの入力を終えていない（未確認の）ユーザーも同じく「管理者に連絡してください」の文言になりますが、
+            現在はユーザー登録画面から自分で確認コードを入力できます。文言と実際の手段が合っていない点は見直しの候補です。
+        </div>
+        <div class="important">
+            <strong>ローカルでは接続情報を自分で用意する</strong><br>
+            <code>frontend/.env.local</code> に <code>VITE_COGNITO_USER_POOL_ID</code> と <code>VITE_COGNITO_USER_POOL_CLIENT_ID</code>（dev のユーザープールの値）を書かないと、ログインできません。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li><code>frontend/.env.local</code> に dev のユーザープールの接続情報を設定する（値は <code>Michishiru-dev</code> スタックの出力 <code>UserPoolId</code> / <code>UserPoolClientId</code>）</li>
+            <li><code>npm run dev</code> で起動し、<code>/</code> を開くと <code>/login</code> へ送られることを確かめる</li>
+            <li>正しいユーザー名・パスワードでホームへ進むこと、間違えると「ユーザー名またはパスワードが違います」と出ることを確かめる</li>
+            <li>ログインしたまま再読み込みしてもホームに留まること、ログイン済みで <code>/login</code> を開くとホームへ送られることを確かめる</li>
+            <li>テスト: <code>frontend</code> で <code>npm test</code>（<code>src/services/__tests__/authService.test.js</code> / <code>src/components/feature/auth/__tests__/LoginForm.test.js</code>。いずれも後のマージで追加）</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>frontend/src/views/LoginView.vue</code></td><td>ログイン画面。成功後の遷移と、登録・再設定からの戻りの通知</td><td>feature/NZ-166（以降の改善あり）</td></tr>
+                <tr><td><code>frontend/src/components/feature/auth/LoginForm.vue</code></td><td>入力フォーム（表示と emit のみ）</td><td>feature/NZ-166</td></tr>
+                <tr><td><code>frontend/src/services/authService.js</code></td><td>Amplify の呼び出しと例外の文言変換</td><td>feature/NZ-166</td></tr>
+                <tr><td><code>frontend/src/stores/authStore.js</code></td><td>ログイン状態の保持</td><td>feature/NZ-166</td></tr>
+                <tr><td><code>frontend/src/constants/authConfig.js</code></td><td>Cognito の接続情報（ビルド時の環境変数）</td><td>feature/NZ-166</td></tr>
+                <tr><td><code>frontend/src/main.js</code></td><td><code>Amplify.configure</code></td><td>feature/NZ-166</td></tr>
+                <tr><td><code>frontend/src/router/index.js</code></td><td>ログイン状態によるガード</td><td>feature/NZ-166</td></tr>
+                <tr><td><code>frontend/package.json</code></td><td><code>aws-amplify</code>（6.22.1）の追加</td><td>feature/NZ-166</td></tr>
+                <tr><td><code>.github/workflows/deploy.yml</code></td><td>接続情報をビルドへ渡す（現在は CDK の出力経由）</td><td>feature/NZ-166</td></tr>
+                <tr><td><code>docs/Cognitoログイン画面_構築手順書.html</code></td><td>当時のユーザープールの作り方の手順書</td><td>feature/NZ-166</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>「認証基盤」「ユーザープールIDの受け渡し」「デプロイの順序」の確定事項</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>「認証」の節（login と signIn の使い分け、logout を使わない理由）</td></tr>
+            <tr><td><a href="../Cognitoログイン画面_構築手順書.html">Cognitoログイン画面 構築手順書</a></td><td>このマージと一緒に追加された構築手順（ユーザープールは現在 CDK 管理）</td></tr>
+            <tr><td><a href="./NZ-189_ユーザー登録画面_実装解説.html">ユーザー登録画面</a></td><td>ユーザープールの CDK 化と接続情報の受け渡し（続きの機能）</td></tr>
+            <tr><td><a href="./NZ-203_サインアウト機能_実装解説.html">サインアウト機能</a></td><td>ログアウト（続きの機能）</td></tr>
+            <tr><td><a href="./APIの認可_実装解説.html">APIの認可</a></td><td>ログインで得たトークンを API に付ける仕組み（続きの機能）</td></tr>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ルート提案と再作成 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>ルート提案と再作成 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-09-16 〜 2026-10-14<br>
+            <strong>📅 マージ日:</strong> 2026-09-16（3件）, 2026-10-14（1件）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-6, feature/NZ-147, feature/NZ-278<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>ec68ced</code>（ルート作成処理の再呼び出し: 再作成でロード表示を正しく解除）,
+            <code>4c0f3c5</code>（再作成失敗時のエラーをトーストで表示）,
+            <code>09f2248</code>（詳細画面の削除: 決定で直接案内へ）,
+            <code>a0b759b</code>（提案画面にホームへ戻るボタン）<br>
+            <small>※ 提案画面のデザイン（一画面に収める <code>0d851b4</code>、マスコットのレベル表示 <code>e8cd294</code>）は
+            <a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a> と
+            <a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a>、
+            おまかせの通知は <a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a>、チュートリアル中の動きは <a href="./チュートリアル_実装解説.html">チュートリアル</a> で扱います。</small>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>routeStore（検索条件と作成済みルートの置き場）</strong><br>
+            ホームで選んだジャンル・距離・おまかせの状態と、作成したルート（<code>currentRoute</code>）は Pinia の <code>routeStore</code> に入っています。
+            画面を移っても残るので、提案画面からの再作成でも同じ条件をそのまま使えます。再読み込みすると消えます。
+        </div>
+        <div class="prereq">
+            <strong>useRouteCreation（ルート作成の composable）</strong><br>
+            現在地を取り、ルート作成API（<code>POST /api/v1/routes</code>）を呼んで結果を <code>routeStore</code> に入れる処理です。
+            ホーム画面と提案画面の両方がこれを使います。API の中身は <a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a> を参照してください。
+        </div>
+        <div class="prereq">
+            <strong>ルートガード</strong><br>
+            Vue Router の <code>beforeEach</code> で、画面を開く前に条件を確かめる仕組みです。提案・案内・結果の画面は <code>requiresRoute</code> を持ち、
+            作成済みのルートが無いとホームへ戻されます。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>ルート提案画面（<code>/suggestion</code>、<code>RouteSuggestionView.vue</code>）の3つの操作を整えた一連の変更です。</p>
+        <table>
+            <tr><th>ボタン</th><th>動き</th><th>関連する US</th></tr>
+            <tr><td>決定</td><td>そのまま案内画面（<code>/navigation</code>）へ進む。以前あった詳細画面は挟まない</td><td>US-4</td></tr>
+            <tr><td>再作成</td><td>同じ条件でルートを作り直す。作成中はロード画面を出し、失敗したらトーストで知らせて直前のルートを表示し続ける</td><td>US-5</td></tr>
+            <tr><td>ホームに戻る</td><td>提案を採用せずホームへ戻る。条件はストアに残るので、変えて作り直せる</td><td>US-1</td></tr>
+        </table>
+        <p>画面下部には距離（km）も表示しています（US-3「モーダルに移動距離を表示すること」）。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li><strong>再作成でロード画面が消えない問題（<code>ec68ced</code>）:</strong> 以前のロード表示は「画面遷移で破棄されるまで出し続ける」作りでした。ホームから作るときは提案画面へ移るので消えますが、提案画面で再作成すると同じ画面に留まるため、ロード画面が残り続けていました。</li>
+            <li><strong>失敗が伝わらない問題（<code>ec68ced</code> / <code>4c0f3c5</code>）:</strong> 失敗してもロード画面のまま止まっていたため、トーストで理由を出して操作を続けられるようにしました。</li>
+            <li><strong>決定から案内までの手数（<code>09f2248</code>）:</strong> 前提条件書の画面遷移では「決定 → 案内画面」ですが、間に詳細画面がありました。遷移図に合わせて削除しました。</li>
+            <li><strong>戻る手段（<code>a0b759b</code>）:</strong> 提案が気に入らず条件を変えたいとき、ブラウザの戻る以外に手段がありませんでした。</li>
+        </ul>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: ホームで作成 → 提案画面へ</strong><br>
+            <code>RouteConditionView</code> が <code>createRoute()</code> を呼び、成功したら <code>route-suggestion</code> へ進みます。失敗したらトーストを出してホームに留まります。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 提案画面を表示</strong><br>
+            地図のプレビュー（<code>RouteMapPreview</code>）、ルート名・説明・所要時間のカード（<code>RouteInfoCard</code>）、下部に距離と3つのボタンを出します。
+            おまかせで選ばれた条件があれば、表示したときにトーストで知らせます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 再作成</strong><br>
+            <code>handleRegenerate</code> が前回のトーストを消してから <code>createRoute()</code> を呼びます。作成中（<code>isCreating</code>）はロード画面（<code>RouteLoadingOverlay</code>）に切り替わり、
+            終われば成否にかかわらず解除されます。成功すると <code>routeStore.currentRoute</code> が新しいルートに替わり、画面が描き直されます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 決定 / ホームに戻る</strong><br>
+            決定は <code>route-navigation</code> へ、ホームに戻るは <code>route-condition</code> へ、名前で遷移します。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/composables/useRouteCreation.js</h3>
+        <div class="code-block"><pre>const createRoute = async () => {
+  isCreating.value = true;
+  errorMessage.value = null;
+  const startedAt = Date.now();
+
+  try {
+    const location = await fetchCurrentLocation();
+    const route = await requestRouteCreation({ ... });
+    routeStore.setCurrentRoute(route);
+    return true;
+  } catch (error) {
+    errorMessage.value = error.message;
+    return false;
+  } finally {
+    const elapsedMs = Date.now() - startedAt;
+    if (elapsedMs &lt; MIN_LOADING_DURATION_MS) {
+      await wait(MIN_LOADING_DURATION_MS - elapsedMs);
+    }
+    isCreating.value = false;
+  }
+};</pre></div>
+        <ul>
+            <li><strong>出力:</strong> 成功なら <code>true</code>、失敗なら <code>false</code>（理由は <code>errorMessage</code>）</li>
+            <li><code>finally</code> で必ず <code>isCreating</code> を戻します。これが <code>ec68ced</code> の修正の中心です</li>
+            <li>応答が速すぎるとロード画面が一瞬だけ出てちらつくので、最短表示時間（<code>MIN_LOADING_DURATION_MS</code>）までは待ちます</li>
+            <li>条件は毎回ストアから読むので、初回作成と再作成で同じ値になります。おまかせの項目は送らず、毎回サーバーが選び直します</li>
+        </ul>
+
+        <h3>frontend/src/views/RouteSuggestionView.vue</h3>
+        <div class="code-block"><pre>const handleRegenerate = async () => {
+  // 前回の失敗メッセージが残ったままロード表示へ入らないように消す
+  hideMessage();
+
+  const isSucceeded = await createRoute();
+
+  if (!isSucceeded) {
+    showMessage(creationErrorMessage.value ?? 'ルートの再作成に失敗しました');
+    return;
+  }
+
+  // 再作成ではおまかせで選び直されるため、新しい値を知らせる
+  showRandomSelectionMessage();
+};</pre></div>
+        <p>
+            テンプレートは <code>isCreating</code> が真ならロード画面、そうでなく <code>currentRoute</code> があれば提案の本体を出します（<code>v-if</code> / <code>v-else-if</code>）。
+            失敗しても <code>currentRoute</code> は前のままなので、直前の提案が表示され続けます。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>「ルート提案モーダル」は画面として実装されている</strong><br>
+            前提条件書の US-3 は「地図画面 + ルート提案モーダル」ですが、実装は URL を持つ画面（<code>/suggestion</code>）です。
+            受け入れ条件（地図への描画・距離・再作成・決定）は満たしていますが、名前を読むときに戸惑わないよう注意してください。
+        </div>
+        <div class="important">
+            <strong>削除した詳細画面を参照しない</strong><br>
+            <code>RouteDetailView.vue</code> / <code>RouteDetailMap.vue</code> とルート名 <code>route-detail</code> は <code>09f2248</code> で削除されました。古い資料に残っていても使えません。
+        </div>
+        <div class="important">
+            <strong>再作成中にほかのボタンは押せない</strong><br>
+            作成中は画面全体がロード画面に切り替わるため、決定・ホームに戻るは押せません。作成を途中で取り消す手段もありません。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li><code>npm run dev</code> で起動し、ホームでジャンルと距離を選んで「ルートを作成」を押す</li>
+            <li>提案画面で「再作成」を押し、ロード画面が出て、終わると新しいルートに替わることを確かめる</li>
+            <li>ローカルAPIを止める（または通信をオフラインにする）状態で「再作成」を押し、トーストでエラーが出て、直前のルートがそのまま見えることを確かめる</li>
+            <li>「決定」で案内画面へ直接進むこと、「ホームに戻る」でホームへ戻り、選んでいた条件が残っていることを確かめる</li>
+            <li>提案画面の URL（<code>/suggestion</code>）を直接開くか再読み込みすると、ホームへ戻されることを確かめる</li>
+            <li>この機能専用の自動テストはありません。ルート作成の通信部分は <code>frontend</code> の <code>npm test</code>（<code>src/services/__tests__/routeService.test.js</code>）で確認できます</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>frontend/src/composables/useRouteCreation.js</code></td><td>作成の実行・ロード表示の解除・失敗理由</td><td>feature/NZ-6</td></tr>
+                <tr><td><code>frontend/src/views/RouteSuggestionView.vue</code></td><td>提案画面。決定・再作成・ホームに戻る</td><td>feature/NZ-6, feature/NZ-147, feature/NZ-278</td></tr>
+                <tr><td><code>frontend/src/views/RouteConditionView.vue</code></td><td>ホームでの作成と失敗時のトースト</td><td>feature/NZ-6</td></tr>
+                <tr><td><code>frontend/src/router/index.js</code></td><td><code>route-detail</code> の削除、<code>requiresRoute</code> のガード</td><td>feature/NZ-147</td></tr>
+                <tr><td><code>frontend/src/assets/styles/global.css</code></td><td>下部のボタン3つの並び</td><td>feature/NZ-278</td></tr>
+                <tr><td><code>frontend/src/views/RouteDetailView.vue</code> / <code>components/feature/route/RouteDetailMap.vue</code></td><td>（削除）詳細画面</td><td>feature/NZ-147</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-3（ルート提案）・US-4（決定）・US-5（再作成）の受け入れ条件と画面遷移図</td></tr>
+            <tr><td><a href="../仕様書.md">仕様書</a></td><td>画面と URL の対応</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>suggestion / regenerate / loading の定義</td></tr>
+            <tr><td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td><td>再作成で呼ぶ API の中身（前提になる機能）</td></tr>
+            <tr><td><a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a></td><td>再作成のたびに選び直されるおまかせの通知</td></tr>
+        </table>
+    </div>
+</body>
+</html>

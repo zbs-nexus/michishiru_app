@@ -114,7 +114,20 @@
             <strong>📅 マージ日:</strong> 2026-10-07（5回のマージすべて同日）<br>
             <strong>🌿 対象ブランチ:</strong> NZ-170_review-post<br>
             <strong>🔖 対象マージ:</strong> <code>cce3717</code>, <code>8eeaf26</code>, <code>939f1cf</code>, <code>1695300</code>, <code>e8725e4</code><br>
-            <strong>👤 対象読者:</strong> 開発初心者
+            <strong>🔁 追加の対象（2026-10-28 更新）:</strong><br>
+            &nbsp;&nbsp;・2026-10-14 <code>feature/NZ-241</code> / <code>fix/NZ-241-review-pin-and-form</code>:
+            <code>ca55da2</code>（他の人の口コミの紫ピン・<code>getReviewSpots</code>）,
+            <code>00a85a5</code>（ピンの先端・フォームとピンの重なり・ボトムシート化・取得失敗のログ）,
+            <code>c2594c1</code>（写真の全画面表示・ちらつき・拡大縮小でのピンのずれ）,
+            <code>1587ecf</code>（写真表示のバグ修正）,
+            <code>236028f</code>（投稿の切り替えのラグ・フォームを閉じない）,
+            <code>4ebadfa</code>（選択中のピンの強調）<br>
+            &nbsp;&nbsp;・2026-10-28 <code>feature/NZ-322</code> <code>f72fac3</code>（「投稿中…」の全画面表示）,
+            <code>feature/NZ-318</code> <code>ff7282d</code>（口コミのピンを既定で非表示）,
+            <code>feature/NZ-317</code> <code>ba1fdde</code>（フォームのジャンルアイコンを画像に）<br>
+            <strong>👤 対象読者:</strong> 開発初心者<br>
+            <small>※ 10/14 以降の変更は、下の「🆕 2026-10-14 以降の変更」の節にまとめています。それより前の節は 10/07 時点の説明で、置き換わった部分には注記を入れています。
+            ルートに口コミの場所を混ぜる機能は <a href="./口コミの場所を巡るルート_実装解説.html">口コミの場所を巡るルート</a>、チュートリアルでの口コミの練習は <a href="./チュートリアル_実装解説.html">チュートリアル</a> を参照してください。</small>
         </div>
 
         <p>
@@ -291,7 +304,7 @@
         </div>
 
         <h3>APIの一覧</h3>
-        <p>この機能で追加された API は4本です。いずれもログインが必須です。</p>
+        <p>この機能で追加された API は4本です（10/14 に5本目の <code>GET /api/v1/review-spots</code> が追加。下の「🆕」の節を参照）。いずれもログインが必須です。</p>
 
         <table>
             <tr>
@@ -658,6 +671,7 @@ watch(() =&gt; props.existingSpot, () =&gt; { resetInputs(); prefillForEditing()
 // offsetは地図中央からのずれ（上部バナー・下部フォームの分だけ親が指定する）
 map.easeTo({ center: lngLat, offset: [0, props.pinOffsetY] });</pre>
         </div>
+        <p><small>※ 10/07 時点のコードです。10/14（<code>00a85a5</code>）で、ピンを描く座標（<code>pinPosition</code>）と地図を寄せる座標（<code>focusPosition</code>）が分かれ、<code>pinOffsetY</code> は <code>focusOffsetY</code> になりました。下の「🆕」の節を参照してください。</small></p>
         <p>
             <code>anchor: 'bottom'</code> はピンの<strong>下端</strong>を座標に合わせる指定です。これを指定しないと画像の中心が座標に合い、
             ピンの先が実際の位置からずれて見えます。
@@ -711,7 +725,83 @@ const reviewTable = new dynamodb.TableV2(this, 'ReviewTable', {
             （<code>backend/shared/utils/requestContext.js</code>）。
         </p>
 
+        <h2>🆕 2026-10-14 以降の変更</h2>
+
+        <h3>1. 他の人の口コミを紫のピンで出す（<code>ca55da2</code>）</h3>
+        <p>
+            地図のピンが3色になりました。色と意味は1対1で固定です（用語辞書「口コミのピンの色」）。
+        </p>
+        <table>
+            <tr><th>色</th><th>意味</th><th>クラス</th><th>データの出どころ</th></tr>
+            <tr><td>赤</td><td>新規で口コミを投稿する場所（長押しした位置）</td><td><code>location-pin</code></td><td>画面の状態（<code>newSpotPin</code>）</td></tr>
+            <tr><td>オレンジ</td><td>自分が口コミ投稿済みの場所</td><td><code>review-pin-mine</code></td><td><code>GET /api/v1/my-reviews</code>（<code>useMyReviews</code>）</td></tr>
+            <tr><td>紫</td><td>他の人の口コミの場所</td><td><code>review-pin-other</code></td><td><code>GET /api/v1/review-spots</code>（<code>useReviewSpots</code>）から自分の分を除いたもの</td></tr>
+        </table>
+        <ul>
+            <li>新しい Lambda <code>getReviewSpots</code> は、<code>Review</code> テーブルの新しい GSI <code>GSI-SpotList</code>（キーが <code>sk</code>、並びが <code>createdAt</code>）を <code>sk = 'SPOT'</code> で引き、場所の一覧を新しい順に返します。Scan を使わずに Query 1回で済みます</li>
+            <li>返すのは <code>spotId</code> / <code>position</code> / <code>spotName</code> だけです。「誰が投稿したか（<code>createdByUserId</code>）」は他人のIDが外へ出るので返しません</li>
+            <li>自分の分を除くのはフロント（<code>RouteNavigationView</code> の <code>otherReviewSpots</code>）で、オレンジのピンと重ならないようにします</li>
+            <li>取得に失敗しても画面は止めず、ピンを出さずに続けます。理由を追えるよう、フロントは <code>console.warn</code>、Lambda は <code>logError</code> に残します（<code>00a85a5</code>）</li>
+            <li>赤いピンは「まだ口コミが無い場所」にだけ立てます。投稿済みのピンを押したとき（<code>isExistingSpotSelected</code>）や、長押しの位置に既存の場所が見つかったときは立てません</li>
+            <li>画面上部の「口コミ」の札（自分・みんな）でオレンジ・紫の表示を切り替えられます（<code>showMyReviews</code> / <code>showOtherReviews</code>）。<strong>2026-10-28（<code>ff7282d</code>）から既定は両方とも非表示</strong>です。ピンが経路に重なって巡る道筋が見えにくくなるためで、チュートリアル中だけ紫を表示で始めます</li>
+        </ul>
+
+        <h3>2. ピンを描く座標と地図を寄せる座標を分ける・ボトムシート化（<code>00a85a5</code>）</h3>
+        <ul>
+            <li><code>pinPosition</code>（赤いピンを描く座標）と <code>focusPosition</code>（見えている範囲の中央へ持ってくる座標）を別にしました。赤・オレンジ・紫のどのピンから開いても、フォームに隠れない位置へ寄せられます</li>
+            <li>寄せる量 <code>focusOffsetY</code> は、親（<code>RouteNavigationView</code>）がバナーとフォームの実際の高さを測って渡します。フォームを描画してから測る順序が大切で、逆にすると古い高さで寄ってしまいます（<code>showReviewFormAt</code>）</li>
+            <li>投稿フォームは画面下からせり上がるボトムシートになり、既定は半分の高さ（42vh）、上スワイプかハンドルで全体（85vh）に広がります（<code>isExpanded</code>）。高さが変わると <code>changeExpanded</code> を emit し、親が寄せ位置を測り直します</li>
+            <li>赤いピンの先端が押した座標を指すよう、ピンの下端を基準にしています（<code>anchor: 'bottom'</code>）。拡大縮小でピンがずれる問題も <code>c2594c1</code> で直しています</li>
+        </ul>
+
+        <h3>3. 長押しとピン選択で開き方を分ける（<code>c2594c1</code> / <code>236028f</code>）</h3>
+        <table>
+            <tr><th>操作</th><th>開き方</th><th>理由</th></tr>
+            <tr><td>地図の長押し（<code>handleLongPressMap</code>）</td><td>場所の解決（<code>GET /api/v1/spots</code>）を待たずに入力欄を先に出し、裏で解決する</td><td>新規投稿を待たせないため</td></tr>
+            <tr><td>投稿済みのピンを押す（<code>handleSelectReviewSpot</code>）</td><td>解決を終えてからフォームを描く。押した瞬間にピンだけ先に大きくする</td><td>先に出すと、解決までの間だけ新規投稿の入力欄が見えてちらつくため</td></tr>
+        </table>
+        <p>別の投稿のピンへ切り替えるときは、フォームを閉じずに中身だけを差し替えます（<code>236028f</code>。閉じて開き直すとラグが出るため）。</p>
+
+        <h3>4. 選択中のピンを目立たせる（<code>4ebadfa</code>）</h3>
+        <p>
+            開いている場所のピンは色を変えず、大きくして（<code>--pin-size</code>）縁と影を強め、前面へ出します（<code>is-selected</code>）。
+            色は意味に固定しているため、「選択中」という別の意味に色を使いません。目印は <code>selectedReviewSpotId</code> で、支援技術にも <code>aria-pressed</code> で伝えます。
+        </p>
+
+        <h3>5. 写真の全画面表示（<code>c2594c1</code> / <code>1587ecf</code>）</h3>
+        <ul>
+            <li>新しい部品 <code>ReviewPhotoViewer.vue</code> で、写真をタップすると全画面で拡大表示します</li>
+            <li>複数枚は左右スワイプ（40px 以上の横移動。<code>SWIPE_THRESHOLD_PX</code>）・矢印ボタン・キーボードで送れ、端では反対側へ回ります</li>
+            <li>表示する写真の一覧（<code>viewerPhotoUrls</code>）と開く位置（<code>viewerStartIndex</code>）はフォームが持ち、ビューアーは「今どれを見ているか（<code>viewerIndex</code>）」だけを扱います</li>
+        </ul>
+
+        <h3>6. 「投稿中…」の全画面表示（<code>f72fac3</code>）</h3>
+        <div class="code-block"><pre>&lt;BaseProcessingOverlay
+  v-if="isSubmittingReview"
+  message="投稿中…"
+/&gt;</pre></div>
+        <ul>
+            <li>新しい汎用部品 <code>BaseProcessingOverlay.vue</code> が、羊皮紙色の半透明の膜で画面全体を覆い、文言だけを出します。二度押しや地図の長押しを物理的に塞ぎます。散歩の終了時の「記録中…」も同じ部品です</li>
+            <li>重なり順は投稿フォーム（150）より手前、トースト（200）より奥（180）です。待っている間に出たエラーは読めます</li>
+            <li><code>isSubmittingReview</code> は通信中を表す <code>useReviewPosting</code> の <code>isPosting</code> とは別の状態です。通信がすぐ終わっても最短 500ms（<code>MIN_REVIEW_SUBMITTING_DURATION_MS</code>）は出し続け、一瞬で消えるちらつきを防ぎます。チュートリアル（実際には送らない）でも同じ見え方になります</li>
+            <li>成功したら膜とフォームを閉じてトーストで知らせ、失敗したら膜だけを閉じ、入力を残したフォームとエラーを見せて再送できるようにします</li>
+        </ul>
+
+        <h3>7. ジャンルのアイコンを画像に（<code>ba1fdde</code>）</h3>
+        <p>
+            フォームのジャンルの選択肢と、既存の場所のジャンル表示を、絵文字（マスタの <code>iconEmoji</code>）から同梱の PNG 画像に変えました。
+            画像の対応は <code>constants/genreImages.js</code> の <code>getGenreImage(genreId, genreName)</code> で、ホーム画面のジャンル選択と同じ見た目になります。
+        </p>
+
         <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>0. 紫のピンの件数には上限がある（10/14 追加）</h3>
+            <p>
+                <code>getReviewSpots</code> はページングせず、新しい順に <code>DEFAULT_QUERY_LIMIT</code> 件までしか返しません。投稿が増えると古い場所のピンは出なくなります。
+                また <code>GSI-SpotList</code> は全場所が1つのパーティション（<code>sk = 'SPOT'</code>）に集まる構成で、件数上限つきの読み取りのみのため現在の規模では許容している、とコメントにあります。
+            </p>
+        </div>
 
         <div class="important">
             <h3>1. 平均評価（ratingAverage）は保存していない</h3>
@@ -811,7 +901,12 @@ const reviewTable = new dynamodb.TableV2(this, 'ReviewTable', {
             <li>押しながら指を動かした場合・地図をドラッグした場合に<strong>フォームが開かない</strong>ことも確認する（長押しの取り消しが効いているか）</li>
             <li>ロケーション名・ジャンル・星を入れて投稿し、画面上部に「口コミを投稿しました」が出てオレンジのピンが増えることを確認する</li>
             <li>同じ場所をもう一度長押しし、名前とジャンルが入った「口コミを編集」の形で開くことを確認する（本人編集）</li>
-            <li>左上の「自分の口コミ」ボタンで、オレンジのピンの表示が切り替わることを確認する</li>
+            <li><s>左上の「自分の口コミ」ボタンで、オレンジのピンの表示が切り替わることを確認する</s>（10/07 時点の手順）</li>
+            <li>（2026-10-28 時点）画面上部右の「口コミ」の札の「自分」「みんな」で、オレンジ・紫のピンの表示が切り替わること、案内開始時はどちらも非表示であることを確認する</li>
+            <li>紫のピンを押すと評価のみのフォームが開き、ピンが大きく前面に出ること、別のピンへ切り替えてもフォームが閉じずに中身が替わることを確認する</li>
+            <li>フォームのハンドルを上へスワイプすると全体表示に広がり、ピンがフォームに隠れない位置へ寄ることを確認する</li>
+            <li>写真をタップすると全画面で表示され、複数枚ならスワイプ・矢印で送れることを確認する</li>
+            <li>投稿ボタンを押すと「投稿中…」が全画面に出て、その間は地図やボタンを操作できないことを確認する</li>
         </ol>
 
         <div class="info-box">
@@ -978,6 +1073,56 @@ npm run build</pre>
                     <td>用語辞書。口コミの節を新設し、用語を追加</td>
                     <td><code>cce3717</code>, <code>1695300</code>, <code>e8725e4</code></td>
                 </tr>
+                <tr>
+                    <td><code>backend/functions/getReviewSpots/</code>（handler / service / repository / constants）</td>
+                    <td>（10/14 新規）口コミが付いた場所の一覧（紫のピン用）</td>
+                    <td><code>ca55da2</code>, <code>00a85a5</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/composables/useReviewSpots.js</code></td>
+                    <td>（10/14 新規）紫のピン用の一覧の取得</td>
+                    <td><code>ca55da2</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/review/ReviewPhotoViewer.vue</code></td>
+                    <td>（10/14 新規）写真の全画面表示</td>
+                    <td><code>c2594c1</code>, <code>1587ecf</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/base/BaseProcessingOverlay.vue</code></td>
+                    <td>（10/28 新規）「投稿中…」「記録中…」の全画面表示</td>
+                    <td><code>f72fac3</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/constants/genreImages.js</code></td>
+                    <td>（10/28）ジャンルの画像の対応表。フォームでも使う</td>
+                    <td><code>ba1fdde</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/review/ReviewPostForm.vue</code>（追記）</td>
+                    <td>ボトムシート化（<code>isExpanded</code>）・写真の拡大表示・ジャンル画像・「投稿中…」の文言・チュートリアルの吹き出し</td>
+                    <td><code>ca55da2</code>, <code>00a85a5</code>, <code>c2594c1</code>, <code>1587ecf</code>, <code>f72fac3</code>, <code>ba1fdde</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/route/RouteMap.vue</code> / <code>RouteNavigationMap.vue</code>（追記）</td>
+                    <td>紫のピン・<code>focusPosition</code> / <code>focusOffsetY</code>・選択中のピンの強調</td>
+                    <td><code>ca55da2</code>, <code>00a85a5</code>, <code>4ebadfa</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteNavigationView.vue</code>（追記）</td>
+                    <td>3色のピンの出し分け・表示切り替え（既定は非表示）・開き方の分岐・「投稿中…」</td>
+                    <td><code>ca55da2</code>, <code>00a85a5</code>, <code>c2594c1</code>, <code>236028f</code>, <code>4ebadfa</code>, <code>f72fac3</code>, <code>ff7282d</code></td>
+                </tr>
+                <tr>
+                    <td><code>iac/lib/michishiru-stack.ts</code>（追記）</td>
+                    <td><code>GSI-SpotList</code>・<code>GetReviewSpotsFunction</code>・<code>GET /api/v1/review-spots</code>（Cognito 認可付き）</td>
+                    <td><code>ca55da2</code></td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/components/feature/review/__tests__/ReviewPostForm.test.js</code> / <code>src/views/__tests__/RouteNavigationView.test.js</code></td>
+                    <td>（10/28）「投稿中…」の表示・ピンの既定の非表示のテスト</td>
+                    <td><code>f72fac3</code>, <code>ff7282d</code></td>
+                </tr>
             </table>
         </div>
 
@@ -1002,6 +1147,18 @@ npm run build</pre>
             <tr>
                 <td><a href="../仕様書.md">仕様書</a></td>
                 <td>画面仕様と開発コマンド（<code>npm run dev</code> などの一覧）。口コミ画面の記載はまだない</td>
+            </tr>
+            <tr>
+                <td><a href="./口コミの場所を巡るルート_実装解説.html">口コミの場所を巡るルート</a></td>
+                <td>投稿された口コミの場所をルートの候補に混ぜる機能（続きの機能）</td>
+            </tr>
+            <tr>
+                <td><a href="./チュートリアル_実装解説.html">チュートリアル</a></td>
+                <td>ダミーの紫ピンで口コミの評価を練習する流れ</td>
+            </tr>
+            <tr>
+                <td><a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a></td>
+                <td>口コミの投稿件数が経験値になる仕組み</td>
             </tr>
         </table>
     </div>
