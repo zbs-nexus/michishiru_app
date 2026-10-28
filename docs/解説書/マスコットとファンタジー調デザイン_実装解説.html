@@ -109,7 +109,16 @@
             <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
             <strong>📅 マージ日:</strong> 2026-10-07<br>
             <strong>🌿 対象ブランチ:</strong> feature/NZ-178<br>
-            <strong>🔖 対象マージ:</strong> <code>3c4fc0b</code>
+            <strong>🔖 対象マージ:</strong> <code>3c4fc0b</code><br>
+            <strong>🔁 追加の対象（2026-10-28 更新）:</strong><br>
+            &nbsp;&nbsp;・2026-10-14 <code>feature/NZ-236</code>: <code>4e24e22</code>（アプリ全体の書体を DotGothic16 へ）, <code>5bd23f0</code>（ボタン・入力欄に書体を継承）, <code>b72a9d7</code>（地図の中の文字に書体を継承）<br>
+            &nbsp;&nbsp;・2026-10-15 <code>feature/NZ-159</code>: <code>0d851b4</code>（どの端末でも一画面に収める <code>--fit</code>）<br>
+            &nbsp;&nbsp;・2026-10-21 <code>feature/NZ-236</code> ほか: <code>7f188e5</code>（ドット絵風のデザイン）→ <code>c3d8e30</code>（いったん取り消し）→ <code>ce94517</code>（取り消しを元に戻す。マスコットの画像更新も同梱）,
+            <code>c8983b2</code>（ボタンが隠れるバグの修正）, <code>b8c06ae</code>（ホームの背景画像の差し替え。同じマージの「前の目的地へ」ボタンは <a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a>）,
+            <code>8c95b92</code>（ジャンル画像の追加・スクロールバーの帯を消す）<br>
+            &nbsp;&nbsp;・2026-10-28 <code>feature/NZ-317</code>: <code>3d8e20d</code>（ジャンルのアイコンを透過PNGに・枠の調整）, <code>ba1fdde</code>（口コミフォームも画像に）<br>
+            <small>※ 10/14 以降の変更は「🆕 2026-10-14 以降の変更」の節にまとめています。それより前の節は 10/07 時点の説明です。
+            特に<strong>書体は「解星特ミン」から「DotGothic16」に変わっています</strong>。マスコットのレベルと経験値は <a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a> を参照してください。</small>
         </div>
 
         <h2>🧩 先に知っておきたいこと</h2>
@@ -146,7 +155,7 @@
         <ul>
             <li>配色と書体を <code>global.css</code> の <code>:root</code> に集約し、羊皮紙の地色・金の縁取り・紫のインクの3点で全画面を揃えた</li>
             <li>マスコットの部品（<code>MascotAvatar</code> / <code>MascotSpeechBubble</code>）を新規に作り、各画面のコメントを吹き出しで話させた</li>
-            <li>見出しの書体を「解星特ミン」に変え、外部CDNではなく自前で配信するようにした</li>
+            <li>見出しの書体を「解星特ミン」に変え、外部CDNではなく自前で配信するようにした（10/14 にアプリ全体が DotGothic16 へ変更。自前配信の方針は同じ）</li>
             <li>デザインを確認するための開発専用画面（<code>/design-preview</code>）を追加した</li>
         </ul>
         <p>
@@ -486,6 +495,7 @@ const mascotMessageVariant = computed(() =>
  */
 import('@fontsource/kaisei-tokumin/700.css');</pre>
         </div>
+        <p><small>※ 10/07 時点のコードです。現在（<code>4e24e22</code> 以降）は <code>import('@fontsource/dotgothic16/400.css');</code> の1行で、見出しも本文も DotGothic16 です。下の「🆕」の節を参照してください。</small></p>
         <p>
             ファイルの先頭に並ぶ <code>import ... from ...</code> は「このファイルを動かす前に必ず読み込む」宣言ですが、<code>import('...')</code> という関数の形（動的 import）は「別の荷物として後から取りに行く」書き方です。こうすると書体の定義が本体のJS/CSSから切り離され、最初の表示を待たせません。
         </p>
@@ -545,7 +555,69 @@ if (import.meta.env.DEV) {
             <code>enablePreviewIdToken()</code> は API の認可に使うトークンを開発用のダミーへ切り替える関数で、これが無いと検索条件マスタの取得が「ログインの有効期限が切れました」で失敗します。見本のルートは新宿駅を出て新宿御苑・花園神社・甘味処を回る周回コースで、座標も実在の位置に合わせた固定値です。散歩結果の画面には歩いた実績（3240m・3スポット・48分）も入れてから移動します。
         </p>
 
+        <h2>🆕 2026-10-14 以降の変更</h2>
+
+        <h3>1. アプリ全体の書体を DotGothic16 へ（<code>4e24e22</code> / <code>5bd23f0</code> / <code>b72a9d7</code>）</h3>
+        <div class="code-block"><pre>--font-display: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;
+--font-body: 'DotGothic16', 'Hiragino Sans', 'Yu Gothic', 'YuGothic', 'Meiryo', sans-serif;</pre></div>
+        <ul>
+            <li>見出しも本文も同じドット文字（DotGothic16、SIL Open Font License 1.1）にしました。変数は2つのまま残し、将来「見出しだけ戻す」余地を残しています</li>
+            <li>読み込めないときは端末のゴシックへ落ちます。明朝は雰囲気が離れすぎるので候補に入れていません</li>
+            <li>DotGothic16 は<strong>ウェイト400しか持たない</strong>ため、<code>font-weight: 700</code> の箇所はブラウザの合成太字になります。今後の強調は太字に頼らず、文字の大きさや色で差をつけます（ドット文字は太らせると輪郭が潰れる）</li>
+            <li>読み込みは <code>main.js</code> の <code>import('@fontsource/dotgothic16/400.css')</code>（自前配信・動的 import）。以前の <code>@fontsource/kaisei-tokumin</code> は読み込みをやめましたが、戻せるよう依存は <code>package.json</code> に残しています</li>
+            <li>ブラウザは <code>button</code> / <code>input</code> などに既定の書体を当てるため、<code>font-family: inherit</code> で <code>body</code> から受け継がせています（<code>5bd23f0</code>）</li>
+            <li>MapLibre GL は地図の入れ物に独自の書体を当てるため、<code>.maplibregl-map { font-family: inherit; }</code> で戻しています（<code>b72a9d7</code>）。地図のタイルに焼き込まれた地名は画像なので変えられません</li>
+        </ul>
+
+        <h3>2. どの端末でも一画面に収める（<code>0d851b4</code>）</h3>
+        <div class="code-block"><pre>--fit: 1px;
+
+@supports (height: 1svh) {
+  :root {
+    --fit: clamp(0px, calc((100svh - 560px) / 300), 1px);
+  }
+}</pre></div>
+        <ul>
+            <li><code>--fit</code> は画面の高さに合わせて 0px〜1px に変わる係数です。高さ560px以下で0、860px以上で1、その間は比例します</li>
+            <li>寸法は <code>calc(低い画面での値 + var(--fit) * 伸び幅)</code> の形で書きます。例: <code>calc(12px + var(--fit) * 8)</code> は低い画面で12px、高い画面で20px</li>
+            <li>画面の骨格（<code>.screen</code>）は表示領域の高さちょうどにして文書をスクロールさせず、収まらないときだけ本文（<code>.content</code>）の中をスクロールさせます。スクロールバーの帯は出しません（<code>8c95b92</code>。羊皮紙の地に灰色の筋が入るため）</li>
+            <li>結果画面は本文を上下の中央に寄せ、ルート提案画面のカード（<code>RouteInfoCard</code>）も縮むように調整しました</li>
+        </ul>
+
+        <h3>3. ドット絵風のデザイン（<code>7f188e5</code> → <code>c3d8e30</code> → <code>ce94517</code>）</h3>
+        <p>
+            10/21 の朝、ドット絵風のデザインが入り（<code>7f188e5</code>）、いったん取り消され（<code>c3d8e30</code>）、<code>ce94517</code> に含まれるコミット「デザイン変更の取り消しを元に戻す」で再び入りました。
+            <strong>現在のコードはドット絵風のデザイン</strong>です。履歴を追うときは、<code>c3d8e30</code> の時点のファイルが一時的に古いデザインに戻っている点に注意してください。
+        </p>
+        <table>
+            <tr><th>要素</th><th>中身</th></tr>
+            <tr><td>地の絵</td><td>古地図の一枚絵（<code>assets/images/home-map-background.png</code>）を <code>.paper-map-bg</code> として敷く。羊皮紙色の膜を重ねて文字を読みやすくする。ホーム・認証・ロード中・散歩結果で使い、<code>DefaultLayout</code> の <code>#background</code> スロットへ置く。画像は <code>b8c06ae</code> で高解像度版に差し替え</td></tr>
+            <tr><td>ドット絵の枠</td><td><code>--pixel-frame-width</code> と <code>--pixel-frame-ink</code> / <code>-primary</code> / <code>-danger</code>。5×5 の SVG を <code>border-image</code> で9分割し、角が段差になる二重線の枠を作る。ボタン・入力欄・カードに使う</td></tr>
+            <tr><td>輪郭と影</td><td>面を囲む線は茶のインク（<code>--border-ink</code>）、影はぼかさず右下へずらすだけ（<code>--shadow</code>）。金（<code>--accent-gold</code>）は飾り専用</td></tr>
+            <tr><td>地図の上の影</td><td>マーカー・ピンは実際の地図の上に浮かせるので、真下に落ちる柔らかい影（<code>--shadow-marker</code>）。硬い影だとピンが指す座標がずれて見える</td></tr>
+        </table>
+        <p>
+            <code>c8983b2</code> は、結果画面などで背景の絵（<code>position: fixed</code>）が位置指定を持たない中身より手前に描かれ、ボタンや注記が隠れるバグの修正です。
+            <code>.content</code> を通らない結果画面の本文の入れ物にも、<code>.content</code> と同じ <code>position: relative; z-index: 1;</code> を持たせています（コメントに「消さないこと」とあります）。
+        </p>
+
+        <h3>4. ジャンルのアイコンを画像に（<code>8c95b92</code> / <code>3d8e20d</code> / <code>ba1fdde</code>）</h3>
+        <ul>
+            <li>ホーム画面のジャンルのボタンを、マスタの絵文字（<code>iconEmoji</code>）から同梱の画像に変えました。端末やブラウザで絵文字の見た目が揃わないためです</li>
+            <li>素材は <code>8c95b92</code> で約2MBの JPEG として追加され、<code>3d8e20d</code> で背景を透過した約40KBの PNG（128px）に置き換えてボタンに組み込み、枠の見た目も調整しました</li>
+            <li>対応表は <code>constants/genreImages.js</code> の <code>getGenreImage(genreId, genreName)</code>。ジャンルIDで引き、見つからなければ日本語の表示名で引きます（本番のマスタが手作りで、IDが seed と違う場合の保険）。画像のファイル名とIDは一致しません（<code>gourmet</code> → <code>food.png</code>）</li>
+            <li>口コミの投稿フォームのジャンルも同じ画像にそろえました（<code>ba1fdde</code>。<a href="./口コミ投稿_実装解説.html">口コミ投稿</a>）</li>
+        </ul>
+
         <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>0. ドット絵の枠と角丸は併用できない（10/21 追加）</h3>
+            <p>
+                <code>border-image</code> の枠は四角いのに背景だけ角が丸まるため、ドット絵の枠を使う要素では <code>border-radius</code> を書かないでください。
+                また枠の太さ（<code>--pixel-frame-width</code>）を変えると要素が外へ広がるので、ジャンルの4列やボタンの高さが崩れていないか確かめてください。
+            </p>
+        </div>
 
         <div class="important">
             <h3>1. マスコットは1画面に1体だけ</h3>
@@ -821,6 +893,14 @@ npm test</pre>
             <tr>
                 <td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td>
                 <td>プレビュー画面が呼ばずに済ませている、ルート作成の中身（Location Service と Bedrock）</td>
+            </tr>
+            <tr>
+                <td><a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a></td>
+                <td>マスコットの姿が実績で Lv.1〜Lv.10 に育つ仕組み（続きの機能）</td>
+            </tr>
+            <tr>
+                <td><a href="./ダブルタップでの拡大防止_実装解説.html">ダブルタップでの拡大防止</a></td>
+                <td><code>global.css</code> に追加された、操作部品のダブルタップ拡大の抑止</td>
             </tr>
         </table>
     </div>

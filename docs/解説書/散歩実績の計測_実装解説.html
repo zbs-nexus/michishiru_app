@@ -106,11 +106,12 @@
         <h1>散歩実績の計測 - 実装解説</h1>
 
         <div class="info-box">
-            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
-            <strong>📅 マージ日:</strong> 2026-10-07（10:23）<br>
-            <strong>🌿 対象ブランチ:</strong> <code>feature/NZ-230</code>（PR #69「散歩実測値の取得」）<br>
-            <strong>🔖 対象マージ:</strong> <code>95b51ab</code><br>
-            <small>※ このマージで追加されたのは「GPSの軌跡から距離を積む」部分（計画ファイルでは段階1と呼ばれています）です。計測の欠落を検知する <code>measurementStatus</code> は、対象期間より後のマージ <code>dc87c1c</code>（2026-10-14 / <code>feature/NZ-176</code>）で加わりました。現在のコードを読むときに混乱しないよう、この解説書では後者も区別して触れます。</small>
+            <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-14<br>
+            <strong>📅 マージ日:</strong> 2026-10-07（10:23）, 2026-10-14（09:16）<br>
+            <strong>🌿 対象ブランチ:</strong> <code>feature/NZ-230</code>（PR #69「散歩実測値の取得」）, <code>feature/NZ-176</code>（PR #79）<br>
+            <strong>🔖 対象マージ:</strong> <code>95b51ab</code>（GPSの軌跡から距離を積む。計画ファイルでは段階1）, <code>dc87c1c</code>（計測の信頼性: 計測状態・欠落の検知・画面の消灯抑止）<br>
+            <small>※ <code>dc87c1c</code> には実績をサーバーへ保存する部分も含まれますが、そちらは <a href="./散歩実績の保存_実装解説.html">散歩実績の保存</a> で扱います。<br>
+            ※ 2026-10-28 更新: 次の目的地の到達判定（40m以内で自動）は廃止され、「次の目的地へ」ボタンでのみ到達済みにする方式に変わっています（<a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a>）。「巡ったスポット」もボタンで到達済みにした数です。</small>
         </div>
 
         <h2>🧩 先に知っておきたいこと</h2>
@@ -184,7 +185,7 @@ WalkResultView → WalkResultStats（結果画面に表示）</pre>
         </div>
         <div class="flow-step">
             <strong>Step 5: 到達したスポットをストアへ写す（RouteNavigationView.vue）</strong><br>
-            到達判定そのものは既存の <code>useRouteProgress</code> が行います。その結果（<code>visitedSpotIds</code>）を <code>watch</code> で監視し、変わるたびに <code>walkStore.setVisitedSpotIds()</code> へ渡します。案内画面が破棄されても結果画面から読めるようにするためです。
+            到達済みの管理そのものは既存の <code>useRouteProgress</code> が行います（現在は「次の目的地へ」ボタンを押したときに到達済みになります）。その結果（<code>visitedSpotIds</code>）を <code>watch</code> で監視し、変わるたびに <code>walkStore.setVisitedSpotIds()</code> へ渡します。案内画面が破棄されても結果画面から読めるようにするためです。
         </div>
         <div class="flow-step">
             <strong>Step 6: 終了ボタンで時刻を確定して遷移する（handleConfirmEnd）</strong><br>
@@ -322,8 +323,8 @@ watch(visitedSpotIds, (spotIds) => {
       &lt;/p&gt;</pre></div>
         <p><code>role="status"</code> は、画面読み上げソフトにこの文章の出現を伝えるための指定です。</p>
 
-        <h3>計測状態（measurementStatus）— 対象期間より後の追補</h3>
-        <p>現在の <code>walkStore.js</code> には、上の <code>hasLocationFix</code> だけでは言い分けられない状況のために、3値の <code>measurementStatus</code> が入っています。これは <code>dc87c1c</code>（2026-10-14 / <code>feature/NZ-176</code>）で加わったもので、<strong>対象期間の外</strong>です。段階1のコードを読むときは存在しない点に注意してください。</p>
+        <h3>計測状態（measurementStatus）— <code>dc87c1c</code> で追加</h3>
+        <p>現在の <code>walkStore.js</code> には、上の <code>hasLocationFix</code> だけでは言い分けられない状況のために、3値の <code>measurementStatus</code> が入っています。これは <code>dc87c1c</code>（2026-10-14 / <code>feature/NZ-176</code>）で加わったもので、段階1（<code>95b51ab</code>）の時点のコードには存在しません。</p>
         <div class="code-block"><pre>  const measurementStatus = computed(() => {
     if (hasLocationFix.value === false) {
       return MEASUREMENT_STATUS.UNAVAILABLE;
@@ -347,10 +348,43 @@ watch(visitedSpotIds, (spotIds) => {
         </table>
         <p>2値（測れた／測れなかった）ではなく3値にしているのは、「測れてはいるが足りていない」という状態が実際に起きるためです。トンネルで測位が止まった、画面を消していた、精度が悪い区間が続いた、といった場合に数値は出ますが実際より短くなります。そこで<strong>数値は常に表示したうえで、足りない可能性を注記で正直に伝える</strong>形にしています。判定は強い事実から順に見ます（測位できていない → 欠落を検知した → 距離が0のまま）。</p>
 
+        <h3>欠落の検知（hasMeasurementGap）— <code>dc87c1c</code> で追加</h3>
+        <p><code>hasMeasurementGap</code> を立てるのは <code>RouteNavigationView.vue</code> です。次の2種類の「止まっていた時間」を<strong>散歩全体で合計</strong>し、合計が <code>MEASUREMENT_GAP_THRESHOLD_MS</code>（60秒）以上になったら <code>walkStore.markMeasurementGap()</code> を呼びます。</p>
+        <table>
+            <tr><th>止まっていた時間</th><th>どう測るか</th></tr>
+            <tr><td>測位の中断</td><td><code>isMeasurementInterrupted</code>（測位エラーが出ている、または精度が <code>MAX_MEASURABLE_ACCURACY_M</code> より悪い）が真の間。復帰しないまま続く場合に備え、残り時間でタイマーも張る</td></tr>
+            <tr><td>画面の非表示</td><td><code>visibilitychange</code> で <code>hidden</code> になってから戻るまで。非表示中は測位側では数えない（同じ時間を2回積まないため）</td></tr>
+        </table>
+        <div class="code-block"><pre>const addMeasurementGapMs = (gapMs) => {
+  accumulatedGapMs += gapMs;
+
+  if (accumulatedGapMs >= MEASUREMENT_GAP_THRESHOLD_MS) {
+    walkStore.markMeasurementGap();
+  }
+};</pre></div>
+        <ul>
+            <li>1回の中断ごとに判定を捨てず合計するのは、「信号待ちのたびに数十秒切れる」ような断続的な不調も拾うためです</li>
+            <li>測位エラー1回では欠落にしません。タイムアウト（10秒）は屋内や高架下で普通に起き、その間に進む距離（約12m）では実害がないためです</li>
+            <li>60秒より短い中断なら、復帰時の区間が200m以内に収まり、距離は直線でつながります</li>
+            <li>一度立てた <code>hasMeasurementGap</code> は戻しません。途切れていた間の距離は取り戻せないためです</li>
+        </ul>
+
+        <h3>画面の消灯抑止（useScreenWakeLock）— <code>dc87c1c</code> で追加</h3>
+        <p>
+            スマートフォンは画面が自動で消えると測位が止まります。そこで案内中は、ブラウザの Screen Wake Lock API（画面を点けたままにする仕組み）で自動消灯を抑止します。
+            <code>frontend/src/composables/useScreenWakeLock.js</code> の <code>requestScreenWakeLock()</code> を案内画面の表示時と、非表示から戻ったとき（非表示になると自動で解放されるため）に呼びます。
+        </p>
+        <ul>
+            <li>未対応のブラウザでは何もせずに抜けます（案内自体は消灯抑止なしでも成立する）</li>
+            <li>取得の待ち合わせ中に画面を離れた場合は、取れたロックをその場で捨てます</li>
+            <li>画面の破棄時（<code>onBeforeUnmount</code>）に必ず解放します。残すと案内画面を離れても消灯が止まったままになります</li>
+        </ul>
+
         <h2>⚠️ 注意ポイント</h2>
         <div class="important">
             <strong>実績は1回の散歩分しか残らず、リロードで消える</strong><br>
-            <code>walkStore</code> はブラウザのメモリ上にあるだけで、このマージの時点では保存先を持ちません。結果画面で再読み込みすると値は0に戻り、「ホームに戻る」を押すと <code>resetWalk()</code> で消えます。累積距離や散歩回数といった長期の実績は対象外で、サーバーへ保存する処理（<code>useWalkResultSave</code>）は対象期間より後のマージで追加されました。
+            <code>walkStore</code> はブラウザのメモリ上にあるだけです。結果画面で再読み込みすると値は0に戻り、「ホームに戻る」を押すと <code>resetWalk()</code> で消えます。<br>
+            <small>※ 2026-10-28 更新: <code>dc87c1c</code> 以降は、終了時に1回分の実績がサーバー（<code>WalkResult-&lt;環境&gt;</code>）へ保存され、累計にも足されます。画面上の <code>walkStore</code> がリロードで消える点は変わりません（<a href="./散歩実績の保存_実装解説.html">散歩実績の保存</a>）。</small>
         </div>
         <div class="important">
             <strong><code>hasLocationFix</code> は「距離を積めた」ではなく「測位が届いた」</strong><br>
@@ -380,12 +414,13 @@ watch(visitedSpotIds, (spotIds) => {
                     <li>一度に200mより遠くへ飛ばした場合も増えません（飛び判定）。</li>
                 </ul>
             </li>
-            <li>スポットの座標に40m以内まで近づけると「巡ったスポット」が増えることを確認します。</li>
+            <li>「次の目的地へ」を押すと「巡ったスポット」が増えることを確認します（2026-10-14 以降、近づいただけでは増えません）。</li>
+            <li>開発者ツールの「Sensors」で位置を「Location unavailable」にして60秒以上待つ、あるいは別のタブへ60秒以上切り替えてから戻り、終了後に「一部の区間を計測できなかったため…」の注記が出ることを確認します。</li>
             <li>「終了」→「終了する」で結果画面に進み、「所要時間」が案内を始めてからの分数になっていることを確認します。</li>
             <li>位置情報の許可をブロックしたまま案内を終了し、「位置情報を取得できなかったため、実績を計測できませんでした」が出ることを確認します。</li>
             <li>「ホームに戻る」からもう一度ルートを作って案内・終了し、前回の距離やスポット数が積み上がっていないことを確認します。</li>
             <li>静的検査とビルド: <code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code>。</li>
-            <li>自動テスト: <code>frontend/</code> で <code>npm test</code>（Vitest）。<code>src/stores/__tests__/walkStore.test.js</code> が <code>measurementStatus</code> の4通りを検証します。<small>※ このテストは対象マージの時点では存在せず、<code>dc87c1c</code> で追加されたものです。段階1の検証は lint とビルド、手動確認で行われました。</small></li>
+            <li>自動テスト: <code>frontend/</code> で <code>npm test</code>（Vitest）。<code>src/stores/__tests__/walkStore.test.js</code> が <code>measurementStatus</code> の4通りを検証します。<code>src/composables/__tests__/useScreenWakeLock.test.js</code> が消灯抑止の取得・解放を、<code>src/views/__tests__/RouteNavigationView.test.js</code> が欠落の検知を検証します。<small>※ これらのテストは <code>dc87c1c</code> で追加されたものです。段階1の検証は lint とビルド、手動確認で行われました。</small></li>
         </ol>
 
         <h2>📁 関連ファイル一覧</h2>
@@ -432,6 +467,21 @@ watch(visitedSpotIds, (spotIds) => {
                     <td>既存（<code>feature/NZ-153</code>）</td>
                 </tr>
                 <tr>
+                    <td><code>frontend/src/composables/useScreenWakeLock.js</code></td>
+                    <td>（新規）案内中の画面の自動消灯を抑止する</td>
+                    <td><code>feature/NZ-176</code>（<code>dc87c1c</code>）</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/stores/walkStore.js</code>（追記）</td>
+                    <td><code>measurementStatus</code> / <code>hasMeasurementGap</code> / <code>markMeasurementGap</code> / <code>lastDistanceAddedAt</code> を追加</td>
+                    <td><code>feature/NZ-176</code>（<code>dc87c1c</code>）</td>
+                </tr>
+                <tr>
+                    <td><code>frontend/src/views/RouteNavigationView.vue</code>（追記）</td>
+                    <td>欠落の検知（中断時間の合計・<code>visibilitychange</code>）と消灯抑止の呼び出し</td>
+                    <td><code>feature/NZ-176</code>（<code>dc87c1c</code>）</td>
+                </tr>
+                <tr>
                     <td><code>frontend/.agents/tasks/walk-record-stage1/</code></td>
                     <td>実装計画・レビュー・検証の記録（<code>plan.md</code> / <code>review.md</code> / <code>verification.md</code>）</td>
                     <td><code>feature/NZ-230</code></td>
@@ -467,7 +517,7 @@ watch(visitedSpotIds, (spotIds) => {
             </tr>
             <tr>
                 <td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示の実装解説</a></td>
-                <td>到達判定（40m以内）と <code>visitedSpotIds</code> の作り方。この機能が「巡ったスポット」として受け取る値の出どころ</td>
+                <td>到達済みの管理（現在は「次の目的地へ」「前の目的地へ」のボタン操作）と <code>visitedSpotIds</code> の作り方。この機能が「巡ったスポット」として受け取る値の出どころ</td>
             </tr>
         </table>
     </div>
