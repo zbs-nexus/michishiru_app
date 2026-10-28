@@ -102,6 +102,16 @@ const props = defineProps({
     type: Number,
     default: 0
   },
+  /**
+   * 拡大率を変えずに、スムーズに（アニメーション付きで）見えている範囲の中央へ寄せる座標
+   * { lng, lat }。未設定の場合はnull。
+   * チュートリアルで紫ピンへ案内するなど、今の縮尺を保ったまま位置だけを滑らかに移す用途。
+   * 即時に寄せる focusPosition とは別に持ち、こちらは easeTo をアニメーションさせる。
+   */
+  smoothCenterPosition: {
+    type: Object,
+    default: null
+  },
   /** 自分が投稿した口コミの場所（{ spotId, position, spotName } の配列） */
   myReviewSpots: {
     type: Array,
@@ -561,6 +571,27 @@ const focusOnPosition = () => {
     center: [props.focusPosition.lng, props.focusPosition.lat],
     offset: [0, props.focusOffsetY],
     duration: 0
+  });
+};
+
+/**
+ * @description 拡大率を変えずに、対象の座標を見えている範囲の中央へスムーズに寄せる。
+ *
+ * 今の縮尺を保ったまま位置だけを滑らかに移すため、easeTo に zoom を渡さず
+ * アニメーション（duration あり）で動かす。切り替わりではなく移動に見せるのが狙い。
+ * 画面上部・下部の隠れているぶん（topInset / bottomInset）を offset で補い、
+ * 対象が可視範囲の中央へ来るようにする。
+ * @returns {void}
+ */
+const smoothCenterOnPosition = () => {
+  if (map === null || props.smoothCenterPosition === null) {
+    return;
+  }
+
+  map.easeTo({
+    center: [props.smoothCenterPosition.lng, props.smoothCenterPosition.lat],
+    offset: [0, toVisibleCenterOffsetY()],
+    duration: 800
   });
 };
 
@@ -1082,6 +1113,19 @@ watch(
     }
 
     focusOnPosition();
+  },
+  { deep: true }
+);
+
+// スムーズに寄せる対象（チュートリアルの紫ピンなど）が設定されたら、拡大率を変えずに滑らかに移動する
+watch(
+  () => props.smoothCenterPosition,
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    smoothCenterOnPosition();
   },
   { deep: true }
 );

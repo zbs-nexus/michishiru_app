@@ -63,6 +63,14 @@ defineProps({
     type: Number,
     default: 0
   },
+  /**
+   * 拡大率を変えずにスムーズに見えている範囲の中央へ寄せる座標 { lng, lat }。未設定はnull。
+   * チュートリアルで紫ピンへ案内するために使う
+   */
+  smoothCenterPosition: {
+    type: Object,
+    default: null
+  },
   /** 自分が投稿した口コミの場所の一覧 */
   myReviewSpots: {
     type: Array,
@@ -142,6 +150,7 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :pin-position="pinPosition"
         :focus-position="focusPosition"
         :focus-offset-y="focusOffsetY"
+        :smooth-center-position="smoothCenterPosition"
         :my-review-spots="myReviewSpots"
         :show-my-reviews="showMyReviews"
         :other-review-spots="otherReviewSpots"

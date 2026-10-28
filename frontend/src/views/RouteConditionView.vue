@@ -187,6 +187,18 @@ const handleStartTutorial = () => {
 };
 
 /**
+ * @description メニューからチュートリアルを終了してホーム画面へ戻す。
+ * チュートリアルの途中でやめられるようにする。
+ * 入力途中の条件（チュートリアル用に選んだジャンル・距離）が残らないよう初期化する。
+ * この画面自体がホームのため、遷移はせず状態だけを初期化する。
+ * @returns {void}
+ */
+const handleEndTutorial = () => {
+  tutorialStore.finish();
+  routeStore.resetConditions();
+};
+
+/**
  * @description ログアウトしてログイン画面へ戻る。
  * 次に使う人へ前の利用者の入力条件が残らないよう、ストアも初期化する。
  * @returns {Promise<void>}
@@ -259,8 +271,10 @@ const isTutorialCreateStep = computed(() =>
 
       <SignOutMenu
         class="header-menu"
+        :is-tutorial-active="tutorialStore.isActive"
         @sign-out="handleSignOut"
         @start-tutorial="handleStartTutorial"
+        @end-tutorial="handleEndTutorial"
       />
     </div>
 

@@ -67,8 +67,9 @@ const props = defineProps({
   },
   /**
    * チュートリアルで合わせさせる距離の上限（km）。
-   * 距離の区画が有効なとき、スライダーの最大値をこの値へ下げ、
-   * 目標（5km）を超えて動かせないようにする。null のときは下げない。
+   * 距離の区画が有効なとき、スライダーの目盛り・可動域は本番と同じ（上限10km）に保ちつつ、
+   * 選べる値だけをこの値（5km）で頭打ちにする。これより右へはドラッグし続けても動かない。
+   * null のときは頭打ちにしない。
    */
   tutorialMaxDistanceKm: {
     type: Number,
@@ -79,25 +80,27 @@ const props = defineProps({
 defineEmits(['selectGenre', 'selectDistance', 'toggleGenreRandom', 'toggleDistanceRandom']);
 
 /**
- * 距離スライダーの最大値（km）。
- * チュートリアルで距離の区画を操作させる段階では、目標（tutorialMaxDistanceKm）を
- * 超えて動かせないよう上限を下げる。それ以外はマスタの上限をそのまま使う。
+ * スライダーで選べる値の上限（km）。
+ * チュートリアルで距離を操作させる段階では、目盛りの上限（10km）は本番と同じに保ったまま、
+ * 選べる値だけを tutorialMaxDistanceKm（5km）で頭打ちにする。
+ * BaseSlider がドラッグ中もこの値で押し戻すため、5kmより右へは動かせない。
+ * 頭打ちしない場合は null。
  */
-const distanceMaxKm = computed(() => {
-  if (isTutorialDistanceActive.value && props.tutorialMaxDistanceKm !== null) {
+const distanceValueMaxKm = computed(() => {
+  if (props.isTutorial && props.tutorialMaxDistanceKm !== null) {
     return props.tutorialMaxDistanceKm;
   }
 
-  return props.distanceRange.maxKm;
+  return null;
 });
 
-/** 距離スライダーの目盛り。下限と、スライダーで動かせる上限のラベルを表示する */
+/**
+ * 距離スライダーの目盛り。本番と同じく、マスタの下限と上限（10km）のラベルを表示する。
+ * チュートリアルでも可動域は変えず、選べる値だけを頭打ちにするため目盛りは本番のままにする。
+ */
 const distanceScaleLabels = computed(() => [
   props.distanceRange.minLabel,
-  // チュートリアルで上限を下げたときは、その値をラベルに出す（目盛りと可動域を一致させる）
-  isTutorialDistanceActive.value && props.tutorialMaxDistanceKm !== null
-    ? `${props.tutorialMaxDistanceKm}km`
-    : props.distanceRange.maxLabel
+  props.distanceRange.maxLabel
 ]);
 
 /** チュートリアルでジャンルの区画を操作させる段階かどうか */
@@ -236,7 +239,8 @@ const isGenreButtonDimmed = (value) => {
         <BaseSlider
           :model-value="distanceKm"
           :min-value="distanceRange.minKm"
-          :max-value="distanceMaxKm"
+          :max-value="distanceRange.maxKm"
+          :value-max-value="distanceValueMaxKm"
           :scale-labels="distanceScaleLabels"
           unit="km"
           labelled-by="distance-label"
@@ -298,6 +302,21 @@ const isGenreButtonDimmed = (value) => {
   border-color: var(--border-ink);
   background-color: var(--primary-color);
   color: var(--white);
+}
+
+/*
+ * チュートリアル中のおまかせ。チュートリアルは必ず手動で選ばせる一本道にするため
+ * disabled で押せなくしている。押せないことが見た目でも分かるよう淡くする。
+ */
+.random-icon-btn:disabled {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+.random-icon-btn:disabled:hover {
+  border-color: var(--border-ink);
+  background-color: var(--surface);
 }
 
 .random-message {

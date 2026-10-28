@@ -314,6 +314,19 @@ const isTutorialReviewOpenStep = computed(() =>
 );
 
 /**
+ * チュートリアルで、拡大率を変えずにスムーズに地図を寄せる対象の座標。
+ * 紫ピンをタップさせる段階（OPEN_REVIEW）で、表示時の縮尺を保ったまま
+ * ダミーの紫ピンの位置へ地図を滑らかに移す。それ以外の段階ではnull（寄せない）。
+ */
+const tutorialSmoothCenterPosition = computed(() => {
+  if (isTutorialReviewOpenStep.value) {
+    return TUTORIAL_OTHER_REVIEW_SPOT.position;
+  }
+
+  return null;
+});
+
+/**
  * 口コミフォームに渡すチュートリアルの案内文。
  * 評価・投稿の段階ではフォームに隠れて下部の案内が見えないため、フォーム上部に出す。
  * フォームを操作させない段階ではnull（通常表示）。
@@ -1169,6 +1182,7 @@ const handleConfirmEnd = async () => {
       :pin-position="newSpotPin"
       :focus-position="reviewTargetPosition"
       :focus-offset-y="focusOffsetY"
+      :smooth-center-position="tutorialSmoothCenterPosition"
       :my-review-spots="myReviews"
       :show-my-reviews="showMyReviews"
       :other-review-spots="otherReviewSpots"
