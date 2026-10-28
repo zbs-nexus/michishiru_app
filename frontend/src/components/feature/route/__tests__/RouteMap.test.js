@@ -831,7 +831,7 @@ describe('RouteMap（初期表示の位置と現在地へ戻るときの位置�
     ]);
   });
 
-  test('現在地へ戻るボタンは、固定の倍率で現在地を見えている範囲の中央に置く', () => {
+  test('現在地へ戻るボタンは、押した時点の倍率のまま現在地を見えている範囲の中央に置く', () => {
     setMapHeight(800);
 
     mountAndLoad({
@@ -847,11 +847,11 @@ describe('RouteMap（初期表示の位置と現在地へ戻るときの位置�
     const button = addedControls[0].onAdd().querySelector('.recenter-btn');
     button.click();
 
-    // 初期表示の倍率（最初の区間の長さで変わる）ではなく、常に同じ倍率にする
+    // zoom を渡さないことで、利用者が合わせた縮尺のまま位置だけを戻す
     expect(easeToCalls).toEqual([
-      { center: [139.71, 35.69], zoom: NAVIGATION_ZOOM_LEVEL, offset: [0, (236 - 100) / 2] }
+      { center: [139.71, 35.69], offset: [0, (236 - 100) / 2] }
     ]);
-    expect(NAVIGATION_ZOOM_LEVEL).toBe(17);
+    expect(easeToCalls[0]).not.toHaveProperty('zoom');
   });
 });
 

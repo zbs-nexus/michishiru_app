@@ -285,7 +285,7 @@ inclusion: always
 | スタート地点を中央に置くか | shouldCenterOnOrigin | 真のとき、地図の初期表示でスタート地点（経路の先頭）を見えている範囲の中央に置き、最初の区間（legs[0]）が収まる倍率にする。案内画面だけが真にする（`RouteNavigationMap` が `RouteMap` へ渡す）。偽のときはルート全体を収める |
 | 地図の上側の隠れている高さ | mapTopInsetPx / topInsetPx | 地図の上端から、画面上部の操作（バナー・前後のボタン・口コミの表示切り替え・チュートリアルの吹き出し）で隠れている高さ（ピクセル）。案内開始時のスタート地点と、現在地へ戻るときの現在地を見えている範囲の中央へ置くために使う。View では `mapTopInsetPx`、`RouteNavigationMap` / `RouteMap` の props では `topInsetPx` |
 | 地図の下側の隠れている高さ | mapBottomInsetPx / bottomInsetPx | 地図の下端から、終了ボタンで隠れている高さ（ピクセル）。使い方は mapTopInsetPx と同じ。View では `mapBottomInsetPx`、props では `bottomInsetPx` |
-| 案内中のズームレベル | NAVIGATION_ZOOM_LEVEL | 現在地へ戻るボタンで寄せるときの固定の倍率（17）。ルートや区間の長さでは変えない。`constants/mapDefaults.js` の定数 |
+| 案内中のズームレベル | NAVIGATION_ZOOM_LEVEL | 案内開始時に最初の区間を収められない（画面が極端に低い）場合に、スタート地点を中央に置くときの倍率（17）。現在地へ戻るボタンはこの値を使わず、押した時点の倍率のまま現在地へ寄せる。`constants/mapDefaults.js` の定数 |
 
 ### 環境とデプロイ
 
@@ -456,3 +456,4 @@ inclusion: always
 | 2026/10/28 | 案内画面の拡大・縮小のボタンを削除し、口コミの表示切り替えを右寄せの縦並びにしたことに伴い、「地図」の mapControlsTopPx / controlsTopPx を「地図のコントロールの上端」へ改め、基準を口コミの表示切り替えの札の下端に変更 |
 | 2026/10/28 | 案内開始時にスタート地点を見えている範囲の中央へ置き、現在地へ戻るボタンを固定の倍率にしたことに伴い「地図」へ shouldCenterOnOrigin / mapTopInsetPx / topInsetPx / mapBottomInsetPx / bottomInsetPx / NAVIGATION_ZOOM_LEVEL を追加 |
 | 2026/10/28 | 口コミの投稿中に全画面で「投稿中…」を出すようにしたことに伴い「口コミ」へ isSubmittingReview / MIN_REVIEW_SUBMITTING_DURATION_MS / BaseProcessingOverlay を追加。「記録中…」も同じ部品（BaseProcessingOverlay）へ置き換えた |
+| 2026/10/28 | 現在地へ戻るボタンを、固定の倍率から押した時点の倍率のまま寄せる動きに変更。NAVIGATION_ZOOM_LEVEL の説明を、案内開始時に最初の区間を収められない場合の代わりの倍率へ改めた |

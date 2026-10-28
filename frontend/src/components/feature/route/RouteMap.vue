@@ -399,9 +399,8 @@ const createCurrentLocationElement = () => {
 const toVisibleCenterOffsetY = () => (props.topInsetPx - props.bottomInsetPx) / 2;
 
 /**
- * @description 現在地を見えている範囲の中央へ寄せ、拡大率を固定の値（NAVIGATION_ZOOM_LEVEL）にする。
- * 拡大率をルートや区間の長さで変えないのは、歩いている最中に押したとき、
- * いつも同じ縮尺で周りの道が見えるようにするため。
+ * @description 現在地を見えている範囲の中央へ寄せる。拡大率は押した時点のまま変えない。
+ * 利用者が合わせた縮尺を崩さず、位置だけを現在地へ戻すため、easeTo に zoom を渡さない。
  * @returns {void}
  */
 const centerOnCurrentLocation = () => {
@@ -411,7 +410,6 @@ const centerOnCurrentLocation = () => {
 
   map.easeTo({
     center: [props.currentLocation.lng, props.currentLocation.lat],
-    zoom: NAVIGATION_ZOOM_LEVEL,
     offset: [0, toVisibleCenterOffsetY()]
   });
 };
