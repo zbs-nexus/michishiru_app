@@ -1,7 +1,6 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import BaseButton from '@/components/base/BaseButton.vue';
-import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import ReviewPhotoInput from '@/components/feature/review/ReviewPhotoInput.vue';
 import ReviewPhotoViewer from '@/components/feature/review/ReviewPhotoViewer.vue';
 import ReviewRatingInput from '@/components/feature/review/ReviewRatingInput.vue';
@@ -59,28 +58,13 @@ const props = defineProps({
     default: false
   },
   /**
-   * チュートリアルの案内文。チュートリアル中のみ渡し、フォーム上部に案内として出す。
-   * 渡されない（null）ときはチュートリアル表示を一切行わない。
-   */
-  tutorialMessage: {
-    type: String,
-    default: null
-  },
-  /**
    * チュートリアルで強調する要素。
    * 'rating' は評価の★を、'submit' は投稿ボタンを目立たせる。チュートリアル外ではnull。
+   * チュートリアルの案内文は画面上部（前の目的地ボタンの下）の吹き出しで出すため、フォーム内には出さない。
    */
   tutorialHighlight: {
     type: String,
     default: null
-  },
-  /**
-   * チュートリアルの案内役（マスコット）のレベル。
-   * 案内文をマスコットの吹き出しで話させるために使う。ほかの画面と見た目を揃える。
-   */
-  tutorialMascotLevel: {
-    type: Number,
-    default: 1
   }
 });
 
@@ -449,19 +433,6 @@ const handleSubmit = () => {
     >
       <span class="review-form-handle-bar" />
     </button>
-
-    <!--
-      チュートリアル中の案内。ほかの画面と同じく、評価入力の説明もマスコットが
-      吹き出しで話す。フォーム上部に出し、評価・投稿へ誘導する。
-    -->
-    <MascotSpeechBubble
-      v-if="tutorialMessage"
-      class="review-tutorial-mascot"
-      :message="tutorialMessage"
-      :level="tutorialMascotLevel"
-      placement="side"
-      size="small"
-    />
 
     <div class="review-form-header">
       <h3 class="review-form-title">
@@ -1008,23 +979,6 @@ const handleSubmit = () => {
   width: auto;
   min-width: 88px;
   padding: 12px 20px;
-}
-
-/*
- * チュートリアルの案内役（マスコット）。フォーム上部に貼り付け、
- * スクロールしても評価・投稿への案内が見えるようにする。
- * 羊皮紙色の帯を背景に敷き、下のフォーム入力と視覚的に区切る。
- */
-.review-tutorial-mascot {
-  position: sticky;
-  top: 28px;
-  z-index: 1;
-  margin: 0 0 8px;
-  padding: 8px;
-  background: var(--bg-light);
-  border: var(--pixel-frame-width) solid var(--border-ink);
-  border-image: var(--pixel-frame-ink);
-  background-clip: padding-box;
 }
 
 /*

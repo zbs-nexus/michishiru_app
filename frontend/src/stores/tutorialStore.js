@@ -73,6 +73,22 @@ export const useTutorialStore = defineStore('tutorial', () => {
   };
 
   /**
+   * @description 今のステップを1つ前へ戻す（ステップ名を問わない）。
+   * 「前の目的地へ」でフォームの案内を1つ前の解説へ戻すなど、
+   * 今のステップに関係なく戻したいときに使う。先頭より前には戻さない。
+   * @returns {void}
+   */
+  const goBack = () => {
+    if (!isActive.value) {
+      return;
+    }
+
+    if (stepIndex.value > 0) {
+      stepIndex.value -= 1;
+    }
+  };
+
+  /**
    * @description チュートリアルを終了して初期状態へ戻す
    * @returns {void}
    */
@@ -96,6 +112,7 @@ export const useTutorialStore = defineStore('tutorial', () => {
     start,
     completeStep,
     revertStep,
+    goBack,
     finish,
     isStep,
     // ステップ名の定数を画面から参照できるように再公開する

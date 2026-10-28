@@ -313,6 +313,35 @@ const isTutorialReviewOpenStep = computed(() =>
   tutorialStore.isStep(tutorialStore.STEP.OPEN_REVIEW)
 );
 
+/** チュートリアルで「みんな」のトグルを押させて紫ピンを表示させる段階かどうか */
+const isTutorialShowOtherReviewsStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.SHOW_OTHER_REVIEWS)
+);
+
+/** チュートリアルで地図を長押しして新規投稿を始めさせる段階かどうか */
+const isTutorialLongPressStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.LONG_PRESS_MAP)
+);
+
+/**
+ * 「みんな」の口コミのトグルを操作できるかどうか。
+ * チュートリアル外は常に操作できる。チュートリアル中は一本道を保つため、
+ * 「みんなを表示」段階（SHOW_OTHER_REVIEWS）でだけ操作できるようにする。
+ */
+const canToggleOtherReviews = computed(() => {
+  if (!tutorialStore.isActive) {
+    return true;
+  }
+
+  return isTutorialShowOtherReviewsStep.value;
+});
+
+/**
+ * 「自分」の口コミのトグルを操作できるかどうか。
+ * チュートリアルでは自分の口コミを扱わないため、チュートリアル中は常に操作させない。
+ */
+const canToggleMyReviews = computed(() => !tutorialStore.isActive);
+
 /**
  * チュートリアルで、拡大率を変えずにスムーズに地図を寄せる対象の座標。
  * 紫ピンをタップさせる段階（OPEN_REVIEW）で、表示時の縮尺を保ったまま
@@ -327,31 +356,27 @@ const tutorialSmoothCenterPosition = computed(() => {
 });
 
 /**
- * 口コミフォームに渡すチュートリアルの案内文。
- * 評価・投稿の段階ではフォームに隠れて下部の案内が見えないため、フォーム上部に出す。
- * フォームを操作させない段階ではnull（通常表示）。
- */
-const reviewFormTutorialMessage = computed(() => {
-  if (
-    tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW) ||
-    tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)
-  ) {
-    return tutorialStore.currentMessage;
-  }
-
-  return null;
-});
-
-/**
  * 口コミフォームで強調する要素。
  * 評価の段階は★、投稿の段階は投稿ボタンを目立たせる。それ以外はnull。
  */
 const reviewFormTutorialHighlight = computed(() => {
+  // 他の人の口コミへの評価：★を強調
   if (tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW)) {
     return 'rating';
   }
 
+  // 他の人の口コミへの評価の投稿：投稿ボタンを強調
   if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
+    return 'submit';
+  }
+
+  // 新規投稿の入力：自由入力のため特定要素は強調しない（案内は上部の吹き出しで行う）
+  if (tutorialStore.isStep(tutorialStore.STEP.INPUT_NEW_REVIEW)) {
+    return null;
+  }
+
+  // 新規投稿の投稿：投稿ボタンを強調
+  if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW)) {
     return 'submit';
   }
 
@@ -544,6 +569,9 @@ onMounted(() => {
   // チュートリアルは挙動を安定させるため、現在地の追跡・口コミの取得（実API）を行わない。
   // 紫ピンはダミーを使い、実績もダミーを結果画面で見せる
   if (tutorialStore.isActive) {
+    // チュートリアルは「みんな」を押して紫ピンを出す流れを体験させるため、
+    // 最初は紫ピンを隠しておく（SHOW_OTHER_REVIEWS でトグルを押すと表示される）
+    showOtherReviews.value = false;
     loadGenreOptions();
     requestScreenWakeLock();
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -577,11 +605,18 @@ const toggleMyReviews = () => {
 };
 
 /**
- * @description 他の人の口コミの紫ピンの表示/非表示を切り替える
+ * @description 他の人の口コミの紫ピンの表示/非表示を切り替える。
+ * チュートリアルの「みんなを表示」段階では、表示に切り替えたときに次（紫ピンのタップ）へ進める。
  * @returns {void}
  */
 const toggleOtherReviews = () => {
   showOtherReviews.value = !showOtherReviews.value;
+
+  // チュートリアルで「みんな」を押して紫ピンを出せたら、紫ピンをタップする段階へ進める。
+  // 表示に切り替えたときだけ進め、消す操作では進めない
+  if (showOtherReviews.value && tutorialStore.isStep(tutorialStore.STEP.SHOW_OTHER_REVIEWS)) {
+    tutorialStore.completeStep(tutorialStore.STEP.SHOW_OTHER_REVIEWS);
+  }
 };
 
 /**
@@ -711,8 +746,24 @@ const showReviewFormAt = async (position) => {
  * @returns {Promise<void>}
  */
 const handleLongPressMap = async (position) => {
-  // チュートリアル中は新規のロケーション投稿を操作させない（文章の説明にとどめる）
+  // チュートリアル中は、新規投稿を体験させる段階（LONG_PRESS_MAP）でだけ長押しを受け付ける。
+  // 実APIの解決は呼ばず、未投稿扱いの新規モードでフォームを開いて自由入力を体験させる。
+  // それ以外の段階では長押しを無視して操作を一本道に保つ。
   if (tutorialStore.isActive) {
+    if (!isTutorialLongPressStep.value) {
+      return;
+    }
+
+    hideMessage();
+    resetReview();
+    isExistingSpotSelected.value = false;
+    selectedReviewSpotId.value = null;
+
+    // 入力フォームを開く段階（INPUT_NEW_REVIEW）へ進め、吹き出しの案内を切り替える
+    tutorialStore.completeStep(tutorialStore.STEP.LONG_PRESS_MAP);
+
+    // resolvedSpot は null のまま（新規モード）。押した位置に赤いピンを立てて開く
+    await showReviewFormAt(position);
     return;
   }
 
@@ -835,8 +886,16 @@ const handleCloseReview = () => {
  * @returns {void}
  */
 const handleChangeReviewRating = () => {
+  // 他の人の口コミへ評価を付ける段階
   if (tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW)) {
     tutorialStore.completeStep(tutorialStore.STEP.RATE_REVIEW);
+    return;
+  }
+
+  // 新規投稿で評価を付けたら、投稿を押す段階へ進める。
+  // 名前・ジャンルは自由入力のため合図には使わず、最後に付けやすい評価で進める
+  if (tutorialStore.isStep(tutorialStore.STEP.INPUT_NEW_REVIEW)) {
+    tutorialStore.completeStep(tutorialStore.STEP.INPUT_NEW_REVIEW);
   }
 };
 
@@ -907,8 +966,15 @@ const handleSubmitReview = async (review) => {
   showMessage('口コミを投稿しました', 'success');
 
   if (tutorialStore.isActive) {
+    // 他の人の口コミへの評価を投稿したら、次は新規投稿の体験（地図の長押し）へ進む
     if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
       tutorialStore.completeStep(tutorialStore.STEP.SUBMIT_REVIEW);
+      return;
+    }
+
+    // 新規投稿を投稿したら、散歩の終了へ進む
+    if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW)) {
+      tutorialStore.completeStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW);
     }
     return;
   }
@@ -939,13 +1005,19 @@ const handleAdvanceToNextSpot = () => {
  * @returns {void}
  */
 const handleReturnToPreviousSpot = () => {
-  returnToPreviousSpot();
-
-  // 「次の目的地へ」で OPEN_REVIEW まで進んでいたら、戻す操作で ADVANCE_SPOT へ戻す。
-  // 戻し専用の revertStep は、今のステップが OPEN_REVIEW のときだけ1つ前へ戻す
+  // チュートリアル中は、スポットを戻すのではなく、案内（解説）を1つ前へ戻す。
+  // とくにフォームを開く段階では、開いているフォームを閉じてから前の解説へ戻し、
+  // 「前の目的地へ」で手順をやり直せるようにする。
   if (tutorialStore.isActive) {
-    tutorialStore.revertStep(tutorialStore.STEP.OPEN_REVIEW);
+    if (isReviewFormVisible.value) {
+      handleCloseReview();
+    }
+
+    tutorialStore.goBack();
+    return;
   }
+
+  returnToPreviousSpot();
 };
 
 /**
@@ -1106,6 +1178,21 @@ const handleConfirmEnd = async () => {
       </div>
 
       <!--
+        チュートリアル中の案内役。前の目的地／次の目的地のボタンの段のすぐ下に固定で置く。
+        評価・投稿・新規入力などフォームを開く段階でも、案内はここに出し続ける
+        （フォーム内には出さず、常に同じ場所で読めるようにする）。
+        フォームは画面下部から出るため、上部のこの吹き出しとは重ならない。
+      -->
+      <MascotSpeechBubble
+        v-if="tutorialStore.isActive && tutorialStore.currentMessage"
+        class="tutorial-mascot-inline"
+        :message="tutorialStore.currentMessage"
+        :level="mascotStore.mascotLevel"
+        placement="side"
+        size="small"
+      />
+
+      <!--
         口コミのピンの表示切り替え。地図を広く見せるため右端に寄せ、
         「口コミ」の見出しの下に自分・みんなを縦に並べる
       -->
@@ -1131,7 +1218,7 @@ const handleConfirmEnd = async () => {
           class="review-toggle review-toggle-mine"
           :class="{ 'is-on': showMyReviews }"
           type="button"
-          :disabled="isAdvanceSpotFocus"
+          :disabled="isAdvanceSpotFocus || !canToggleMyReviews"
           :aria-pressed="showMyReviews"
           aria-label="自分の口コミ"
           @click="toggleMyReviews"
@@ -1140,11 +1227,18 @@ const handleConfirmEnd = async () => {
           自分
         </button>
 
+        <!--
+          「みんな」のトグル。チュートリアルの「みんなを表示」段階では、ここを押して
+          紫ピンを出す流れを体験させるため、is-tutorial-target で目立たせて操作可能にする。
+        -->
         <button
           class="review-toggle review-toggle-other"
-          :class="{ 'is-on': showOtherReviews }"
+          :class="{
+            'is-on': showOtherReviews,
+            'is-tutorial-target': isTutorialShowOtherReviewsStep
+          }"
           type="button"
-          :disabled="isAdvanceSpotFocus"
+          :disabled="isAdvanceSpotFocus || !canToggleOtherReviews"
           :aria-pressed="showOtherReviews"
           aria-label="みんなの口コミ"
           @click="toggleOtherReviews"
@@ -1153,21 +1247,6 @@ const handleConfirmEnd = async () => {
           みんな
         </button>
       </div>
-
-      <!--
-        チュートリアル中の案内役。地図は全画面で通常マスコットの定位置が無いため、
-        画面上部の操作（バナー・前後のボタン・口コミ切替）の下の空き位置に積む。
-        固定オーバーレイでは置かず、.navigation-top の流れに乗せて地図操作を塞がない。
-        口コミフォーム（評価・投稿）の段階ではフォーム上部に案内を出すため、ここには出さない。
-      -->
-      <MascotSpeechBubble
-        v-if="tutorialStore.isActive && tutorialStore.currentMessage && !isReviewFormVisible"
-        class="tutorial-mascot-inline"
-        :message="tutorialStore.currentMessage"
-        :level="mascotStore.mascotLevel"
-        placement="side"
-        size="small"
-      />
     </div>
 
     <RouteNavigationMap
@@ -1220,9 +1299,7 @@ const handleConfirmEnd = async () => {
       :existing-photos="existingPhotos"
       :is-resolving="isResolving"
       :is-posting="isSubmittingReview"
-      :tutorial-message="reviewFormTutorialMessage"
       :tutorial-highlight="reviewFormTutorialHighlight"
-      :tutorial-mascot-level="mascotStore.mascotLevel"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
       @change-expanded="handleChangeReviewFormExpanded"
@@ -1316,6 +1393,15 @@ const handleConfirmEnd = async () => {
 
 .navigation-top > * {
   pointer-events: auto;
+}
+
+/*
+ * チュートリアルの案内役の吹き出しは、案内文を見せるだけでタップを受けない。
+ * pointer-events を切り、吹き出しの下に重なる地図・口コミの紫ピンのタップを通す
+ * （切らないと吹き出しがピンに被さってタップを奪い、フォームを開き直せなくなる）。
+ */
+.navigation-top > .tutorial-mascot-inline {
+  pointer-events: none;
 }
 
 /*
@@ -1491,5 +1577,14 @@ const handleConfirmEnd = async () => {
 
 .review-toggle-other.is-on .review-toggle-dot {
   background: var(--review-purple);
+}
+
+/*
+ * チュートリアルで「みんな」を押させる段階で、トグルを枠で浮かせて目立たせる。
+ * 周りが暗い中でここだけ際立たせ、紫ピンを出す操作へ誘導する。
+ */
+.review-toggle-other.is-tutorial-target {
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 </style>

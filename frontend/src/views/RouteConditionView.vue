@@ -34,7 +34,6 @@ const routeStore = useRouteStore();
 const tutorialStore = useTutorialStore();
 const {
   isCreating,
-  errorMessage: creationErrorMessage,
   createRoute
 } = useRouteCreation();
 const {
@@ -168,7 +167,9 @@ const handleCreateRoute = async () => {
   const isSucceeded = await createRoute();
 
   if (!isSucceeded) {
-    showMessage(creationErrorMessage.value ?? 'ルートの作成に失敗しました');
+    // 失敗の主因は、選んだジャンルの周辺スポットが足りずルートを組めないこと。
+    // 技術的な失敗ではなく、条件を変えれば解決することを利用者に伝える
+    showMessage('周辺に対象ジャンルのロケーションが不足しています。条件を変更して再度ルート作成を行ってください。');
     return;
   }
 

@@ -23,12 +23,20 @@ export const TUTORIAL_STEP = {
   CONFIRM_ROUTE: 'confirm-route',
   /** 案内: 「次の目的地へ」を押させる */
   ADVANCE_SPOT: 'advance-spot',
+  /** 案内: 「みんな」のトグルを押して、他の人の口コミの紫ピンを表示させる */
+  SHOW_OTHER_REVIEWS: 'show-other-reviews',
   /** 案内: 地図の紫ピン（他の人の口コミの場所）をタップさせる */
   OPEN_REVIEW: 'open-review',
   /** 案内: 口コミフォームで★の評価を付けさせる */
   RATE_REVIEW: 'rate-review',
   /** 案内: 口コミの「投稿」を押させる（チュートリアルでは送信せずダミー完了） */
   SUBMIT_REVIEW: 'submit-review',
+  /** 案内: 地図を長押しして、新しい口コミの場所を登録する流れを体験させる */
+  LONG_PRESS_MAP: 'long-press-map',
+  /** 案内: 新規投稿フォームにロケーション名・ジャンル・評価を自由入力させる */
+  INPUT_NEW_REVIEW: 'input-new-review',
+  /** 案内: 新規投稿の「投稿」を押させる（チュートリアルでは送信せず画面上のみ完了） */
+  SUBMIT_NEW_REVIEW: 'submit-new-review',
   /** 案内: 「終了」を押させる */
   REQUEST_END: 'request-end',
   /** 案内: 終了確認モーダルで「終了する」を押させる */
@@ -68,10 +76,15 @@ export const TUTORIAL_STEPS = [
     message: '案内がはじまったよ。スポットに着いたら「次の目的地へ」を押して進もう。'
   },
   {
-    step: TUTORIAL_STEP.OPEN_REVIEW,
+    step: TUTORIAL_STEP.SHOW_OTHER_REVIEWS,
     routeName: 'route-navigation',
     message:
-      '気に入った場所には口コミを残せるよ。新しい場所は地図を長押しして登録できるんだ。今日は近くの紫のピンをタップして、みんなの口コミに評価を付けてみよう。'
+      'みんなの口コミも見てみよう。右上の「みんな」を押すと、口コミのある場所が紫のピンで地図に出るよ。'
+  },
+  {
+    step: TUTORIAL_STEP.OPEN_REVIEW,
+    routeName: 'route-navigation',
+    message: '紫のピンが出たね。タップすると、その場所の口コミを見られるよ。'
   },
   {
     step: TUTORIAL_STEP.RATE_REVIEW,
@@ -82,6 +95,23 @@ export const TUTORIAL_STEPS = [
     step: TUTORIAL_STEP.SUBMIT_REVIEW,
     routeName: 'route-navigation',
     message: '評価できたら「投稿」を押して完了だよ。'
+  },
+  {
+    step: TUTORIAL_STEP.LONG_PRESS_MAP,
+    routeName: 'route-navigation',
+    message:
+      '次は新しい場所を登録してみよう。地図のどこかを長押しすると、その場所に口コミを付けられるよ。'
+  },
+  {
+    step: TUTORIAL_STEP.INPUT_NEW_REVIEW,
+    routeName: 'route-navigation',
+    message:
+      'フォームが開いたね。ロケーション名・ジャンル・★の評価を自由に入れてみてね。（チュートリアルでは実際には保存されないよ）'
+  },
+  {
+    step: TUTORIAL_STEP.SUBMIT_NEW_REVIEW,
+    routeName: 'route-navigation',
+    message: '入力できたら「投稿」を押してみよう。'
   },
   {
     step: TUTORIAL_STEP.REQUEST_END,
