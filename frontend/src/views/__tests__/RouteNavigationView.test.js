@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
+import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
+import BaseProcessingOverlay from '@/components/base/BaseProcessingOverlay.vue';
+import BaseToast from '@/components/base/BaseToast.vue';
+import { postReview } from '@/services/reviewService';
 import { useRouteStore } from '@/stores/routeStore';
 import { useWalkStore } from '@/stores/walkStore';
 
@@ -32,6 +36,17 @@ vi.mock('@/services/conditionService', () => ({
     genreOptions: [],
     distanceRange: {}
   }))
+}));
+
+// 口コミの通信は認証と fetch を伴うため差し替える。
+// 場所の解決は「未投稿の場所」、一覧は空で返し、投稿はテストごとに結果を決める
+vi.mock('@/services/reviewService', () => ({
+  resolveSpot: vi.fn(async () => ({ exists: false })),
+  fetchMyReviews: vi.fn(async () => []),
+  fetchReviewSpots: vi.fn(async () => []),
+  postReview: vi.fn(async () => ({})),
+  fetchPhotoUploadUrls: vi.fn(async () => []),
+  uploadPhoto: vi.fn(async () => {})
 }));
 
 /** watchPosition が受け取ったコールバック。測位の成否をテストから起こすために持つ */
@@ -547,5 +562,128 @@ describe('RouteNavigationView の画面上部の並び', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('RouteNavigationView の口コミ投稿中の表示', () => {
+  /** 「投稿中…」を出し続ける最短の時間（ミリ秒）。View 側の MIN_REVIEW_SUBMITTING_DURATION_MS と揃える */
+  const MIN_REVIEW_SUBMITTING_DURATION_MS = 500;
+
+  /** 投稿する内容（評価のみ） */
+  const REVIEW = {
+    spotName: null,
+    genreId: null,
+    genreName: null,
+    rating: 4,
+    photos: [],
+    keptPhotoKeys: []
+  };
+
+  beforeEach(() => {
+    // 送信の回数を数えるテストがあるため、前のテストの呼び出しを残さない
+    postReview.mockClear();
+  });
+
+  /**
+   * @description 地図を長押しして口コミ投稿フォームを開く
+   * @param {object} wrapper マウントした wrapper
+   * @returns {Promise<void>}
+   */
+  const openReviewForm = async (wrapper) => {
+    wrapper.findComponent(RouteNavigationMap).vm.$emit('longPressMap', { lng: 139.7, lat: 35.69 });
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+  };
+
+  /**
+   * @description 「投稿中…」の全画面表示を探す（「記録中…」と区別する）
+   * @param {object} wrapper マウントした wrapper
+   * @returns {object|undefined} 見つかった全画面表示
+   */
+  const findSubmittingOverlay = (wrapper) =>
+    wrapper
+      .findAllComponents(BaseProcessingOverlay)
+      .find((overlay) => overlay.props('message') === '投稿中…');
+
+  /**
+   * @description 投稿フォームから投稿を送る
+   * @param {object} wrapper マウントした wrapper
+   * @returns {Promise<void>}
+   */
+  const submitReview = async (wrapper) => {
+    wrapper.findComponent(ReviewPostForm).vm.$emit('submitReview', REVIEW);
+    await nextTick();
+  };
+
+  test('投稿を押すと「投稿中…」を全画面に出し、完了したら閉じて地図に戻る', async () => {
+    let finishPost = null;
+    postReview.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPost = resolve;
+        })
+    );
+
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+    await submitReview(wrapper);
+
+    // 通信中は全画面表示を出し、投稿ボタンも「投稿中…」にする
+    expect(findSubmittingOverlay(wrapper)).toBeDefined();
+    expect(wrapper.findComponent(ReviewPostForm).props('isPosting')).toBe(true);
+
+    // 最短の表示時間を過ぎても、通信が終わるまでは出し続ける
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS * 4);
+    expect(findSubmittingOverlay(wrapper)).toBeDefined();
+
+    finishPost({});
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+
+    // 完了したら全画面表示とフォームを閉じ、成功を知らせる
+    expect(findSubmittingOverlay(wrapper)).toBeUndefined();
+    expect(wrapper.findComponent(ReviewPostForm).exists()).toBe(false);
+    expect(wrapper.findComponent(BaseToast).props('message')).toBe('口コミを投稿しました');
+  });
+
+  test('通信がすぐ終わっても、最短の表示時間は「投稿中…」を出し続ける', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+    await submitReview(wrapper);
+
+    // 通信は既に終わっているが、一瞬で消えるとチラつくため残す
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS - 1);
+    expect(findSubmittingOverlay(wrapper)).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(findSubmittingOverlay(wrapper)).toBeUndefined();
+    expect(wrapper.findComponent(ReviewPostForm).exists()).toBe(false);
+  });
+
+  test('投稿に失敗したら「投稿中…」だけを閉じ、入力を残したフォームとエラーを見せる', async () => {
+    postReview.mockRejectedValueOnce(new Error('口コミの投稿に失敗しました（テスト）'));
+
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+    await submitReview(wrapper);
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+
+    expect(findSubmittingOverlay(wrapper)).toBeUndefined();
+    // フォームを閉じないことで、入力をやり直さずに再送できる
+    expect(wrapper.findComponent(ReviewPostForm).exists()).toBe(true);
+    expect(wrapper.findComponent(ReviewPostForm).props('isPosting')).toBe(false);
+    expect(wrapper.findComponent(BaseToast).props('message')).toBe(
+      '口コミの投稿に失敗しました（テスト）'
+    );
+  });
+
+  test('「投稿中…」の間に届いた二度目の送信は受け付けない', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+
+    await submitReview(wrapper);
+    await submitReview(wrapper);
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+
+    expect(postReview).toHaveBeenCalledTimes(1);
   });
 });

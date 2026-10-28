@@ -52,7 +52,7 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  /** 投稿中かどうか（二重送信を防ぐ） */
+  /** 投稿中かどうか（二重送信を防ぎ、投稿ボタンの文言を「投稿中…」にする） */
   isPosting: {
     type: Boolean,
     default: false
@@ -644,7 +644,8 @@ const handleSubmit = () => {
         :is-disabled="isBusy"
         @click="handleSubmit"
       >
-        投稿
+        <!-- 押したことが分かるよう、投稿中は文言を変える -->
+        {{ isPosting ? '投稿中…' : '投稿' }}
       </BaseButton>
     </div>
 
