@@ -67,7 +67,11 @@ export const CURRENT_LOCATION_COLOR = '#4285F4';
 /** 現在地マーカーの精度円の色（半透明） */
 export const CURRENT_LOCATION_ACCURACY_COLOR = 'rgba(66, 133, 244, 0.15)';
 
-/** 案内中のズームレベル（現在地追従時） */
+/**
+ * 案内開始時のズームレベル。案内画面を開いた直後は、この値でスタート地点を中央に置く。
+ * 1つ目の目的地までの区間の長さでは変えない（横幅 約190mで、最初の曲がり角まで見える）。
+ * 現在地へ戻るボタンはこの値を使わず、押した時点の倍率のまま寄せる。
+ */
 export const NAVIGATION_ZOOM_LEVEL = 17;
 
 /**

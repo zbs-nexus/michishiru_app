@@ -25,6 +25,15 @@ const createdSources = new Map();
 /** 追加されたレイヤーの記録（追加した順） */
 const addedLayers = [];
 
+/** 地図へ追加されたコントロールの記録（追加した順） */
+const addedControls = [];
+
+/** fitBounds に渡された引数（[bounds, options]）の記録 */
+const fitBoundsCalls = [];
+
+/** easeTo に渡されたオプションの記録 */
+const easeToCalls = [];
+
 vi.mock('maplibre-gl', () => {
   class FakeMarker {
     constructor(options = {}) {
@@ -94,15 +103,21 @@ vi.mock('maplibre-gl', () => {
       addedLayers.push(layer);
     }
 
-    addControl() {}
+    addControl(control) {
+      addedControls.push(control);
+    }
 
-    fitBounds() {}
+    fitBounds(bounds, options) {
+      fitBoundsCalls.push([bounds, options]);
+    }
 
     getZoom() {
       return 15;
     }
 
-    easeTo() {}
+    easeTo(options) {
+      easeToCalls.push(options);
+    }
 
     remove() {}
   }
@@ -111,7 +126,6 @@ vi.mock('maplibre-gl', () => {
     MapLibreMap: FakeMap,
     Marker: FakeMarker,
     Popup: FakePopup,
-    NavigationControl: class {},
     setWorkerUrl: () => {}
   };
 });
@@ -121,6 +135,9 @@ vi.mock('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url', () => ({ default: 
 
 const { default: RouteMap } = await import('@/components/feature/route/RouteMap.vue');
 const {
+  MAP_FIT_PADDING_PX,
+  MAX_FIT_ZOOM_LEVEL,
+  NAVIGATION_ZOOM_LEVEL,
   ROUTE_CURRENT_LEG_CASING_WIDTH_PX,
   ROUTE_CURRENT_LEG_COLOR,
   ROUTE_CURRENT_LEG_WIDTH_PX,
@@ -623,6 +640,154 @@ describe('RouteMap（区間ごとの描き分け）', () => {
     expect(linesOf('route')).toEqual([geometry.coordinates]);
     expect(linesOf('route-walked-legs')).toEqual([]);
     expect(linesOf('route-current-leg')).toEqual([]);
+  });
+});
+
+describe('RouteMap（地図のコントロール）', () => {
+  beforeEach(() => {
+    createdMarkers.length = 0;
+    createdSources.clear();
+    addedLayers.length = 0;
+    addedControls.length = 0;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('拡大・縮小のボタンは置かず、現在地へ戻るボタンだけを置く', () => {
+    mountAndLoad({
+      showCurrentLocation: true,
+      currentLocation: { lng: 139.7036, lat: 35.6862 }
+    });
+
+    const containers = addedControls.map((control) => control.onAdd());
+
+    // 拡大・縮小のボタンを置くと、地図の右上が埋まり見づらくなる
+    expect(containers).toHaveLength(1);
+    expect(containers[0].querySelector('.recenter-btn')).not.toBeNull();
+    expect(containers[0].querySelector('.maplibregl-ctrl-zoom-in')).toBeNull();
+  });
+});
+
+describe('RouteMap（初期表示の位置と現在地へ戻るときの位置）', () => {
+  /** スタート地点（経路の先頭） */
+  const origin = [139.7036, 35.6862];
+
+  /** 最初の区間（スタート地点→1スポット目） */
+  const firstLeg = {
+    type: 'LineString',
+    coordinates: [origin, [139.7046, 35.6872]]
+  };
+
+  /** 2つ目の区間。最初の区間から遠くへ延びる */
+  const secondLeg = {
+    type: 'LineString',
+    coordinates: [[139.7046, 35.6872], [139.72, 35.7]]
+  };
+
+  /** 経路全体（最初の区間より広い） */
+  const wholeGeometry = {
+    type: 'LineString',
+    coordinates: [...firstLeg.coordinates, [139.72, 35.7]]
+  };
+
+  /** 案内開始直後の区間の描き分け */
+  const startSections = { walkedLegs: [], currentLeg: firstLeg, upcomingLegs: [secondLeg] };
+
+  /** 1つ目の目的地がずっと遠い（約4km先）最初の区間 */
+  const farFirstLeg = {
+    type: 'LineString',
+    coordinates: [origin, [139.74, 35.72]]
+  };
+
+  beforeEach(() => {
+    createdMarkers.length = 0;
+    createdSources.clear();
+    addedLayers.length = 0;
+    addedControls.length = 0;
+    fitBoundsCalls.length = 0;
+    easeToCalls.length = 0;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('案内画面では、固定の倍率（17）でスタート地点を見えている範囲の中央に置く', () => {
+    mountAndLoad({
+      geometry: wholeGeometry,
+      legSections: startSections,
+      shouldCenterOnOrigin: true,
+      topInsetPx: 236,
+      bottomInsetPx: 100
+    });
+
+    // 区間を収める寄せ方（fitBounds）はしない
+    expect(fitBoundsCalls).toHaveLength(0);
+    // 上下の隠れる高さの差の半分だけずらし、バナーと終了ボタンの間の中央に置く
+    expect(easeToCalls).toEqual([
+      { center: origin, zoom: NAVIGATION_ZOOM_LEVEL, offset: [0, (236 - 100) / 2], duration: 0 }
+    ]);
+    expect(NAVIGATION_ZOOM_LEVEL).toBe(17);
+  });
+
+  test('1つ目の目的地が遠くても、倍率は区間の長さで変えない', () => {
+    mountAndLoad({
+      geometry: { type: 'LineString', coordinates: farFirstLeg.coordinates },
+      legSections: { walkedLegs: [], currentLeg: farFirstLeg, upcomingLegs: [] },
+      shouldCenterOnOrigin: true
+    });
+
+    expect(fitBoundsCalls).toHaveLength(0);
+    expect(easeToCalls).toEqual([
+      { center: origin, zoom: NAVIGATION_ZOOM_LEVEL, offset: [0, 0], duration: 0 }
+    ]);
+  });
+
+  test('経路が無くスタート地点が分からないときは、ルート全体（スポット）を収める', () => {
+    mountAndLoad({ geometry: null, shouldCenterOnOrigin: true });
+
+    expect(easeToCalls).toHaveLength(0);
+    expect(fitBoundsCalls).toHaveLength(1);
+  });
+
+  test('提案画面（shouldCenterOnOrigin が偽）は従来どおりルート全体を収める', () => {
+    mountAndLoad({ geometry: wholeGeometry, spots: [], legSections: startSections });
+
+    expect(fitBoundsCalls).toEqual([
+      [
+        [
+          [139.7036, 35.6862],
+          [139.72, 35.7]
+        ],
+        { padding: MAP_FIT_PADDING_PX, maxZoom: MAX_FIT_ZOOM_LEVEL, animate: false }
+      ]
+    ]);
+  });
+
+  test('現在地へ戻るボタンは、押した時点の倍率のまま現在地を見えている範囲の中央に置く', () => {
+    mountAndLoad({
+      geometry: wholeGeometry,
+      legSections: startSections,
+      shouldCenterOnOrigin: true,
+      showCurrentLocation: true,
+      currentLocation: { lng: 139.71, lat: 35.69 },
+      topInsetPx: 236,
+      bottomInsetPx: 100
+    });
+
+    // 初期表示の寄せ（スタート地点）は数えず、ボタンを押したときの寄せだけを見る
+    easeToCalls.length = 0;
+
+    const button = addedControls[0].onAdd().querySelector('.recenter-btn');
+    button.click();
+
+    // zoom を渡さないことで、利用者が合わせた縮尺のまま位置だけを戻す
+    expect(easeToCalls).toEqual([
+      { center: [139.71, 35.69], offset: [0, (236 - 100) / 2] }
+    ]);
+    expect(easeToCalls[0]).not.toHaveProperty('zoom');
   });
 });
 

@@ -5,7 +5,12 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import RouteNavigationView from '@/views/RouteNavigationView.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
+import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
+import BaseProcessingOverlay from '@/components/base/BaseProcessingOverlay.vue';
+import BaseToast from '@/components/base/BaseToast.vue';
+import { postReview } from '@/services/reviewService';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
 import { useWalkStore } from '@/stores/walkStore';
 
 /**
@@ -32,6 +37,17 @@ vi.mock('@/services/conditionService', () => ({
     genreOptions: [],
     distanceRange: {}
   }))
+}));
+
+// 口コミの通信は認証と fetch を伴うため差し替える。
+// 場所の解決は「未投稿の場所」、一覧は空で返し、投稿はテストごとに結果を決める
+vi.mock('@/services/reviewService', () => ({
+  resolveSpot: vi.fn(async () => ({ exists: false })),
+  fetchMyReviews: vi.fn(async () => []),
+  fetchReviewSpots: vi.fn(async () => []),
+  postReview: vi.fn(async () => ({})),
+  fetchPhotoUploadUrls: vi.fn(async () => []),
+  uploadPhoto: vi.fn(async () => {})
 }));
 
 /** watchPosition が受け取ったコールバック。測位の成否をテストから起こすために持つ */
@@ -124,7 +140,9 @@ const mountNavigationViewWithRoute = (legs) => {
     shallow: true,
     global: {
       stubs: {
-        DefaultLayout: { template: '<div><slot /><slot name="footer" /></div>' }
+        DefaultLayout: { template: '<div><slot /><slot name="footer" /></div>' },
+        // 「次の目的地へ」はチュートリアルの包みの中にあるため、中身を描くスタブにする
+        TutorialSpotlight: { template: '<slot />' }
       }
     }
   });
@@ -354,14 +372,50 @@ describe('RouteNavigationView の前の目的地に戻るボタン', () => {
     const mineToggle = wrapper.find('.review-toggle-mine');
     const otherToggle = wrapper.find('.review-toggle-other');
 
+    await mineToggle.trigger('click');
+
     expect(mineToggle.attributes('aria-pressed')).toBe('true');
-    expect(otherToggle.attributes('aria-pressed')).toBe('true');
+    expect(mineToggle.classes()).toContain('is-on');
+    expect(otherToggle.attributes('aria-pressed')).toBe('false');
 
     await mineToggle.trigger('click');
 
     expect(mineToggle.attributes('aria-pressed')).toBe('false');
     expect(mineToggle.classes()).not.toContain('is-on');
-    expect(otherToggle.attributes('aria-pressed')).toBe('true');
+  });
+});
+
+describe('RouteNavigationView の口コミのピンの初期表示', () => {
+  test('開いた直後は自分・みんなの口コミのピンをどちらも出さない', () => {
+    const wrapper = mountNavigationViewWithRoute();
+    const map = wrapper.findComponent(RouteNavigationMap);
+
+    // ピンが経路に重なって巡る道筋が見にくくなるため、既定は非表示
+    expect(map.props('showMyReviews')).toBe(false);
+    expect(map.props('showOtherReviews')).toBe(false);
+    expect(wrapper.find('.review-toggle-mine').attributes('aria-pressed')).toBe('false');
+    expect(wrapper.find('.review-toggle-other').attributes('aria-pressed')).toBe('false');
+  });
+
+  test('札を押すと、その種類のピンだけが出る', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    await wrapper.find('.review-toggle-other').trigger('click');
+
+    const map = wrapper.findComponent(RouteNavigationMap);
+    expect(map.props('showOtherReviews')).toBe(true);
+    expect(map.props('showMyReviews')).toBe(false);
+  });
+
+  test('チュートリアル中は、紫のピンをタップさせるため「みんな」だけを出して始める', () => {
+    useTutorialStore().start();
+
+    const wrapper = mountNavigationViewWithRoute();
+    const map = wrapper.findComponent(RouteNavigationMap);
+
+    expect(map.props('showOtherReviews')).toBe(true);
+    expect(map.props('showMyReviews')).toBe(false);
+    expect(wrapper.find('.review-toggle-other').attributes('aria-pressed')).toBe('true');
   });
 });
 
@@ -451,10 +505,27 @@ describe('RouteNavigationView の画面上部の並び', () => {
     // 前後のボタンは同じ段に並べる（前が左、次が右）
     const rowButtons = [...rowEl.querySelectorAll('button')].map((button) => button.className);
     expect(rowButtons).toEqual(['previous-spot-btn', 'next-spot-btn']);
+
+    // 前の目的地のボタンは矢印を付けず、「次の目的地へ」と文言を揃える
+    expect(wrapper.find('.previous-spot-btn').text()).toBe('前の目的地へ');
   });
 
-  test('地図のズームボタンは、前後のボタンの段の下端＋余白に置く', async () => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ bottom: 150.2 });
+  test('口コミの表示切り替えは、見出しの下に自分・みんなを縦に並べる', () => {
+    const wrapper = mountNavigationViewWithRoute();
+    const togglesEl = wrapper.find('.review-toggles').element;
+
+    const children = [...togglesEl.children].map((child) => child.className);
+    expect(children).toEqual([
+      'review-toggles-label',
+      'review-toggle review-toggle-mine',
+      'review-toggle review-toggle-other'
+    ]);
+  });
+
+  test('地図の現在地へ戻るボタンは、口コミの表示切り替えの札の下端＋余白に置く', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 150.2 });
 
     const wrapper = mountNavigationViewWithRoute();
     // 描画後に測るため、測った値が地図へ渡るのは次の描画
@@ -462,9 +533,28 @@ describe('RouteNavigationView の画面上部の並び', () => {
 
     // 151（切り上げ）+ 余白8
     expect(wrapper.findComponent(RouteNavigationMap).props('controlsTopPx')).toBe(159);
+    // 測ったのは口コミの表示切り替えの札
+    expect(rectSpy.mock.contexts).toContain(wrapper.find('.review-toggles').element);
   });
 
-  test('バナーの高さが変わったら、ズームボタンの位置を測り直し、画面を離れたら見張りをやめる', async () => {
+  test('地図の上下が画面の操作で隠れる高さ（上部の操作の下端・終了ボタンの上端から下）を地図へ渡す', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 236.4, top: 700 });
+
+    const wrapper = mountNavigationViewWithRoute();
+    await nextTick();
+
+    const map = wrapper.findComponent(RouteNavigationMap);
+
+    // 上は画面上部の操作の入れ物の下端（切り上げ）
+    expect(map.props('topInsetPx')).toBe(237);
+    expect(rectSpy.mock.contexts).toContain(wrapper.find('.navigation-top').element);
+    // 下は画面の下端から終了ボタンの上端まで（jsdom の innerHeight は 768）
+    expect(map.props('bottomInsetPx')).toBe(window.innerHeight - 700);
+  });
+
+  test('バナーの高さが変わったら、現在地へ戻るボタンの位置を測り直し、画面を離れたら見張りをやめる', async () => {
     const rectSpy = vi
       .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockReturnValue({ bottom: 130 });
@@ -497,7 +587,7 @@ describe('RouteNavigationView の画面上部の並び', () => {
       expect(observed).toEqual([wrapper.findComponent(RouteNextSpotBanner).element]);
       expect(map().props('controlsTopPx')).toBe(138);
 
-      // 長い名前でバナーが伸び、段が下がった
+      // 長い名前でバナーが伸び、口コミの表示切り替えの札が下がった
       rectSpy.mockReturnValue({ bottom: 170 });
       resizeCallback();
       await nextTick();
@@ -509,5 +599,128 @@ describe('RouteNavigationView の画面上部の並び', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('RouteNavigationView の口コミ投稿中の表示', () => {
+  /** 「投稿中…」を出し続ける最短の時間（ミリ秒）。View 側の MIN_REVIEW_SUBMITTING_DURATION_MS と揃える */
+  const MIN_REVIEW_SUBMITTING_DURATION_MS = 500;
+
+  /** 投稿する内容（評価のみ） */
+  const REVIEW = {
+    spotName: null,
+    genreId: null,
+    genreName: null,
+    rating: 4,
+    photos: [],
+    keptPhotoKeys: []
+  };
+
+  beforeEach(() => {
+    // 送信の回数を数えるテストがあるため、前のテストの呼び出しを残さない
+    postReview.mockClear();
+  });
+
+  /**
+   * @description 地図を長押しして口コミ投稿フォームを開く
+   * @param {object} wrapper マウントした wrapper
+   * @returns {Promise<void>}
+   */
+  const openReviewForm = async (wrapper) => {
+    wrapper.findComponent(RouteNavigationMap).vm.$emit('longPressMap', { lng: 139.7, lat: 35.69 });
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+  };
+
+  /**
+   * @description 「投稿中…」の全画面表示を探す（「記録中…」と区別する）
+   * @param {object} wrapper マウントした wrapper
+   * @returns {object|undefined} 見つかった全画面表示
+   */
+  const findSubmittingOverlay = (wrapper) =>
+    wrapper
+      .findAllComponents(BaseProcessingOverlay)
+      .find((overlay) => overlay.props('message') === '投稿中…');
+
+  /**
+   * @description 投稿フォームから投稿を送る
+   * @param {object} wrapper マウントした wrapper
+   * @returns {Promise<void>}
+   */
+  const submitReview = async (wrapper) => {
+    wrapper.findComponent(ReviewPostForm).vm.$emit('submitReview', REVIEW);
+    await nextTick();
+  };
+
+  test('投稿を押すと「投稿中…」を全画面に出し、完了したら閉じて地図に戻る', async () => {
+    let finishPost = null;
+    postReview.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishPost = resolve;
+        })
+    );
+
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+    await submitReview(wrapper);
+
+    // 通信中は全画面表示を出し、投稿ボタンも「投稿中…」にする
+    expect(findSubmittingOverlay(wrapper)).toBeDefined();
+    expect(wrapper.findComponent(ReviewPostForm).props('isPosting')).toBe(true);
+
+    // 最短の表示時間を過ぎても、通信が終わるまでは出し続ける
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS * 4);
+    expect(findSubmittingOverlay(wrapper)).toBeDefined();
+
+    finishPost({});
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+
+    // 完了したら全画面表示とフォームを閉じ、成功を知らせる
+    expect(findSubmittingOverlay(wrapper)).toBeUndefined();
+    expect(wrapper.findComponent(ReviewPostForm).exists()).toBe(false);
+    expect(wrapper.findComponent(BaseToast).props('message')).toBe('口コミを投稿しました');
+  });
+
+  test('通信がすぐ終わっても、最短の表示時間は「投稿中…」を出し続ける', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+    await submitReview(wrapper);
+
+    // 通信は既に終わっているが、一瞬で消えるとチラつくため残す
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS - 1);
+    expect(findSubmittingOverlay(wrapper)).toBeDefined();
+
+    await vi.advanceTimersByTimeAsync(1);
+
+    expect(findSubmittingOverlay(wrapper)).toBeUndefined();
+    expect(wrapper.findComponent(ReviewPostForm).exists()).toBe(false);
+  });
+
+  test('投稿に失敗したら「投稿中…」だけを閉じ、入力を残したフォームとエラーを見せる', async () => {
+    postReview.mockRejectedValueOnce(new Error('口コミの投稿に失敗しました（テスト）'));
+
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+    await submitReview(wrapper);
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+
+    expect(findSubmittingOverlay(wrapper)).toBeUndefined();
+    // フォームを閉じないことで、入力をやり直さずに再送できる
+    expect(wrapper.findComponent(ReviewPostForm).exists()).toBe(true);
+    expect(wrapper.findComponent(ReviewPostForm).props('isPosting')).toBe(false);
+    expect(wrapper.findComponent(BaseToast).props('message')).toBe(
+      '口コミの投稿に失敗しました（テスト）'
+    );
+  });
+
+  test('「投稿中…」の間に届いた二度目の送信は受け付けない', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+    await openReviewForm(wrapper);
+
+    await submitReview(wrapper);
+    await submitReview(wrapper);
+    await vi.advanceTimersByTimeAsync(MIN_REVIEW_SUBMITTING_DURATION_MS);
+
+    expect(postReview).toHaveBeenCalledTimes(1);
   });
 });

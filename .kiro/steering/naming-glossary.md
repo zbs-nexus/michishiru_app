@@ -169,6 +169,9 @@ inclusion: always
 | 口コミ | review | ユーザーがスポットに付ける感想と評価のまとまり |
 | 口コミ投稿 | postReview | 口コミを投稿すること |
 | 口コミ投稿フォーム | ReviewPostForm | 口コミを入力するフォーム（コンポーネント名） |
+| 投稿中かどうか | isSubmittingReview | 投稿ボタンを押してから結果が出るまで真にする状態。真の間は全画面に「投稿中…」を出し、投稿ボタンの文言も「投稿中…」にする。通信中を表す useReviewPosting の isPosting とは別で、最短の表示時間とチュートリアル（実際には送らない）を含む。`RouteNavigationView.vue` の状態 |
+| 「投稿中…」を出し続ける最短の時間 | MIN_REVIEW_SUBMITTING_DURATION_MS | 通信がすぐ終わっても「投稿中…」を消さない時間（500ミリ秒）。一瞬で消えるチラつきを防ぐ。`RouteNavigationView.vue` の定数 |
+| 処理中の全画面表示 | BaseProcessingOverlay | 通信を待つ間、画面全体を羊皮紙色の膜で覆い文言だけを出す部品（「記録中…」「投稿中…」）。操作を塞ぐ。マスコットは出さない |
 | 評価 | rating | スポットへの5段階評価（1〜5の整数） |
 | 平均評価 | ratingAverage | その場所の評価の平均。合計と件数から算出する |
 | 評価件数 | ratingCount | その場所に付いた口コミ（評価）の件数 |
@@ -278,7 +281,11 @@ inclusion: always
 | 座標列 | coordinates | `geometry` が持つ `[経度, 緯度]` の配列。経路上の座標点（= `waypoint`）の集まり |
 | 表示範囲 | bounds | 地図に収める矩形。`[[南西の経度, 緯度], [北東の経度, 緯度]]` |
 | 地図スタイル | mapStyle | 地図の見た目とタイル配信元の定義 |
-| ズームボタンの上端 | mapControlsTopPx / controlsTopPx | 案内画面で地図のズームボタンを置く上端（ピクセル）。前後のボタンの段の下端＋余白。目的地の名前でバナーが伸びるため測って追従させる。View では `mapControlsTopPx`、`RouteNavigationMap` の props では `controlsTopPx` |
+| 地図のコントロールの上端 | mapControlsTopPx / controlsTopPx | 案内画面で地図のコントロール（現在地へ戻るボタン）を置く上端（ピクセル）。口コミの表示切り替えの札（右寄せ）の下端＋余白。拡大・縮小のボタンは置かない。目的地の名前でバナーが伸びるため測って追従させる。View では `mapControlsTopPx`、`RouteNavigationMap` の props では `controlsTopPx` |
+| スタート地点を中央に置くか | shouldCenterOnOrigin | 真のとき、地図の初期表示でスタート地点（経路の先頭）を見えている範囲の中央に置き、固定の倍率（NAVIGATION_ZOOM_LEVEL）で表示する。1つ目の目的地までの区間の長さでは倍率を変えない。案内画面だけが真にする（`RouteNavigationMap` が `RouteMap` へ渡す）。偽のときはルート全体を収める |
+| 地図の上側の隠れている高さ | mapTopInsetPx / topInsetPx | 地図の上端から、画面上部の操作（バナー・前後のボタン・口コミの表示切り替え・チュートリアルの吹き出し）で隠れている高さ（ピクセル）。案内開始時のスタート地点と、現在地へ戻るときの現在地を見えている範囲の中央へ置くために使う。View では `mapTopInsetPx`、`RouteNavigationMap` / `RouteMap` の props では `topInsetPx` |
+| 地図の下側の隠れている高さ | mapBottomInsetPx / bottomInsetPx | 地図の下端から、終了ボタンで隠れている高さ（ピクセル）。使い方は mapTopInsetPx と同じ。View では `mapBottomInsetPx`、props では `bottomInsetPx` |
+| 案内開始時のズームレベル | NAVIGATION_ZOOM_LEVEL | 案内画面を開いた直後に、スタート地点を中央に置くときの固定の倍率（17。横幅 約190m）。現在地へ戻るボタンはこの値を使わず、押した時点の倍率のまま現在地へ寄せる。`constants/mapDefaults.js` の定数 |
 
 ### 環境とデプロイ
 
@@ -446,3 +453,8 @@ inclusion: always
 | 2026/10/21 | レベルアップの判定を案内画面の終了処理へ移し検知ロジックを mascotStore へ集約したことに伴い「マスコット」へ pendingLevelUpLevels / refreshAndDetectLevelUp / clearPendingLevelUp / isFinishing を追加。levelBeforeWalk を mascotStore 内のローカル変数へ、isCelebrationVisible を WalkResultView.vue の状態へ説明変更。useMascotLevelUp は役割が mascotStore へ移ったため削除 |
 | 2026/10/21 | 案内画面の次の目的地の名前を省略せず全文出し、前後のボタンと重ならないよう上部の操作を縦に積んだことに伴い「地図」へ mapControlsTopPx / controlsTopPx を追加 |
 | 2026/10/21 | ルートの口コミの場所を自分の口コミ（オレンジ）と他の人の口コミ（紫）に描き分けたことに伴い「ルートとスポット」へ isMyReviewSpot を追加。isReviewSpot の説明と、口コミのピンの色の表の注記（ルートのスポットも同じ色の意味）を更新 |
+| 2026/10/28 | 案内画面の拡大・縮小のボタンを削除し、口コミの表示切り替えを右寄せの縦並びにしたことに伴い、「地図」の mapControlsTopPx / controlsTopPx を「地図のコントロールの上端」へ改め、基準を口コミの表示切り替えの札の下端に変更 |
+| 2026/10/28 | 案内開始時にスタート地点を見えている範囲の中央へ置き、現在地へ戻るボタンを固定の倍率にしたことに伴い「地図」へ shouldCenterOnOrigin / mapTopInsetPx / topInsetPx / mapBottomInsetPx / bottomInsetPx / NAVIGATION_ZOOM_LEVEL を追加 |
+| 2026/10/28 | 口コミの投稿中に全画面で「投稿中…」を出すようにしたことに伴い「口コミ」へ isSubmittingReview / MIN_REVIEW_SUBMITTING_DURATION_MS / BaseProcessingOverlay を追加。「記録中…」も同じ部品（BaseProcessingOverlay）へ置き換えた |
+| 2026/10/28 | 現在地へ戻るボタンを、固定の倍率から押した時点の倍率のまま寄せる動きに変更。NAVIGATION_ZOOM_LEVEL の説明を、案内開始時に最初の区間を収められない場合の代わりの倍率へ改めた |
+| 2026/10/28 | 案内開始時の倍率を、最初の区間を収める倍率から固定の倍率（NAVIGATION_ZOOM_LEVEL = 17）に変更したことに伴い、shouldCenterOnOrigin と NAVIGATION_ZOOM_LEVEL の説明を更新 |

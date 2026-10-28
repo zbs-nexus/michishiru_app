@@ -3,9 +3,11 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
+import BaseProcessingOverlay from '@/components/base/BaseProcessingOverlay.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
+import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteNavigationMap from '@/components/feature/route/RouteNavigationMap.vue';
 import RouteNextSpotBanner from '@/components/feature/route/RouteNextSpotBanner.vue';
 import ReviewPostForm from '@/components/feature/review/ReviewPostForm.vue';
@@ -20,10 +22,17 @@ import { useToastMessage } from '@/composables/useToastMessage';
 import { useWalkResultSave } from '@/composables/useWalkResultSave';
 import { MAX_MEASURABLE_ACCURACY_M, useWalkRecord } from '@/composables/useWalkRecord';
 import { useScreenWakeLock } from '@/composables/useScreenWakeLock';
+import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
 import { useWalkStore } from '@/stores/walkStore';
 import { toRouteLegSections } from '@/utils/routeLegs';
+import {
+  TUTORIAL_OTHER_REVIEW_SPOT,
+  TUTORIAL_RESOLVED_REVIEW_SPOT,
+  TUTORIAL_REVIEW_SPOT_ID
+} from '@/constants/tutorial';
 
 /**
  * @description ルート案内を表示する画面。
@@ -35,6 +44,7 @@ const router = useRouter();
 // 案内中もマスコットのレベルを出すため読むだけ。実績の取り直しはホームと結果画面で行う
 const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
+const tutorialStore = useTutorialStore();
 const walkStore = useWalkStore();
 
 /**
@@ -46,6 +56,13 @@ const walkStore = useWalkStore();
  * 値はそのまま据え置いている。
  */
 const MEASUREMENT_GAP_THRESHOLD_MS = 60000;
+
+/**
+ * 「投稿中…」を出し続ける最短の時間（ミリ秒）。
+ * 評価だけの投稿は通信がすぐ終わるため、表示が一瞬で消えるとチラつきに見え、
+ * 押せたのかがかえって分かりにくくなる。押したことが目で追える長さに揃える。
+ */
+const MIN_REVIEW_SUBMITTING_DURATION_MS = 500;
 
 /** 終了確認モーダルを表示するかどうか */
 const isEndConfirmVisible = ref(false);
@@ -65,23 +82,58 @@ const selectedReviewSpotId = ref(null);
 /** 口コミ投稿フォームを表示するかどうか */
 const isReviewFormVisible = ref(false);
 
+/**
+ * 投稿ボタンを押してから、投稿の結果が出るまでの「投稿中」の状態。
+ * 真の間は画面全体に「投稿中…」を出し、投稿ボタンの文言も「投稿中…」にする。
+ * 通信中かどうか（useReviewPosting の isPosting）とは別に持つのは、
+ * 最短の表示時間を足すため、およびチュートリアル（実際には送らない）でも同じ見え方にするため。
+ */
+const isSubmittingReview = ref(false);
+
 /** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
 const bannerRef = ref(null);
 
-/** 前の目的地・次の目的地へのボタンの段。地図のズームボタンをこの下へ逃がすために測る */
-const spotStepRowRef = ref(null);
+/**
+ * 画面上部の操作をまとめた入れ物の要素。
+ * バナー・前後のボタン・口コミ切替に加え、チュートリアル中はマスコットの吹き出しも含む。
+ * 口コミの場所を可視範囲の中央へ寄せるとき、この下端を上端のインセットに使う
+ * （バナー下端だけだと、下に積んだマスコットの吹き出しに対象がかぶる）。
+ */
+const navigationTopRef = ref(null);
 
-/** 測れるまでの、地図のズームボタンの上端（ピクセル）。名前が1行のときの段の下端＋余白 */
-const DEFAULT_MAP_CONTROLS_TOP_PX = 124;
+/**
+ * 口コミの表示切り替えの札。前後のボタンの段の下・右端に置く。
+ * 地図の現在地へ戻るボタンをこの下へ逃がすために測る
+ */
+const reviewTogglesRef = ref(null);
 
-/** ボタンの段の下端からズームボタンまでの余白（ピクセル） */
+/**
+ * 測れるまでの、地図の現在地へ戻るボタンの上端（ピクセル）。
+ * 名前が1行のときの口コミの表示切り替えの札の下端（約228）＋余白
+ */
+const DEFAULT_MAP_CONTROLS_TOP_PX = 236;
+
+/** 口コミの表示切り替えの札の下端から現在地へ戻るボタンまでの余白（ピクセル） */
 const MAP_CONTROLS_GAP_PX = 8;
 
 /**
- * 地図のズームボタンを置く上端（ピクセル）。
- * 目的地の名前が長いとバナーが伸びてボタンの段も下がるため、段の下端を測って追従させる。
+ * 地図の現在地へ戻るボタンを置く上端（ピクセル）。
+ * 目的地の名前が長いとバナーが伸びて下の段も下がるため、口コミの表示切り替えの札の下端を測って追従させる。
  */
 const mapControlsTopPx = ref(DEFAULT_MAP_CONTROLS_TOP_PX);
+
+/** 終了ボタン。地図の下側が隠れている高さを測るために参照する */
+const endButtonRef = ref(null);
+
+/**
+ * 地図の上端から、画面上部の操作（バナー・前後のボタン・口コミの表示切り替え・
+ * チュートリアルの吹き出し）で隠れている高さ（ピクセル）。
+ * 案内開始時にスタート地点を、現在地へ戻るときに現在地を、見えている範囲の中央へ置くために地図へ渡す
+ */
+const mapTopInsetPx = ref(0);
+
+/** 地図の下端から、終了ボタンで隠れている高さ（ピクセル）。使い方は mapTopInsetPx と同じ */
+const mapBottomInsetPx = ref(0);
 
 /** バナーの高さの変化を見張る。ResizeObserver が無い環境ではnullのまま */
 let bannerResizeObserver = null;
@@ -105,12 +157,12 @@ const { genreOptions, loadGenreOptions } = useGenreOptions();
 
 // 口コミの場所解決と投稿
 const {
+  resolvedSpot,
   existingSpot,
   isOwner,
   userRating,
   existingPhotos,
   isResolving,
-  isPosting,
   errorMessage: reviewErrorMessage,
   resolve: resolveReviewSpot,
   post: postReviewContent,
@@ -123,17 +175,29 @@ const { myReviews, loadMyReviews } = useMyReviews();
 // 口コミが付いた場所の一覧（自分のぶんを除いて紫ピンにする）
 const { reviewSpots, loadReviewSpots } = useReviewSpots();
 
-/** 自分の口コミのオレンジピンを表示するか（既定は表示） */
-const showMyReviews = ref(true);
+/**
+ * 自分の口コミのオレンジピンを表示するか。
+ * 既定は非表示（ピンが経路に重なって巡る道筋が見にくくなるため）。札を押すと出る
+ */
+const showMyReviews = ref(false);
 
-/** 他の人の口コミの紫ピンを表示するか（既定は表示） */
-const showOtherReviews = ref(true);
+/**
+ * 他の人の口コミの紫ピンを表示するか。
+ * 既定は非表示（理由は showMyReviews と同じ）。ただしチュートリアル中は表示で始める。
+ * 紫のピンをタップさせる段階（OPEN_REVIEW）があり、非表示だと先へ進めなくなるため
+ */
+const showOtherReviews = ref(tutorialStore.isActive);
 
 /**
  * 他の人の口コミの場所（紫ピン）。
  * 一覧には自分が投稿済みの場所も含まれるため、オレンジピンと重ならないよう取り除く。
  */
 const otherReviewSpots = computed(() => {
+  // チュートリアルは実APIを呼ばないため、評価を付けさせるダミーの紫ピンを1つだけ出す
+  if (tutorialStore.isActive) {
+    return [TUTORIAL_OTHER_REVIEW_SPOT];
+  }
+
   const myReviewedSpotIds = new Set(myReviews.value.map((review) => review.spotId));
 
   return reviewSpots.value.filter((spot) => !myReviewedSpotIds.has(spot.spotId));
@@ -210,6 +274,116 @@ const legSections = computed(() =>
 // 地図の現在地マーカーだけを経路へ吸着させる。
 // 距離の計算（useRouteProgress / useWalkRecord）には吸着前の currentLocation を渡す
 const { displayLocation } = useRouteSnapping({ currentLocation, geometry });
+
+/** チュートリアルで「次の目的地へ」をハイライトする段階かどうか */
+const isTutorialAdvanceStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.ADVANCE_SPOT)
+);
+
+/**
+ * チュートリアル中、地図の操作（ドラッグ・ズーム）を止めるかどうか。
+ * ダミールートを見せるだけで動かす必要がなく、操作を一本道に保つため、
+ * チュートリアル中は常に止める。口コミの紫ピンのタップはマーカー自身が受けるため動く。
+ */
+const isMapInteractive = computed(() => !tutorialStore.isActive);
+
+/**
+ * 「次の目的地へ」の段階で、ボタン・マスコット・吹き出し以外をグレーアウトして
+ * 操作できなくするかどうか。地図・口コミの表示切り替え・終了ボタンにかける。
+ */
+const isAdvanceSpotFocus = computed(() => isTutorialAdvanceStep.value);
+
+/**
+ * チュートリアルで「終了」をハイライトする段階かどうか。
+ * 「終了」を押すと終了確認（CONFIRM_END）へ進むが、そこでキャンセルすると
+ * モーダルだけ閉じてステップは CONFIRM_END のまま残る。このとき終了ボタンを
+ * 押し直せるよう、REQUEST_END だけでなく CONFIRM_END の間もハイライト（操作可）にする。
+ */
+const isTutorialEndStep = computed(
+  () =>
+    tutorialStore.isStep(tutorialStore.STEP.REQUEST_END) ||
+    tutorialStore.isStep(tutorialStore.STEP.CONFIRM_END)
+);
+
+/**
+ * チュートリアルで地図の紫ピンをタップさせる段階かどうか。
+ * この段階だけ紫ピンのタップを受け付け、それ以外では地図の操作（ピンのタップ・長押し）を止める。
+ */
+const isTutorialReviewOpenStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.OPEN_REVIEW)
+);
+
+/** チュートリアルで「みんな」のトグルを押させて紫ピンを表示させる段階かどうか */
+const isTutorialShowOtherReviewsStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.SHOW_OTHER_REVIEWS)
+);
+
+/** チュートリアルで地図を長押しして新規投稿を始めさせる段階かどうか */
+const isTutorialLongPressStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.LONG_PRESS_MAP)
+);
+
+/**
+ * 「みんな」の口コミのトグルを操作できるかどうか。
+ * チュートリアル外は常に操作できる。チュートリアル中は一本道を保つため、
+ * 「みんなを表示」段階（SHOW_OTHER_REVIEWS）でだけ操作できるようにする。
+ */
+const canToggleOtherReviews = computed(() => {
+  if (!tutorialStore.isActive) {
+    return true;
+  }
+
+  return isTutorialShowOtherReviewsStep.value;
+});
+
+/**
+ * 「自分」の口コミのトグルを操作できるかどうか。
+ * チュートリアルでは自分の口コミを扱わないため、チュートリアル中は常に操作させない。
+ */
+const canToggleMyReviews = computed(() => !tutorialStore.isActive);
+
+/**
+ * チュートリアルで、拡大率を変えずにスムーズに地図を寄せる対象の座標。
+ * 紫ピンをタップさせる段階（OPEN_REVIEW）で、表示時の縮尺を保ったまま
+ * ダミーの紫ピンの位置へ地図を滑らかに移す。それ以外の段階ではnull（寄せない）。
+ */
+const tutorialSmoothCenterPosition = computed(() => {
+  if (isTutorialReviewOpenStep.value) {
+    return TUTORIAL_OTHER_REVIEW_SPOT.position;
+  }
+
+  return null;
+});
+
+/**
+ * 口コミフォームで強調する要素。
+ * 評価の段階は★、投稿の段階は投稿ボタンを目立たせる。それ以外はnull。
+ */
+const reviewFormTutorialHighlight = computed(() => {
+  // 他の人の口コミへの評価：★を強調
+  if (tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW)) {
+    return 'rating';
+  }
+
+  // 他の人の口コミへの評価の投稿：投稿ボタンを強調
+  if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
+    return 'submit';
+  }
+
+  // 新規投稿の入力：自由入力のため特定要素は強調しない（案内は上部の吹き出しで行う）
+  if (tutorialStore.isStep(tutorialStore.STEP.INPUT_NEW_REVIEW)) {
+    return null;
+  }
+
+  // 新規投稿の投稿：投稿ボタンを強調
+  if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW)) {
+    return 'submit';
+  }
+
+  return null;
+});
+
+
 
 // 距離の積算は公開する状態を持たず、現在地のwatchでwalkStoreへ直接書き込む
 useWalkRecord({ currentLocation, accuracy });
@@ -391,6 +565,19 @@ const handleVisibilityChange = () => {
 onMounted(() => {
   // 初期化は追跡より先に行う。順序が逆だと初回の測位で積んだ距離がリセットで消える
   walkStore.startWalk();
+
+  // チュートリアルは挙動を安定させるため、現在地の追跡・口コミの取得（実API）を行わない。
+  // 紫ピンはダミーを使い、実績もダミーを結果画面で見せる
+  if (tutorialStore.isActive) {
+    // チュートリアルは「みんな」を押して紫ピンを出す流れを体験させるため、
+    // 最初は紫ピンを隠しておく（SHOW_OTHER_REVIEWS でトグルを押すと表示される）
+    showOtherReviews.value = false;
+    loadGenreOptions();
+    requestScreenWakeLock();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return;
+  }
+
   startTracking();
   // フォームを開いたときに待たせないよう、先にジャンルを取得しておく
   loadGenreOptions();
@@ -418,11 +605,18 @@ const toggleMyReviews = () => {
 };
 
 /**
- * @description 他の人の口コミの紫ピンの表示/非表示を切り替える
+ * @description 他の人の口コミの紫ピンの表示/非表示を切り替える。
+ * チュートリアルの「みんなを表示」段階では、表示に切り替えたときに次（紫ピンのタップ）へ進める。
  * @returns {void}
  */
 const toggleOtherReviews = () => {
   showOtherReviews.value = !showOtherReviews.value;
+
+  // チュートリアルで「みんな」を押して紫ピンを出せたら、紫ピンをタップする段階へ進める。
+  // 表示に切り替えたときだけ進め、消す操作では進めない
+  if (showOtherReviews.value && tutorialStore.isStep(tutorialStore.STEP.SHOW_OTHER_REVIEWS)) {
+    tutorialStore.completeStep(tutorialStore.STEP.SHOW_OTHER_REVIEWS);
+  }
 };
 
 /**
@@ -432,35 +626,71 @@ const toggleOtherReviews = () => {
  * @returns {number} 地図中央からの縦のずれ（下方向が正）
  */
 const measureVisibleCenterOffsetY = () => {
-  const bannerEl = bannerRef.value?.$el ?? null;
+  // 上端は画面上部の操作全体（バナー・前後のボタン・口コミ切替・チュートリアルの吹き出し）の
+  // 下端にする。バナー下端だけだと、下に積んだマスコットの吹き出しに対象の場所がかぶる。
+  // navigation-top が取れないときはバナー下端で代替する。
+  const topEl = navigationTopRef.value ?? bannerRef.value?.$el ?? null;
   const formEl = reviewFormRef.value?.$el ?? null;
 
   // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
-  const topInsetPx = bannerEl ? bannerEl.getBoundingClientRect().bottom : 0;
+  const topInsetPx = topEl ? topEl.getBoundingClientRect().bottom : 0;
   const bottomInsetPx = formEl ? formEl.offsetHeight : 0;
 
   return (topInsetPx - bottomInsetPx) / 2;
 };
 
 /**
- * @description 前後のボタンの段の下端を測り、地図のズームボタンをその下へ置く。
- * 段が描画されていない（測れない）ときは値を変えない。
+ * @description 口コミの表示切り替えの札の下端を測り、地図の現在地へ戻るボタンをその下へ置く。
+ * 札が描画されていない（測れない）ときは値を変えない。
  * @returns {void}
  */
 const measureMapControlsTop = () => {
-  const rowEl = spotStepRowRef.value;
+  const togglesEl = reviewTogglesRef.value;
 
-  if (!rowEl) {
+  if (!togglesEl) {
     return;
   }
 
   // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準の下端をそのまま使える
-  mapControlsTopPx.value = Math.ceil(rowEl.getBoundingClientRect().bottom) + MAP_CONTROLS_GAP_PX;
+  mapControlsTopPx.value =
+    Math.ceil(togglesEl.getBoundingClientRect().bottom) + MAP_CONTROLS_GAP_PX;
 };
 
-// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、ズームボタンの位置を測り直す
-onMounted(() => {
+/**
+ * @description 画面上部の操作と終了ボタンで、地図の上下がどれだけ隠れているかを測る。
+ * 測れない（描画されていない）ほうは値を変えない。
+ * @returns {void}
+ */
+const measureMapInsets = () => {
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
+  const topBottomPx = navigationTopRef.value?.getBoundingClientRect().bottom;
+
+  if (Number.isFinite(topBottomPx)) {
+    mapTopInsetPx.value = Math.ceil(topBottomPx);
+  }
+
+  // 終了ボタンは画面下に固定して地図に重ねているため、画面の下端からボタンの上端までが隠れる
+  const endButtonTopPx = endButtonRef.value?.$el?.getBoundingClientRect?.().top;
+
+  if (Number.isFinite(endButtonTopPx)) {
+    mapBottomInsetPx.value = Math.max(0, Math.ceil(window.innerHeight - endButtonTopPx));
+  }
+};
+
+/**
+ * @description 画面上部の操作の大きさに合わせて、地図に渡す位置を測り直す
+ * @returns {void}
+ */
+const measureMapLayout = () => {
   measureMapControlsTop();
+  measureMapInsets();
+};
+
+// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、現在地へ戻るボタンの位置と
+// 地図の隠れている高さを測り直す。
+// 案内開始時の寄せ（スタート地点を中央）は地図の読み込み完了時に行い、ここで測った値を使う
+onMounted(() => {
+  measureMapLayout();
 
   const bannerEl = bannerRef.value?.$el ?? null;
 
@@ -468,7 +698,7 @@ onMounted(() => {
     return;
   }
 
-  bannerResizeObserver = new ResizeObserver(measureMapControlsTop);
+  bannerResizeObserver = new ResizeObserver(measureMapLayout);
   bannerResizeObserver.observe(bannerEl);
 });
 
@@ -516,6 +746,27 @@ const showReviewFormAt = async (position) => {
  * @returns {Promise<void>}
  */
 const handleLongPressMap = async (position) => {
+  // チュートリアル中は、新規投稿を体験させる段階（LONG_PRESS_MAP）でだけ長押しを受け付ける。
+  // 実APIの解決は呼ばず、未投稿扱いの新規モードでフォームを開いて自由入力を体験させる。
+  // それ以外の段階では長押しを無視して操作を一本道に保つ。
+  if (tutorialStore.isActive) {
+    if (!isTutorialLongPressStep.value) {
+      return;
+    }
+
+    hideMessage();
+    resetReview();
+    isExistingSpotSelected.value = false;
+    selectedReviewSpotId.value = null;
+
+    // 入力フォームを開く段階（INPUT_NEW_REVIEW）へ進め、吹き出しの案内を切り替える
+    tutorialStore.completeStep(tutorialStore.STEP.LONG_PRESS_MAP);
+
+    // resolvedSpot は null のまま（新規モード）。押した位置に赤いピンを立てて開く
+    await showReviewFormAt(position);
+    return;
+  }
+
   // 前の場所のメッセージ・解決結果を持ち越さない
   hideMessage();
   resetReview();
@@ -554,10 +805,43 @@ const handleLongPressMap = async (position) => {
  * @returns {Promise<void>}
  */
 const handleSelectReviewSpot = async ({ spotId, position }) => {
+  // チュートリアル中は、口コミに関わる段階（ピンを開く・評価・投稿）で、
+  // 対象のダミーピンだけを受け付ける。フォームを一度閉じても、対象ピンを押し直せば再開できる。
+  // それ以外の段階・ピンでは何もしない（地図操作を一本道に保つ）
+  if (tutorialStore.isActive) {
+    const isReviewPhase =
+      isTutorialReviewOpenStep.value ||
+      tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW) ||
+      tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW);
+
+    if (!(isReviewPhase && spotId === TUTORIAL_REVIEW_SPOT_ID)) {
+      return;
+    }
+  }
+
   hideMessage();
 
   // 押した瞬間にピンを大きく前面へ出す（解決の応答を待たないフィードバック）
   selectedReviewSpotId.value = spotId;
+
+  // チュートリアルは実APIを呼ばず、ダミーの既存の場所（評価のみモード）でフォームを開く。
+  // 対象の紫ピン以外は上のガードで弾くため、ここに来るのは対象のピンのみ
+  if (tutorialStore.isActive) {
+    resolvedSpot.value = TUTORIAL_RESOLVED_REVIEW_SPOT;
+    isExistingSpotSelected.value = true;
+    await showReviewFormAt(position);
+
+    if (tutorialStore.isStep(tutorialStore.STEP.OPEN_REVIEW)) {
+      tutorialStore.completeStep(tutorialStore.STEP.OPEN_REVIEW);
+
+      // ステップが評価（RATE_REVIEW）へ進むと、フォーム上部に案内文が足されて
+      // フォームの高さが変わる。先に測った寄せ位置のままだと対象のピンが中央から
+      // ずれるため、高さが変わってから測り直して寄せ直す。
+      await nextTick();
+      focusOffsetY.value = measureVisibleCenterOffsetY();
+    }
+    return;
+  }
 
   /*
    * 解決してから描く。フォームを開いていない場合は、内容が揃ってから現れる。
@@ -597,35 +881,155 @@ const handleCloseReview = () => {
 };
 
 /**
- * @description 口コミを投稿する。
- * 成功したらフォームを閉じて知らせ、失敗したらフォームを残してエラーを出す。
- * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @description 口コミの★評価が付いたとき、チュートリアルの評価ステップを進める。
+ * 評価の値そのものはフォーム内で保持する。チュートリアルでは進行の合図にだけ使う。
+ * @returns {void}
+ */
+const handleChangeReviewRating = () => {
+  // 他の人の口コミへ評価を付ける段階
+  if (tutorialStore.isStep(tutorialStore.STEP.RATE_REVIEW)) {
+    tutorialStore.completeStep(tutorialStore.STEP.RATE_REVIEW);
+    return;
+  }
+
+  // 新規投稿で評価を付けたら、投稿を押す段階へ進める。
+  // 名前・ジャンルは自由入力のため合図には使わず、最後に付けやすい評価で進める
+  if (tutorialStore.isStep(tutorialStore.STEP.INPUT_NEW_REVIEW)) {
+    tutorialStore.completeStep(tutorialStore.STEP.INPUT_NEW_REVIEW);
+  }
+};
+
+/**
+ * @description 指定した時間だけ待つ
+ * @param {number} durationMs 待つ時間（ミリ秒）
  * @returns {Promise<void>}
  */
-const handleSubmitReview = async (review) => {
+const waitFor = (durationMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
+
+/**
+ * @description 口コミを送信し、成否を返す。
+ * チュートリアルは実際に送信せず、成功として扱う
+ * （ダミーのスポットに本物の口コミが残らないようにする）。
+ * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @returns {Promise<boolean>} 成功した場合はtrue
+ */
+const sendReview = async (review) => {
+  if (tutorialStore.isActive) {
+    return true;
+  }
+
   const result = await postReviewContent({
     position: reviewTargetPosition.value,
     ...review
   });
 
-  if (result === null) {
+  return result !== null;
+};
+
+/**
+ * @description 口コミを投稿する。
+ * 結果が出るまで画面全体に「投稿中…」を出し、押せたことと処理中であることを伝える。
+ * 成功したら「投稿中…」とフォームを閉じて地図へ戻し、トーストで知らせる。
+ * 失敗したら「投稿中…」だけを閉じ、入力を残したフォームとエラーを見せて再送できるようにする。
+ * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @returns {Promise<void>}
+ */
+const handleSubmitReview = async (review) => {
+  // 「投稿中…」の間に届いた二度目の送信は受け付けない
+  if (isSubmittingReview.value) {
+    return;
+  }
+
+  isSubmittingReview.value = true;
+
+  let isSucceeded;
+
+  try {
+    // 通信がすぐ終わっても、最短の表示時間は「投稿中…」を出し続ける
+    [isSucceeded] = await Promise.all([
+      sendReview(review),
+      waitFor(MIN_REVIEW_SUBMITTING_DURATION_MS)
+    ]);
+  } finally {
+    isSubmittingReview.value = false;
+  }
+
+  if (!isSucceeded) {
     showMessage(reviewErrorMessage.value ?? '口コミの投稿に失敗しました');
     return;
   }
 
   handleCloseReview();
   showMessage('口コミを投稿しました', 'success');
+
+  if (tutorialStore.isActive) {
+    // 他の人の口コミへの評価を投稿したら、次は新規投稿の体験（地図の長押し）へ進む
+    if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
+      tutorialStore.completeStep(tutorialStore.STEP.SUBMIT_REVIEW);
+      return;
+    }
+
+    // 新規投稿を投稿したら、散歩の終了へ進む
+    if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW)) {
+      tutorialStore.completeStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW);
+    }
+    return;
+  }
+
   // 新規・編集を地図のピン（オレンジ・紫）へ反映する
   loadMyReviews();
   loadReviewSpots();
 };
 
 /**
- * @description 終了確認を表示する
+ * @description 次の目的地へ進める。チュートリアル中は口コミ評価のステップへ進める。
+ * 進める操作そのものは useRouteProgress が担う。
+ * @returns {void}
+ */
+const handleAdvanceToNextSpot = () => {
+  advanceToNextSpot();
+
+  if (tutorialStore.isStep(tutorialStore.STEP.ADVANCE_SPOT)) {
+    tutorialStore.completeStep(tutorialStore.STEP.ADVANCE_SPOT);
+  }
+};
+
+/**
+ * @description 前の目的地へ戻す。チュートリアル中は、この操作に合わせて案内ステップも1つ戻す。
+ * 「次の目的地へ」で進んだステップ（ADVANCE_SPOT → OPEN_REVIEW）を、戻す操作で元に戻すことで、
+ * ボタン操作と案内の進み具合を一致させる。
+ * 戻す操作そのものは useRouteProgress が担う。
+ * @returns {void}
+ */
+const handleReturnToPreviousSpot = () => {
+  // チュートリアル中は、スポットを戻すのではなく、案内（解説）を1つ前へ戻す。
+  // とくにフォームを開く段階では、開いているフォームを閉じてから前の解説へ戻し、
+  // 「前の目的地へ」で手順をやり直せるようにする。
+  if (tutorialStore.isActive) {
+    if (isReviewFormVisible.value) {
+      handleCloseReview();
+    }
+
+    tutorialStore.goBack();
+    return;
+  }
+
+  returnToPreviousSpot();
+};
+
+/**
+ * @description 終了確認を表示する。チュートリアル中は終了確認のステップへ進める。
  * @returns {void}
  */
 const handleRequestEnd = () => {
   isEndConfirmVisible.value = true;
+
+  if (tutorialStore.isStep(tutorialStore.STEP.REQUEST_END)) {
+    tutorialStore.completeStep(tutorialStore.STEP.REQUEST_END);
+  }
 };
 
 /**
@@ -646,6 +1050,15 @@ const handleConfirmEnd = async () => {
   }
 
   isEndConfirmVisible.value = false;
+
+  // チュートリアルは実績を保存・計測しないため、保存や取り直しを行わず結果画面へ進める。
+  // 結果画面はチュートリアル中、ダミーの実績を表示する
+  if (tutorialStore.isStep(tutorialStore.STEP.CONFIRM_END)) {
+    tutorialStore.completeStep(tutorialStore.STEP.CONFIRM_END);
+    router.push({ name: 'walk-result' });
+    return;
+  }
+
   isFinishing.value = true;
 
   // 結果画面が所要時間を読むため、保存の前に終了時刻を確定させる
@@ -685,7 +1098,10 @@ const handleConfirmEnd = async () => {
       画面上部の操作をまとめて縦に積む（バナー → 前後のボタン → 口コミの表示切り替え）。
       目的地の名前が長くバナーが伸びても、下の段が押し下げられて重ならない。
     -->
-    <div class="navigation-top">
+    <div
+      ref="navigationTopRef"
+      class="navigation-top"
+    >
       <RouteNextSpotBanner
         ref="bannerRef"
         :spot-name="nextSpot?.name ?? null"
@@ -712,10 +1128,7 @@ const handleConfirmEnd = async () => {
       <!--
         ボタンが片方だけでも段の高さを保ち、下の口コミの表示切り替えが跳ねないようにする
       -->
-      <div
-        ref="spotStepRowRef"
-        class="spot-step-row"
-      >
+      <div class="spot-step-row">
         <!--
           誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
           到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
@@ -725,27 +1138,72 @@ const handleConfirmEnd = async () => {
           class="previous-spot-btn"
           type="button"
           aria-label="前の目的地に戻る"
-          @click="returnToPreviousSpot"
+          @click="handleReturnToPreviousSpot"
         >
-          ← 前の目的地
+          前の目的地へ
         </button>
 
         <!--
           次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
           押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
         -->
-        <button
+        <!--
+          次の目的地へのボタンは常に is-highlighted で素通し（display: contents）にして、
+          flex の margin-left: auto による右寄せを保つ。段階によるロックは is-locked にはせず、
+          ボタン自身の disabled で行う。is-locked（display: block）に切り替えると
+          右寄せが外れてボタンの位置が動くため。
+        -->
+        <TutorialSpotlight
           v-if="nextSpot"
-          class="next-spot-btn"
-          type="button"
-          @click="advanceToNextSpot"
+          class="next-spot-slot"
+          :is-active="tutorialStore.isActive"
+          :is-highlighted="true"
         >
-          次の目的地へ
-        </button>
+          <!--
+            チュートリアル中は「次の目的地へ」の段階だけ押せるようにする。
+            一度押すと段階が進み、半透明のまま押せてしまうのを防ぐため、disabled で確実に止める。
+            （TutorialSpotlight の pointer-events: none はボタン側の pointer-events: auto に
+            上書きされてしまうため、ボタン自身を無効化する）
+          -->
+          <button
+            class="next-spot-btn"
+            :class="{ 'is-locked': tutorialStore.isActive && !isTutorialAdvanceStep }"
+            type="button"
+            :disabled="tutorialStore.isActive && !isTutorialAdvanceStep"
+            @click="handleAdvanceToNextSpot"
+          >
+            次の目的地へ
+          </button>
+        </TutorialSpotlight>
       </div>
 
+      <!--
+        チュートリアル中の案内役。前の目的地／次の目的地のボタンの段のすぐ下に固定で置く。
+        評価・投稿・新規入力などフォームを開く段階でも、案内はここに出し続ける
+        （フォーム内には出さず、常に同じ場所で読めるようにする）。
+        フォームは画面下部から出るため、上部のこの吹き出しとは重ならない。
+      -->
+      <MascotSpeechBubble
+        v-if="tutorialStore.isActive && tutorialStore.currentMessage"
+        class="tutorial-mascot-inline"
+        :message="tutorialStore.currentMessage"
+        :level="mascotStore.mascotLevel"
+        placement="side"
+        size="small"
+      />
+
+      <!--
+        口コミのピンの表示切り替え。地図を広く見せるため右端に寄せ、
+        「口コミ」の見出しの下に自分・みんなを縦に並べる
+      -->
+      <!--
+        「次の目的地へ」の段階では、口コミの表示切り替えも暗くして操作できないようにする。
+        次に押すボタンへ注意を集めるため。
+      -->
       <div
+        ref="reviewTogglesRef"
         class="review-toggles"
+        :class="{ 'is-tutorial-dimmed': isAdvanceSpotFocus }"
         role="group"
         aria-label="口コミのピンの表示"
       >
@@ -760,6 +1218,7 @@ const handleConfirmEnd = async () => {
           class="review-toggle review-toggle-mine"
           :class="{ 'is-on': showMyReviews }"
           type="button"
+          :disabled="isAdvanceSpotFocus || !canToggleMyReviews"
           :aria-pressed="showMyReviews"
           aria-label="自分の口コミ"
           @click="toggleMyReviews"
@@ -768,10 +1227,18 @@ const handleConfirmEnd = async () => {
           自分
         </button>
 
+        <!--
+          「みんな」のトグル。チュートリアルの「みんなを表示」段階では、ここを押して
+          紫ピンを出す流れを体験させるため、is-tutorial-target で目立たせて操作可能にする。
+        -->
         <button
           class="review-toggle review-toggle-other"
-          :class="{ 'is-on': showOtherReviews }"
+          :class="{
+            'is-on': showOtherReviews,
+            'is-tutorial-target': isTutorialShowOtherReviewsStep
+          }"
           type="button"
+          :disabled="isAdvanceSpotFocus || !canToggleOtherReviews"
           :aria-pressed="showOtherReviews"
           aria-label="みんなの口コミ"
           @click="toggleOtherReviews"
@@ -790,9 +1257,11 @@ const handleConfirmEnd = async () => {
       :is-tracking="isTracking"
       :tracking-error="trackingError"
       :is-long-press-enabled="true"
+      :is-interactive="isMapInteractive"
       :pin-position="newSpotPin"
       :focus-position="reviewTargetPosition"
       :focus-offset-y="focusOffsetY"
+      :smooth-center-position="tutorialSmoothCenterPosition"
       :my-review-spots="myReviews"
       :show-my-reviews="showMyReviews"
       :other-review-spots="otherReviewSpots"
@@ -801,8 +1270,22 @@ const handleConfirmEnd = async () => {
       :selected-review-spot-id="selectedReviewSpotId"
       :leg-sections="legSections"
       :controls-top-px="mapControlsTopPx"
+      :top-inset-px="mapTopInsetPx"
+      :bottom-inset-px="mapBottomInsetPx"
       @long-press-map="handleLongPressMap"
       @select-review-spot="handleSelectReviewSpot"
+    />
+
+    <!--
+      「次の目的地へ」の段階だけ、ボタン・マスコット・吹き出し以外を暗い膜で覆い、
+      操作できないことを見た目でも示す。膜は地図の上・画面上部の操作（.navigation-top、
+      z-index 45）の下に敷くため、次の目的地へのボタンとマスコットの吹き出しだけが明るく残る。
+      終了ボタン（footer）はこの膜より手前にあるため、別途 is-tutorial-dimmed で暗くする。
+    -->
+    <div
+      v-if="isAdvanceSpotFocus"
+      class="tutorial-dim-overlay"
+      aria-hidden="true"
     />
 
     <ReviewPostForm
@@ -815,19 +1298,35 @@ const handleConfirmEnd = async () => {
       :initial-rating="userRating"
       :existing-photos="existingPhotos"
       :is-resolving="isResolving"
-      :is-posting="isPosting"
+      :is-posting="isSubmittingReview"
+      :tutorial-highlight="reviewFormTutorialHighlight"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
       @change-expanded="handleChangeReviewFormExpanded"
+      @change-rating="handleChangeReviewRating"
     />
 
     <template #footer>
-      <BaseButton
-        is-full-width
-        @click="handleRequestEnd"
+      <!--
+        「次の目的地へ」の段階では終了ボタンも暗くして押せないようにする。
+        TutorialSpotlight の is-locked は固定配置のボタンの位置を崩すため使わず、
+        ボタン自身の disabled と見た目の is-tutorial-dimmed で止める。
+      -->
+      <TutorialSpotlight
+        :is-active="tutorialStore.isActive"
+        :is-highlighted="isTutorialEndStep || isAdvanceSpotFocus"
       >
-        終 了
-      </BaseButton>
+        <BaseButton
+          ref="endButtonRef"
+          class="end-btn"
+          :class="{ 'is-tutorial-dimmed': isAdvanceSpotFocus }"
+          is-full-width
+          :is-disabled="isAdvanceSpotFocus"
+          @click="handleRequestEnd"
+        >
+          終 了
+        </BaseButton>
+      </TutorialSpotlight>
 
       <BaseModal
         v-if="isEndConfirmVisible"
@@ -839,19 +1338,22 @@ const handleConfirmEnd = async () => {
     </template>
 
     <!--
-      終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。
-      ロード画面（RouteLoadingOverlay）は流用せず、文字だけにする。
-      role="status" で処理中であることを読み上げさせ、終了の二度押しを塞ぐ。
+      口コミの投稿の結果を待つ間に出す「投稿中…」の全画面表示。
+      投稿フォームごと覆い、押せたことを伝えつつ、二度押しや地図の長押しを塞ぐ。
     -->
-    <div
+    <BaseProcessingOverlay
+      v-if="isSubmittingReview"
+      message="投稿中…"
+    />
+
+    <!--
+      終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。
+      終了の二度押しを塞ぐ。
+    -->
+    <BaseProcessingOverlay
       v-if="isFinishing"
-      class="finishing-overlay"
-      role="status"
-    >
-      <p class="finishing-text">
-        記録中…
-      </p>
-    </div>
+      message="記録中…"
+    />
   </DefaultLayout>
 </template>
 
@@ -863,32 +1365,6 @@ const handleConfirmEnd = async () => {
  */
 .primary-btn.full-width {
   bottom: 44px;
-}
-
-/*
- * 終了後の保存・取り直し・判定を待つ間の「記録中…」の全画面表示。
- * 羊皮紙色の膜で地図と操作部をすべて覆い、待っている間の操作（終了の二度押しや
- * 地図の長押しなど）を物理的に塞ぐ。文字だけで、ロード画面の演出は流用しない。
- * 画面上部の操作（z-index 45）より手前に出すため、それらより高くする。
- */
-.finishing-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* 羊皮紙色の半透明の膜。下の地図をうっすら残しつつ操作は受け付けない */
-  background: rgba(241, 227, 200, 0.85);
-}
-
-.finishing-text {
-  font-family: var(--font-display);
-  font-size: calc(18px + var(--fit) * 4);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--primary-color);
-  text-shadow: var(--text-halo);
 }
 
 /*
@@ -917,6 +1393,15 @@ const handleConfirmEnd = async () => {
 
 .navigation-top > * {
   pointer-events: auto;
+}
+
+/*
+ * チュートリアルの案内役の吹き出しは、案内文を見せるだけでタップを受けない。
+ * pointer-events を切り、吹き出しの下に重なる地図・口コミの紫ピンのタップを通す
+ * （切らないと吹き出しがピンに被さってタップを奪い、フォームを開き直せなくなる）。
+ */
+.navigation-top > .tutorial-mascot-inline {
+  pointer-events: none;
 }
 
 /*
@@ -960,6 +1445,41 @@ const handleConfirmEnd = async () => {
 }
 
 /*
+ * チュートリアルで「次の目的地へ」の段階を過ぎたときのロック表示。
+ * 半透明にしたうえで disabled を併用し、押下そのものも止める
+ * （pointer-events だけだとボタン側の pointer-events: auto に上書きされるため）。
+ */
+.next-spot-btn.is-locked {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+/*
+ * 「次の目的地へ」の段階で、ボタン・マスコット・吹き出し以外を覆う暗い膜。
+ * 地図（全画面）の上に敷き、画面上部の操作（.navigation-top、z-index 45）の下に置く。
+ * これにより次の目的地へのボタンとマスコットの吹き出しだけが明るく残り、
+ * 膜が操作（地図のドラッグ・タップ）も遮る。
+ */
+.tutorial-dim-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(45, 62, 80, 0.5);
+}
+
+/*
+ * チュートリアルで暗くする部品（口コミの表示切り替え・終了ボタン）の共通表示。
+ * disabled と併せて使い、操作できないことを見た目でも示す。
+ */
+.review-toggles.is-tutorial-dimmed,
+.end-btn.is-tutorial-dimmed {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  pointer-events: none;
+}
+
+/*
  * 「前の目的地」ボタン。段の左端に置き、左端をバナーの左端に揃える。
  * 枠・影・大きさは「次の目的地へ」と同じにする。
  * 主操作の「次の目的地へ」と区別するため、面だけ羊皮紙の色に紫の文字にする。
@@ -987,21 +1507,21 @@ const handleConfirmEnd = async () => {
 }
 
 /*
- * 口コミピンの表示切り替え（自分・他の人の2つ）を1本のピルにまとめる。
- * 前後のボタンの段の下・左端に置き、ズームコントロール（右）と重ならないようにする。
+ * 口コミピンの表示切り替え（自分・他の人の2つ）を1枚の札にまとめる。
+ * 前後のボタンの段の下・右端（「次の目的地へ」の下）に置き、
+ * 「口コミ」の見出しの下に自分・みんなを縦に並べる。
+ * 現在地へ戻るボタンはこの札の下に置く（下端を測って controlsTopPx で渡す）。
  * 入れ物は幅いっぱいに広げるため、align-self で中身の幅に縮める。
  */
 .review-toggles {
   touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
-  align-self: flex-start;
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 2px;
-  min-height: 32px;
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   box-sizing: border-box;
-  /* 上下の余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
-  padding: 0 0 0 10px;
+  /* 余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
+  padding: 0;
   /*
    * 2つのトグルを1枚の札にまとめているため、ドット絵の枠はこの外枠にだけ付ける。
    * 内側のトグルに付けると、枠（--pixel-frame-width × 2）の分だけ札の中で膨らむ。
@@ -1013,19 +1533,23 @@ const handleConfirmEnd = async () => {
   box-shadow: var(--shadow);
 }
 
+/* 見出し。下の2つのトグルと罫線で区切る */
 .review-toggles-label {
-  margin-right: 2px;
+  padding: 4px 10px;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
   color: var(--text-gray);
+  border-bottom: 1px solid var(--border-ink);
 }
 
 .review-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 4px 10px;
+  padding: 4px 12px 4px 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-gray);
@@ -1053,5 +1577,14 @@ const handleConfirmEnd = async () => {
 
 .review-toggle-other.is-on .review-toggle-dot {
   background: var(--review-purple);
+}
+
+/*
+ * チュートリアルで「みんな」を押させる段階で、トグルを枠で浮かせて目立たせる。
+ * 周りが暗い中でここだけ際立たせ、紫ピンを出す操作へ誘導する。
+ */
+.review-toggle-other.is-tutorial-target {
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 </style>

@@ -4,13 +4,16 @@ import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
+import MascotSpeechBubble from '@/components/feature/mascot/MascotSpeechBubble.vue';
 import RouteInfoCard from '@/components/feature/route/RouteInfoCard.vue';
 import RouteLoadingOverlay from '@/components/feature/route/RouteLoadingOverlay.vue';
 import RouteMapPreview from '@/components/feature/route/RouteMapPreview.vue';
+import TutorialSpotlight from '@/components/feature/tutorial/TutorialSpotlight.vue';
 import { useRouteCreation } from '@/composables/useRouteCreation';
 import { useToastMessage } from '@/composables/useToastMessage';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
 
 /**
  * @description 提案されたルートを確認する画面。
@@ -19,6 +22,7 @@ import { useRouteStore } from '@/stores/routeStore';
 const router = useRouter();
 const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
+const tutorialStore = useTutorialStore();
 const {
   isCreating,
   errorMessage: creationErrorMessage,
@@ -78,6 +82,11 @@ onMounted(() => {
  * @returns {void}
  */
 const handleConfirm = () => {
+  // チュートリアル中は、決定で案内の最初のステップ（次の目的地へ）へ進める
+  if (tutorialStore.isStep(tutorialStore.STEP.CONFIRM_ROUTE)) {
+    tutorialStore.completeStep(tutorialStore.STEP.CONFIRM_ROUTE);
+  }
+
   router.push({ name: 'route-navigation' });
 };
 
@@ -148,7 +157,33 @@ const handleBackToHome = () => {
       />
     </div>
 
+    <!--
+      チュートリアル中は、決定ボタン・マスコット・吹き出し以外を暗い膜で覆い、
+      操作を一本道にする。通常のレイアウト（見出し・地図・紹介文・下部のボタン）は
+      そのままにし、膜はその上に敷く。決定ボタンと案内の吹き出しだけが膜より手前に残る。
+    -->
+    <div
+      v-if="tutorialStore.isActive"
+      class="tutorial-dim-overlay"
+      aria-hidden="true"
+    />
+
     <template #footer>
+      <!--
+        チュートリアルの案内役。下部の操作（決定ボタン等）のすぐ上に置き、説明を読んでから
+        その下の「決定」へ目が向くようにする。膜より手前に出すため is-tutorial-front を付ける。
+        bottom-actions の外（上）に置き、横並びのレイアウトを崩さない。
+        レベル表示・経験値バーは出さず、案内の文言だけを話す。
+      -->
+      <MascotSpeechBubble
+        v-if="tutorialStore.isActive && tutorialStore.currentMessage"
+        class="tutorial-mascot-suggestion is-tutorial-front"
+        :message="tutorialStore.currentMessage"
+        :level="mascotStore.mascotLevel"
+        placement="side"
+        size="small"
+      />
+
       <div class="bottom-actions">
         <div class="distance-display">
           <span class="label">距離</span>
@@ -157,21 +192,47 @@ const handleBackToHome = () => {
           </span>
         </div>
         <div class="action-buttons">
-          <BaseButton @click="handleConfirm">
-            決定
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            @click="handleRegenerate"
+          <!--
+            チュートリアル中は「決定」だけハイライトして押せるようにする。
+            チュートリアル中は決定ボタンを暗い膜より手前に出すため、is-tutorial-front で包む
+            （TutorialSpotlight はハイライト時 display: contents で z-index が効かないため）。
+          -->
+          <div
+            class="confirm-button-slot"
+            :class="{ 'is-tutorial-front': tutorialStore.isActive }"
           >
-            再作成
-          </BaseButton>
-          <BaseButton
-            variant="secondary"
-            @click="handleBackToHome"
+            <TutorialSpotlight
+              :is-active="tutorialStore.isActive"
+              :is-highlighted="tutorialStore.isStep(tutorialStore.STEP.CONFIRM_ROUTE)"
+            >
+              <BaseButton @click="handleConfirm">
+                決定
+              </BaseButton>
+            </TutorialSpotlight>
+          </div>
+          <!-- 再作成・ホームに戻るはチュートリアルを一本道にするためロックする -->
+          <TutorialSpotlight
+            :is-active="tutorialStore.isActive"
+            :is-highlighted="false"
           >
-            ホームに戻る
-          </BaseButton>
+            <BaseButton
+              variant="secondary"
+              @click="handleRegenerate"
+            >
+              再作成
+            </BaseButton>
+          </TutorialSpotlight>
+          <TutorialSpotlight
+            :is-active="tutorialStore.isActive"
+            :is-highlighted="false"
+          >
+            <BaseButton
+              variant="secondary"
+              @click="handleBackToHome"
+            >
+              ホームに戻る
+            </BaseButton>
+          </TutorialSpotlight>
         </div>
       </div>
     </template>
@@ -188,6 +249,49 @@ const handleBackToHome = () => {
 .suggestion-content {
   display: flex;
   flex-direction: column;
+}
+
+/*
+ * チュートリアルの案内役。決定ボタンのすぐ上に流し込みで置き、下に余白を取る。
+ * is-tutorial-front で、画面全体の暗い膜より手前に出す。
+ */
+.tutorial-mascot-inline {
+  flex-shrink: 0;
+  margin-bottom: calc(6px + var(--fit) * 8);
+}
+
+/*
+ * チュートリアル中に、決定ボタン・マスコット・吹き出し以外を覆う暗い膜。
+ * 通常のレイアウトは崩さず、その上に敷く。決定ボタンと案内の吹き出しだけを
+ * is-tutorial-front で膜より手前に残す。
+ */
+.tutorial-dim-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(45, 62, 80, 0.5);
+}
+
+/* 暗い膜より手前に出す案内役の吹き出し。操作は受け付けないため見た目だけを前に出す */
+.is-tutorial-front {
+  position: relative;
+  z-index: 41;
+}
+
+/*
+ * チュートリアルの案内役を下部の操作のすぐ上に置く。
+ * bottom-actions（下端に固定の紙）の上に重ならないよう、下に余白を取る。
+ */
+.tutorial-mascot-suggestion {
+  margin: 0 12px calc(6px + var(--fit) * 8);
+}
+
+/*
+ * 決定ボタンのまとまり。grid の全幅（primary-btn の grid-column: 1 / -1 と同じ）を保つ。
+ * チュートリアル中は is-tutorial-front で暗い膜より手前に出し、押せるようにする。
+ */
+.confirm-button-slot {
+  grid-column: 1 / -1;
 }
 
 /*

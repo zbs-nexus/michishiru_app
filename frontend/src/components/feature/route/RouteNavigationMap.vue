@@ -43,6 +43,11 @@ defineProps({
     type: Boolean,
     default: false
   },
+  /** 地図の操作（ドラッグ・ズーム）を許可するかどうか。チュートリアル中は止める */
+  isInteractive: {
+    type: Boolean,
+    default: true
+  },
   /** 新規で口コミを投稿する場所に立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
   pinPosition: {
     type: Object,
@@ -57,6 +62,14 @@ defineProps({
   focusOffsetY: {
     type: Number,
     default: 0
+  },
+  /**
+   * 拡大率を変えずにスムーズに見えている範囲の中央へ寄せる座標 { lng, lat }。未設定はnull。
+   * チュートリアルで紫ピンへ案内するために使う
+   */
+  smoothCenterPosition: {
+    type: Object,
+    default: null
   },
   /** 自分が投稿した口コミの場所の一覧 */
   myReviewSpots: {
@@ -94,12 +107,26 @@ defineProps({
     default: null
   },
   /**
-   * ズームボタンを置く上端（ピクセル）。画面上部のバナーと前後のボタンの下へ逃がす。
+   * 地図のコントロール（現在地へ戻るボタン）を置く上端（ピクセル）。
+   * 画面上部のバナー・前後のボタン・口コミの表示切り替えの下へ逃がす。
    * バナーは目的地の名前の長さで伸びるため、親が測って渡す
    */
   controlsTopPx: {
     type: Number,
     default: 124
+  },
+  /**
+   * 地図の上端から、画面上部の操作で隠れている高さ（ピクセル）。
+   * 案内開始時のスタート地点と、現在地へ戻るときの現在地を、見えている範囲の中央へ寄せるために使う
+   */
+  topInsetPx: {
+    type: Number,
+    default: 0
+  },
+  /** 地図の下端から、終了ボタンで隠れている高さ（ピクセル）。使い方は topInsetPx と同じ */
+  bottomInsetPx: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -115,6 +142,7 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
       <RouteMap
         :geometry="geometry"
         :spots="spots"
+        :is-interactive="isInteractive"
         :show-current-location="isTracking"
         :current-location="currentLocation"
         :current-accuracy="currentAccuracy"
@@ -122,6 +150,7 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :pin-position="pinPosition"
         :focus-position="focusPosition"
         :focus-offset-y="focusOffsetY"
+        :smooth-center-position="smoothCenterPosition"
         :my-review-spots="myReviewSpots"
         :show-my-reviews="showMyReviews"
         :other-review-spots="otherReviewSpots"
@@ -129,6 +158,9 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :visited-spot-ids="visitedSpotIds"
         :selected-review-spot-id="selectedReviewSpotId"
         :leg-sections="legSections"
+        :top-inset-px="topInsetPx"
+        :bottom-inset-px="bottomInsetPx"
+        should-center-on-origin
         @long-press-map="$emit('longPressMap', $event)"
         @select-review-spot="$emit('selectReviewSpot', $event)"
       />
@@ -156,8 +188,8 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
 }
 
 /*
- * ズームボタンが次の目的地バナーと、その右下の「次の目的地へ」ボタンに隠れて
- * 押せなくなるため、この画面だけコントロールを下へ寄せる。
+ * 現在地へ戻るボタンが、次の目的地バナー・「次の目的地へ」ボタン・その下の
+ * 口コミの表示切り替え（右寄せ）に隠れて押せなくなるため、この画面だけコントロールを下へ寄せる。
  * バナーは目的地の名前の長さで伸びるため、位置は親が測った値（controlsTopPx）に従う。
  */
 .navigation-map :deep(.maplibregl-ctrl-top-right) {

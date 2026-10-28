@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
 // MapLibre GL v6 は名前付きエクスポートのみを提供する（既定エクスポートは無い）。
 // 地図クラスは組み込みの Map と名前が衝突するため、別名の MapLibreMap を使う。
-import { MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } from 'maplibre-gl';
+import { MapLibreMap, Marker, Popup, setWorkerUrl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // MapLibre v6 は geojson の処理を担うワーカーを別ファイルに分けており、
 // その URL を `new URL(`./${変数}`, ...)` と動的に組み立てる。
@@ -17,6 +17,7 @@ import {
   MAP_FIT_PADDING_PX,
   MAP_STYLE,
   MAX_FIT_ZOOM_LEVEL,
+  NAVIGATION_ZOOM_LEVEL,
   ROUTE_CURRENT_LEG_CASING_WIDTH_PX,
   ROUTE_CURRENT_LEG_COLOR,
   ROUTE_CURRENT_LEG_WIDTH_PX,
@@ -37,6 +38,7 @@ setWorkerUrl(maplibreWorkerUrl);
 /**
  * @description 実地図の上にルートの線とスポットを描画する。
  * 経路の座標列（geometry）から線を引き、ルート全体が収まる位置まで地図を寄せる。
+ * 案内画面（shouldCenterOnOrigin）では、固定の倍率でスタート地点を中央に置く。
  *
  * 地図ライブラリはDOM要素を直接必要とするため、生成と破棄をこのコンポーネントが持つ。
  */
@@ -100,6 +102,16 @@ const props = defineProps({
     type: Number,
     default: 0
   },
+  /**
+   * 拡大率を変えずに、スムーズに（アニメーション付きで）見えている範囲の中央へ寄せる座標
+   * { lng, lat }。未設定の場合はnull。
+   * チュートリアルで紫ピンへ案内するなど、今の縮尺を保ったまま位置だけを滑らかに移す用途。
+   * 即時に寄せる focusPosition とは別に持ち、こちらは easeTo をアニメーションさせる。
+   */
+  smoothCenterPosition: {
+    type: Object,
+    default: null
+  },
   /** 自分が投稿した口コミの場所（{ spotId, position, spotName } の配列） */
   myReviewSpots: {
     type: Array,
@@ -137,6 +149,31 @@ const props = defineProps({
   legSections: {
     type: Object,
     default: null
+  },
+  /**
+   * 初期表示でスタート地点を見えている範囲の中央に置くかどうか（案内画面だけが真にする）。
+   * 真の場合は、固定の倍率（NAVIGATION_ZOOM_LEVEL）でスタート地点を中央に置く。
+   * 偽の場合はルート全体が収まるように寄せる
+   */
+  shouldCenterOnOrigin: {
+    type: Boolean,
+    default: false
+  },
+  /**
+   * 地図の上端から、画面上部の操作（バナー等）で隠れている高さ（ピクセル）。
+   * 初期表示と現在地へ戻るときに、見えている範囲の中央へ寄せるために使う
+   */
+  topInsetPx: {
+    type: Number,
+    default: 0
+  },
+  /**
+   * 地図の下端から、画面下部の操作（終了ボタン等）で隠れている高さ（ピクセル）。
+   * 使い方は topInsetPx と同じ
+   */
+  bottomInsetPx: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -195,13 +232,6 @@ let currentLocationMarker = null;
 let pinMarker = null;
 let reviewMarkers = [];
 let recenterControl = null;
-
-/**
- * 初期表示の拡大率。
- * ルート全体を収めた直後の値を覚えておき、現在地へ戻るときに復元する。
- * 地図の生成時の値を初期値とし、ルートを収められない場合もこの値を使う。
- */
-let initialZoomLevel = DEFAULT_ZOOM_LEVEL;
 
 // 長押しの検出。地図の生成後にattachし、座標を親へ通知する
 const { attach: attachLongPress } = useMapLongPress({
@@ -372,7 +402,15 @@ const createCurrentLocationElement = () => {
 };
 
 /**
- * @description 地図の中心を現在地へ寄せ、拡大率を初期表示と同じに戻す。
+ * @description 見えている範囲の中央へ寄せるための、地図中央からの縦のずれを求める。
+ * 上が隠れているぶんだけ下へ、下が隠れているぶんだけ上へずらす。
+ * @returns {number} 地図中央からの縦のずれ（ピクセル）。下方向が正
+ */
+const toVisibleCenterOffsetY = () => (props.topInsetPx - props.bottomInsetPx) / 2;
+
+/**
+ * @description 現在地を見えている範囲の中央へ寄せる。拡大率は押した時点のまま変えない。
+ * 利用者が合わせた縮尺を崩さず、位置だけを現在地へ戻すため、easeTo に zoom を渡さない。
  * @returns {void}
  */
 const centerOnCurrentLocation = () => {
@@ -382,14 +420,14 @@ const centerOnCurrentLocation = () => {
 
   map.easeTo({
     center: [props.currentLocation.lng, props.currentLocation.lat],
-    zoom: initialZoomLevel
+    offset: [0, toVisibleCenterOffsetY()]
   });
 };
 
 /**
  * @description 現在地へ戻るコントロールを組み立てる。
- * MapLibreのコントロールとして追加することで、ズームボタンと同じ枠に
- * 同じ見た目で並ぶ（後から追加したものが下に来る）。
+ * MapLibreのコントロールとして追加することで、地図の右上に
+ * 他の札と同じ見た目（global.css の .maplibregl-ctrl-group）で並ぶ。
  * @returns {object} MapLibreのIControlを満たすオブジェクト
  */
 const createRecenterControl = () => {
@@ -526,9 +564,34 @@ const focusOnPosition = () => {
     return;
   }
 
+  // 口コミフォームを開く流れでは、フォームの高さが段階的に変わって寄せ直しが
+  // 続けて走る。アニメーションさせると前後の easeTo が競合して最後のずれが効き切らず、
+  // 対象のピンが可視範囲の中央に収まらないため、寄せは即時（duration: 0）にする。
   map.easeTo({
     center: [props.focusPosition.lng, props.focusPosition.lat],
-    offset: [0, props.focusOffsetY]
+    offset: [0, props.focusOffsetY],
+    duration: 0
+  });
+};
+
+/**
+ * @description 拡大率を変えずに、対象の座標を見えている範囲の中央へスムーズに寄せる。
+ *
+ * 今の縮尺を保ったまま位置だけを滑らかに移すため、easeTo に zoom を渡さず
+ * アニメーション（duration あり）で動かす。切り替わりではなく移動に見せるのが狙い。
+ * 画面上部・下部の隠れているぶん（topInset / bottomInset）を offset で補い、
+ * 対象が可視範囲の中央へ来るようにする。
+ * @returns {void}
+ */
+const smoothCenterOnPosition = () => {
+  if (map === null || props.smoothCenterPosition === null) {
+    return;
+  }
+
+  map.easeTo({
+    center: [props.smoothCenterPosition.lng, props.smoothCenterPosition.lat],
+    offset: [0, toVisibleCenterOffsetY()],
+    duration: 800
   });
 };
 
@@ -740,10 +803,47 @@ const fitToRoute = () => {
     maxZoom: MAX_FIT_ZOOM_LEVEL,
     animate: false
   });
+};
 
-  // 現在地へ戻るときに初期表示と同じ倍率へ復元できるよう、この時点の倍率を覚えておく。
-  // animate: false のため、ここでは寄せ終わった後の値が取れる
-  initialZoomLevel = map.getZoom();
+/**
+ * @description スタート地点を見えている範囲の中央に置き、固定の倍率（NAVIGATION_ZOOM_LEVEL）で表示する。
+ *
+ * 倍率は1つ目の目的地までの区間の長さでは変えない。区間を収めようとすると、
+ * 目的地が遠いほど縮小されて歩き出す方向が分かりにくくなるため。
+ * 固定の倍率では最初の曲がり角まで見え、遠い目的地はバナーの距離とピンチでの縮小で確かめられる。
+ *
+ * 縦のずれ（offset）で、画面上部の操作と終了ボタンに挟まれた範囲の中央へ寄せる。
+ * 寄せ終わった状態を初期表示にするため、アニメーションさせない（duration: 0）。
+ * @returns {void}
+ */
+const centerOnOrigin = () => {
+  const originPosition = toOriginPosition(props.geometry);
+
+  if (originPosition === null) {
+    fitToRoute();
+    return;
+  }
+
+  map.easeTo({
+    center: originPosition,
+    zoom: NAVIGATION_ZOOM_LEVEL,
+    offset: [0, toVisibleCenterOffsetY()],
+    duration: 0
+  });
+};
+
+/**
+ * @description 初期表示の位置まで地図を寄せる。
+ * 案内画面はスタート地点を中央に、それ以外（提案画面）はルート全体を収める。
+ * @returns {void}
+ */
+const fitToInitialView = () => {
+  if (props.shouldCenterOnOrigin) {
+    centerOnOrigin();
+    return;
+  }
+
+  fitToRoute();
 };
 
 /**
@@ -911,9 +1011,8 @@ onMounted(() => {
     console.error('地図の描画に失敗しました', event.error ?? event);
   });
 
-  if (props.isInteractive) {
-    map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-  }
+  // 拡大・縮小のボタン（NavigationControl）は地図を見やすくするため置かない。
+  // 拡大率はピンチ・ダブルタップで変えられる
 
   if (props.isLongPressEnabled) {
     attachLongPress(map);
@@ -935,7 +1034,7 @@ onMounted(() => {
     renderCurrentLocationMarker();
     renderPinMarker();
     renderReviewMarkers();
-    fitToRoute();
+    fitToInitialView();
   });
 });
 
@@ -952,7 +1051,7 @@ watch(
     renderSpotMarkers();
     // 巡る口コミの場所が変わると、口コミのピンから外す場所も変わるため描き直す
     renderReviewMarkers();
-    fitToRoute();
+    fitToInitialView();
   }
 );
 
@@ -1014,6 +1113,19 @@ watch(
     }
 
     focusOnPosition();
+  },
+  { deep: true }
+);
+
+// スムーズに寄せる対象（チュートリアルの紫ピンなど）が設定されたら、拡大率を変えずに滑らかに移動する
+watch(
+  () => props.smoothCenterPosition,
+  () => {
+    if (map === null || !map.isStyleLoaded()) {
+      return;
+    }
+
+    smoothCenterOnPosition();
   },
   { deep: true }
 );

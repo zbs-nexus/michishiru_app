@@ -16,6 +16,12 @@ import { useToastMessage } from '@/composables/useToastMessage';
 import { useAuthStore } from '@/stores/authStore';
 import { useMascotStore } from '@/stores/mascotStore';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
+import {
+  TUTORIAL_DISTANCE_KM,
+  TUTORIAL_GENRE_ID,
+  createTutorialRoute
+} from '@/constants/tutorial';
 
 /**
  * @description ルート作成条件を入力する画面。
@@ -25,9 +31,9 @@ const router = useRouter();
 const authStore = useAuthStore();
 const mascotStore = useMascotStore();
 const routeStore = useRouteStore();
+const tutorialStore = useTutorialStore();
 const {
   isCreating,
-  errorMessage: creationErrorMessage,
   createRoute
 } = useRouteCreation();
 const {
@@ -73,6 +79,34 @@ const mascotMessageVariant = computed(() =>
 );
 
 /**
+ * 案内役が話す文言。
+ * チュートリアル中は今のステップの文言を優先し、通常時はこの画面の案内文を話す。
+ * 下部固定の専用部品はやめ、通常時と同じ home-mascot の位置で文言だけ切り替える。
+ */
+const displayMascotMessage = computed(() =>
+  tutorialStore.isActive && tutorialStore.currentMessage
+    ? tutorialStore.currentMessage
+    : mascotMessage.value
+);
+
+/**
+ * 案内役の吹き出しを出すかどうか。
+ * 読み込み中（条件マスタ・実績）は出さず、両方そろってから出す。
+ * チュートリアル中は条件マスタの読み込みが終わっていれば、今のステップの文言を出す。
+ */
+const isMascotVisible = computed(() => {
+  if (isLoadingOptions.value) {
+    return false;
+  }
+
+  if (tutorialStore.isActive) {
+    return Boolean(tutorialStore.currentMessage);
+  }
+
+  return mascotStore.isExperienceLoaded;
+});
+
+/**
  * @description 選択されたジャンルを、表示名と合わせてストアへ保存する。
  * 表示名はルート作成APIへ送る値のため、選択肢を持つこの画面で引き当てる。
  * @param {string} value 選択されたジャンルの値（genreId）
@@ -84,14 +118,47 @@ const handleSelectGenre = (value) => {
   );
 
   routeStore.selectGenre(value, selectedOption?.label ?? '');
+
+  // チュートリアル中は、対象のジャンル（写真）が選ばれたら距離の段階へ進める。
+  // 対象以外のボタンはフォーム側で無効化しているため、ここに来るのは対象のみ
+  if (tutorialStore.isStep(tutorialStore.STEP.SELECT_GENRE)) {
+    tutorialStore.completeStep(tutorialStore.STEP.SELECT_GENRE);
+  }
+};
+
+/**
+ * @description 距離を選び、チュートリアル中はちょうど5kmになった段階で次へ進める。
+ * チュートリアルでは5km以外では作成の段階へ進めず、合わせ直しを促す。
+ * @param {number} value 選択された距離（km）
+ * @returns {void}
+ */
+const handleSelectDistance = (value) => {
+  routeStore.selectDistance(value);
+
+  if (
+    tutorialStore.isStep(tutorialStore.STEP.SELECT_DISTANCE) &&
+    value === TUTORIAL_DISTANCE_KM
+  ) {
+    tutorialStore.completeStep(tutorialStore.STEP.SELECT_DISTANCE);
+  }
 };
 
 /**
  * @description 条件を検証してルートを作成し、成功時は提案画面へ進む。
  * 未選択の場合、および作成に失敗した場合は画面上部のポップアップで知らせる。
+ *
+ * チュートリアル中はAPIを呼ばず、ダミーのルートをストアへ入れて提案画面へ進む。
  * @returns {Promise<void>}
  */
 const handleCreateRoute = async () => {
+  // チュートリアルはAPIを呼ばず、固定のダミールートを見せる
+  if (tutorialStore.isStep(tutorialStore.STEP.CREATE_ROUTE)) {
+    routeStore.setCurrentRoute(createTutorialRoute());
+    tutorialStore.completeStep(tutorialStore.STEP.CREATE_ROUTE);
+    router.push({ name: 'route-suggestion' });
+    return;
+  }
+
   if (!routeStore.hasRequiredConditions) {
     showMessage('ジャンルを選択するか、おまかせを選んでください');
     return;
@@ -100,12 +167,36 @@ const handleCreateRoute = async () => {
   const isSucceeded = await createRoute();
 
   if (!isSucceeded) {
-    showMessage(creationErrorMessage.value ?? 'ルートの作成に失敗しました');
+    // 失敗の主因は、選んだジャンルの周辺スポットが足りずルートを組めないこと。
+    // 技術的な失敗ではなく、条件を変えれば解決することを利用者に伝える
+    showMessage('周辺に対象ジャンルのロケーションが不足しています。条件を変更して再度ルート作成を行ってください。');
     return;
   }
 
   // おまかせで選ばれた条件は提案画面で表示する
   router.push({ name: 'route-suggestion' });
+};
+
+/**
+ * @description メニューからチュートリアルを開始する。
+ * 前の利用者やそれまでの入力が残らないよう条件を初期化してから、最初のステップへ入る。
+ * @returns {void}
+ */
+const handleStartTutorial = () => {
+  routeStore.resetConditions();
+  tutorialStore.start();
+};
+
+/**
+ * @description メニューからチュートリアルを終了してホーム画面へ戻す。
+ * チュートリアルの途中でやめられるようにする。
+ * 入力途中の条件（チュートリアル用に選んだジャンル・距離）が残らないよう初期化する。
+ * この画面自体がホームのため、遷移はせず状態だけを初期化する。
+ * @returns {void}
+ */
+const handleEndTutorial = () => {
+  tutorialStore.finish();
+  routeStore.resetConditions();
 };
 
 /**
@@ -118,9 +209,32 @@ const handleSignOut = async () => {
   routeStore.resetConditions();
   // 次の利用者に前の人のレベル・経験値が出ないようにする
   mascotStore.resetExperience();
+  // チュートリアル中にログアウトされても状態が残らないようにする
+  tutorialStore.finish();
 
   router.push({ name: 'login' });
 };
+
+/**
+ * チュートリアルでフォームのどの区画を操作させるか。
+ * ジャンルの段階は 'genre'、距離の段階は 'distance'、作成の段階はどちらも触らせない。
+ */
+const tutorialFormSection = computed(() => {
+  if (tutorialStore.isStep(tutorialStore.STEP.SELECT_GENRE)) {
+    return 'genre';
+  }
+
+  if (tutorialStore.isStep(tutorialStore.STEP.SELECT_DISTANCE)) {
+    return 'distance';
+  }
+
+  return null;
+});
+
+/** チュートリアルで「ルートを作成」ボタンをハイライトする段階かどうか */
+const isTutorialCreateStep = computed(() =>
+  tutorialStore.isStep(tutorialStore.STEP.CREATE_ROUTE)
+);
 </script>
 
 <template>
@@ -138,10 +252,6 @@ const handleSignOut = async () => {
     v-else
     class="is-home"
   >
-    <template #background>
-      <div class="paper-map-bg" />
-    </template>
-
     <BaseToast
       v-if="toastMessage"
       :message="toastMessage"
@@ -162,7 +272,10 @@ const handleSignOut = async () => {
 
       <SignOutMenu
         class="header-menu"
+        :is-tutorial-active="tutorialStore.isActive"
         @sign-out="handleSignOut"
+        @start-tutorial="handleStartTutorial"
+        @end-tutorial="handleEndTutorial"
       />
     </div>
 
@@ -174,18 +287,21 @@ const handleSignOut = async () => {
       has-level-label で `Lv.5 まちの案内人` のようにレベルと名前を添える。
     -->
     <MascotSpeechBubble
-      v-if="mascotStore.isExperienceLoaded && !isLoadingOptions"
+      v-if="isMascotVisible"
       class="home-mascot"
-      :message="mascotMessage"
-      :variant="mascotMessageVariant"
+      :message="displayMascotMessage"
+      :variant="tutorialStore.isActive ? 'normal' : mascotMessageVariant"
       :level="mascotStore.mascotLevel"
       placement="side"
       size="medium"
-      has-level-label
+      :has-level-label="!tutorialStore.isActive"
     >
-      <!-- 実績を取得できたときだけ経験値バーを出す（失敗時はLv.1でバー無し） -->
+      <!--
+        実績を取得できたときだけ経験値バーを出す（失敗時はLv.1でバー無し）。
+        チュートリアル中はレベル表示・バーを出さず、案内の文言だけに集中させる。
+      -->
       <template
-        v-if="mascotStore.hasExperience"
+        v-if="mascotStore.hasExperience && !tutorialStore.isActive"
         #experience
       >
         <MascotExperienceBar
@@ -208,8 +324,12 @@ const handleSignOut = async () => {
         :is-distance-random="routeStore.isDistanceRandom"
         :genre-options="genreOptions"
         :distance-range="distanceRange"
+        :is-tutorial="tutorialStore.isActive"
+        :tutorial-section="tutorialFormSection"
+        :tutorial-genre-value="TUTORIAL_GENRE_ID"
+        :tutorial-max-distance-km="TUTORIAL_DISTANCE_KM"
         @select-genre="handleSelectGenre"
-        @select-distance="routeStore.selectDistance"
+        @select-distance="handleSelectDistance"
         @toggle-genre-random="routeStore.toggleGenreRandom"
         @toggle-distance-random="routeStore.toggleDistanceRandom"
       />
@@ -217,9 +337,15 @@ const handleSignOut = async () => {
       <!--
         未選択でも押せるようにし、押下時にポップアップで不足を知らせる。
         画面の下端に固定して、条件を見ながらいつでも押せるようにする。
+        チュートリアル中は、作成の段階（CREATE_ROUTE）でだけ押せるようにし、
+        それ以外の段階では is-disabled で無効にする。
+        TutorialSpotlight でラップしないのは、ロック時に親へかかる filter が
+        包含ブロックを作り、固定表示（position: fixed）のこのボタンの位置を崩すため。
+        無効表示（disabled）なら固定位置を保ったまま、作成段階以外の押下を防げる。
       -->
       <BaseButton
         is-full-width
+        :is-disabled="tutorialStore.isActive && !isTutorialCreateStep"
         @click="handleCreateRoute"
       >
         ルートを作成

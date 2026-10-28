@@ -1,0 +1,192 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>【ミチシル】キャラクター設定・レベルアップ機能資料</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; line-height: 1.6; color: #333; background-color: #f9f9fa; margin: 0; padding: 20px; }
+        .container { max-width: 1000px; margin: 0 auto; background: #fff; padding: 40px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-bottom: 30px; text-align: center; }
+        h2 { color: #2980b9; margin-top: 40px; border-left: 5px solid #2980b9; padding-left: 15px; }
+        h3 { color: #34495e; margin-top: 25px; }
+        p, li { font-size: 15px; }
+        .highlight { background-color: #e8f4f8; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #f2f6f8; color: #2c3e50; font-weight: bold; width: 20%; }
+        td.level { font-weight: bold; color: #e67e22; white-space: nowrap; }/* 称号と画像のレイアウト用スタイル */
+            .level-cell {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+            .level-title {
+                font-weight: bold;
+                color: #e67e22;
+                line-height: 1.4;
+            }
+            .mascot-thumb {
+                width: 64px;
+                height: 64px;
+                object-fit: contain;
+                /* ドット絵がぼやけないように設定 */
+                image-rendering: pixelated;
+                image-rendering: -moz-crisp-edges;
+                image-rendering: crisp-edges;
+                background-color: #f8f9fa;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 2px;
+                flex-shrink: 0;
+            }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>アプリ「ミチシル」 キャラクター設定・レベルアップ機能資料</h1>
+        
+        <h2>1. キャラクター選定理由（モチーフ：フクロウ）</h2>
+        <div class="highlight">
+            <p><strong>「知識で道を照らす＝ミチシル」の象徴</strong></p>
+            <ul>
+                <li><strong>知恵・案内人としての象徴性：</strong><br> 古くから「森の賢者」「知恵の象徴」とされるフクロウは、街やルートの知識を持って導く「案内人」として、未知を知るアプリ「ミチシル」の世界観に最適です。</li>
+                <li><strong>「空からの視点」と「陸の体験」の役割分担：</strong><br> フクロウは上空から全体を俯瞰してルートを見つける役割を持ちます。歩くのはユーザー（陸）、空から見守り導くのがフクロウ（空）。このタッグ構造により「鳥」である必然性が生まれます。</li>
+                <li><strong>未知を照らす存在：</strong><br> 広い視野を持ち、見通しの利きにくい場所でも目的地をしっかり見定めるフクロウの特性が、「見馴れた日常や未知の街に光をあて、新しい発見をもたらす」というアプリの価値と合致しています。</li>
+            </ul>
+        </div>
+
+        <h2>2. レベルアップ機能導入の目的とストーリー</h2>
+        <div class="highlight">
+            <p><strong>レベルアップ機能導入の目的</strong></p>
+            <ul>
+                <li><strong>継続インセンティブの創出：</strong><br> 単なる「お散歩の記録」ではなく、「自分の歩みが相棒を成長させる」という育成要素を加えることで、ユーザーの散歩に対するモチベーションを維持・向上させ、アプリの継続利用を促します。</li>
+                <li><strong>実績の可視化：</strong><br> ユーザーの散歩実績（距離・時間・スポット情報・評価など）を、キャラクターの姿や称号の進化として視覚的かつ分かりやすく表現し、達成感を提供します。</li>
+            </ul>
+        </div>
+        <div class="highlight">
+            <p><strong>なぜこのレベルアップ（ひなから王様、賢者へ）をするのか</strong></p>
+            <ul>
+                <li><strong>「ラーニング型相棒」としての成長ストーリー：</strong><br> フクロウは最初、知識しか持たない「見習い（ひな）」です。ユーザーが散歩を通じて「生の体験データ」を与えることで、フクロウは生きた知恵を身につけ、本物のガイドへと成長していきます。「案内される側（ユーザー）」と「案内する側（フクロウ）」が共に歩み、お互いを高め合うバディ（相棒）関係を表現しています。</li>
+            </ul>
+        </div>
+
+        <h2>3. 10段階レベルアップストーリーとビジュアルデザイン</h2>
+        <p>ユーザーが散歩実績（距離・時間・スポット発見/評価など）を蓄積するにつれ、相棒キャラクター「ミチシル」は以下の10段階で進化していきます。</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 25%;">レベル / 称号</th>
+                    <th>ストーリー・設定（なぜ成長するのか）</th>
+                    <th>ビジュアルデザインの解説</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.1<br>ミチのタマゴ</span>
+                            <!-- 画像パスは実際のファイル名に合わせて変更してください -->
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv01.png" alt="Lv.1 ミチのタマゴ" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>未知の可能性を秘めて生まれたばかりの状態。まだ外の世界や散歩の魅力を知らず、殻に守られながら最初の一歩を待っている段階。</td>
+                    <td>割れた卵の殻の中にすっぽりと収まった、黄色く愛らしいヒナの姿。つぶらな瞳でこれから始まる旅の世界を見つめている。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.2<br>よちよちヒナ</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv02.png" alt="Lv.2 よちよちヒナ" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>ユーザーと共に外へと踏み出し、歩く楽しさの片鱗を体感し始めた段階。まだ足取りはおぼつかないが、好奇心に満ちている。</td>
+                    <td>殻から抜け出し、白くて丸みのあるふわふわの産毛に包まれたヒナの姿。頭部には淡い黄色の毛が残り、ほんのり赤らんだ頬が愛らしい。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.3<br>おさんぽビギナー</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv03.png" alt="Lv.3 おさんぽビギナー" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>近所を散策し、道や景色を眺める楽しさを覚えた段階。フクロウらしい羽が生え揃い、自分でお出かけする準備が整った。</td>
+                    <td>フクロウらしい白い羽と茶色の背羽が生え揃った姿。肩から小さな茶色の革製ポシェットを斜め掛けし、軽やかにお散歩を始めている。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.4<br>みならいガイド</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv04.png" alt="Lv.4 みならいガイド" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>散歩の習慣が身につき、周囲のスポットやルートを記録し始めた段階。案内人としての基本知識を学び始めている。</td>
+                    <td>葉っぱ飾りがワンポイントの茶色い探検帽をかぶり、左手には丸めた地図（巻物）をしっかりと握りしめた見習いスタイルの姿。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.5<br>まちの案内人</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv05.png" alt="Lv.5 まちの案内人" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>街中の抜け道やおすすめスポットを把握し、自信を持って周囲を案内できるようになった一人前のローカルガイド。</td>
+                    <td>緑色の案内人ハットをかぶり、肩から提げたポシェットには方位磁針（コンパス）を装着。街歩きのエキスパートとしての落ち着きが出ている。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.6<br>さすらいの旅人</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv06.png" alt="Lv.6 さすらいの旅人" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>馴染みの街を飛び出し、未知のエリアや長い道のりへも果敢に挑戦するフィールドワーカーへと成長した段階。</td>
+                    <td>ゴーグル付きのアウトドアハットをかぶり、ポケット付きの探検ベストを着用。左手には歩行を支える木製ステッキ、胸元と腕には方位磁針を備えた本格装備。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.7<br>みちしるべの使者</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv07.png" alt="Lv.7 みちしるべの使者" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>数々の長旅とスポット開拓を成し遂げ、迷える人々を正しい道へと導く風格と経験を備えた頼もしい使者。</td>
+                    <td>青い羽根飾りがついたテンガロンハットに深紅のケープマントを羽織り、脇には多数の地図巻物を抱え、ステッキを手にした歴戦の旅人の姿。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.8<br>導きの王</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv08.png" alt="Lv.8 導きの王" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>圧倒的な歩みとスポット開拓によって広大なエリアを網羅し、すべての道を統べる存在として認められた王。</td>
+                    <td>頭上には黄金の王冠を戴き、金縁のワインレッドマントを羽織る。右手には中央にコンパスが埋め込まれた黄金の王笏（ステッキ）を持ち、周囲に光の粒子が舞う。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.9<br>導きの覇王</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv09.png" alt="Lv.9 導きの覇王" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>あらゆる道・街・歴史の真理を極め、王を超えた威厳と絶対的な案内力で人々を先導する最高位の統率者。</td>
+                    <td>宝石が輝く立派な大王冠を戴き、白ファー付きの真紅のロイヤルマントを着用。目元には黄金の光冠が輝き、コンパスの王笏を構えた威風堂々たる覇王の姿。</td>
+                </tr>
+                <tr>
+                    <td>
+                        <div class="level-cell">
+                            <span class="level-title">Lv.10<br>極・ミチシル</span>
+                            <img src="../frontend/src/assets/images/mascot/mascot-lv10.png" alt="Lv.10 極・ミチシル" class="mascot-thumb">
+                        </div>
+                    </td>
+                    <td>ユーザーと共に歩んだ無数の軌跡そのものが光となり、すべての旅路と未来を永遠に照らし続ける至高・神話の存在。</td>
+                    <td>星座と夜空が煌めく壮麗な宇宙の翼を広げ、頭上には光の輪（エンジェルリング）と王冠。両目は黄金に輝き、左手には未知の暗闇を明るく照らすランタンを掲げた神秘的な姿。</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

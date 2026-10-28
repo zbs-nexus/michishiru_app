@@ -124,8 +124,8 @@ describe('createReview', () => {
         rating: 4,
         // 2回目以降は名前・ジャンルが来ても使わない
         spotName: '別の名前',
-        genreId: 'city',
-        genreName: '街歩き',
+        genreId: 'photo',
+        genreName: '写真',
         userId: 'user-2'
       },
       repository
@@ -176,8 +176,8 @@ describe('createReview', () => {
         position: POSITION,
         rating: 5,
         spotName: '新名称',
-        genreId: 'city',
-        genreName: '街歩き',
+        genreId: 'photo',
+        genreName: '写真',
         photoKeys: ['review-photos/keep', 'review-photos/new'],
         userId: 'owner-1'
       },
@@ -186,7 +186,7 @@ describe('createReview', () => {
 
     assert.ok(repository.calls.updateSpotMeta);
     assert.equal(repository.calls.updateSpotMeta.spotName, '新名称');
-    assert.equal(repository.calls.updateSpotMeta.genreId, 'city');
+    assert.equal(repository.calls.updateSpotMeta.genreId, 'photo');
     // 外した写真（old）だけ削除、keep は残す
     assert.deepEqual(repository.calls.deletePhotos, ['review-photos/old']);
     // 評価も更新される（4 → 5）
@@ -205,8 +205,8 @@ describe('createReview', () => {
         position: POSITION,
         rating: 4,
         spotName: '別の名前',
-        genreId: 'city',
-        genreName: '街歩き',
+        genreId: 'photo',
+        genreName: '写真',
         photoKeys: [],
         userId: 'user-2'
       },

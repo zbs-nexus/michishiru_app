@@ -4,6 +4,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import ReviewPhotoInput from '@/components/feature/review/ReviewPhotoInput.vue';
 import ReviewPhotoViewer from '@/components/feature/review/ReviewPhotoViewer.vue';
 import ReviewRatingInput from '@/components/feature/review/ReviewRatingInput.vue';
+import { getGenreImage } from '@/constants/genreImages';
 
 /** 1つの場所に付けられる写真の最大枚数 */
 const PHOTO_MAX_COUNT = 4;
@@ -51,14 +52,23 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  /** 投稿中かどうか（二重送信を防ぐ） */
+  /** 投稿中かどうか（二重送信を防ぎ、投稿ボタンの文言を「投稿中…」にする） */
   isPosting: {
     type: Boolean,
     default: false
+  },
+  /**
+   * チュートリアルで強調する要素。
+   * 'rating' は評価の★を、'submit' は投稿ボタンを目立たせる。チュートリアル外ではnull。
+   * チュートリアルの案内文は画面上部（前の目的地ボタンの下）の吹き出しで出すため、フォーム内には出さない。
+   */
+  tutorialHighlight: {
+    type: String,
+    default: null
   }
 });
 
-const emit = defineEmits(['submitReview', 'close', 'changeExpanded']);
+const emit = defineEmits(['submitReview', 'close', 'changeExpanded', 'changeRating']);
 
 /** ロケーション名の最大文字数 */
 const SPOT_NAME_MAX_LENGTH = 30;
@@ -190,9 +200,13 @@ const existingGenre = computed(() => {
     (option) => option.value === props.existingSpot.genreId
   );
 
+  const label =
+    props.existingSpot.genreName ?? matched?.label ?? props.existingSpot.genreId;
+
   return {
-    icon: matched?.icon ?? '',
-    label: props.existingSpot.genreName ?? matched?.label ?? props.existingSpot.genreId
+    // アイコンは絵文字ではなく同梱画像に固定する（ジャンル選択と見た目を揃える）
+    image: getGenreImage(props.existingSpot.genreId, label),
+    label
   };
 });
 
@@ -306,6 +320,17 @@ const buildValidationMessage = () => {
  */
 const handleSelectGenre = (genreId) => {
   selectedGenreId.value = genreId;
+};
+
+/**
+ * @description 利用者が★で評価を付けたときに、値を反映して親へ通知する。
+ * initialRating の反映（watch）とは別に、操作による変更だけをここで知らせる。
+ * @param {number} value 選択された評価（1〜5）
+ * @returns {void}
+ */
+const handleChangeRating = (value) => {
+  rating.value = value;
+  emit('changeRating', value);
 };
 
 /**
@@ -442,7 +467,12 @@ const handleSubmit = () => {
         </p>
         <p class="review-existing-meta">
           <span class="review-existing-genre">
-            <span>{{ existingGenre.icon }}</span>
+            <img
+              v-if="existingGenre.image"
+              class="review-existing-genre-image"
+              :src="existingGenre.image"
+              alt=""
+            >
             <span>{{ existingGenre.label }}</span>
           </span>
         </p>
@@ -512,7 +542,19 @@ const handleSubmit = () => {
             :aria-pressed="selectedGenreId === option.value"
             @click="handleSelectGenre(option.value)"
           >
-            <span class="btn-icon">{{ option.icon }}</span>
+            <!--
+              ジャンルのアイコンは同梱した画像に固定する（option.icon の絵文字は使わない）。
+              ホーム画面のジャンル選択（RouteConditionForm）と見た目を揃える。
+              画像はラベルで内容が分かるため装飾扱い（alt は空）にし、対応画像が無ければ出さない。
+            -->
+            <span class="btn-icon">
+              <img
+                v-if="getGenreImage(option.value, option.label)"
+                class="btn-icon-image"
+                :src="getGenreImage(option.value, option.label)"
+                alt=""
+              >
+            </span>
             <span>{{ option.label }}</span>
           </button>
         </div>
@@ -574,15 +616,20 @@ const handleSubmit = () => {
     <div class="review-footer">
       <div class="review-rating">
         <span class="review-label review-label-inline">評価</span>
-        <ReviewRatingInput v-model="rating" />
+        <ReviewRatingInput
+          :model-value="rating"
+          @update:model-value="handleChangeRating"
+        />
       </div>
 
       <BaseButton
         class="review-submit"
+        :class="{ 'is-tutorial-target': tutorialHighlight === 'submit' }"
         :is-disabled="isBusy"
         @click="handleSubmit"
       >
-        投稿
+        <!-- 押したことが分かるよう、投稿中は文言を変える -->
+        {{ isPosting ? '投稿中…' : '投稿' }}
       </BaseButton>
     </div>
 
@@ -755,6 +802,20 @@ const handleSubmit = () => {
   font-size: 20px;
 }
 
+/*
+ * ジャンルのアイコン画像。
+ * 背景を透過したピクセルアートのため額縁は付けず絵柄だけを見せる。
+ * 全画面地図の上に重ねるフォームなので、ホームのジャンル選択より少し小さめにする。
+ * ピクセルの輪郭がにじまないよう最近傍で拡大する。
+ */
+.genre-grid .btn-icon-image {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 .review-hint {
   font-size: 12px;
   color: var(--text-gray);
@@ -851,6 +912,15 @@ const handleSubmit = () => {
   gap: 4px;
 }
 
+/* 固定表示のジャンルアイコン。文字と並ぶため、文字高に近い小さめの画像にする */
+.review-existing-genre-image {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 .review-existing-photos {
   display: flex;
   flex-wrap: wrap;
@@ -909,6 +979,16 @@ const handleSubmit = () => {
   width: auto;
   min-width: 88px;
   padding: 12px 20px;
+}
+
+/*
+ * チュートリアルで操作させる投稿ボタンを枠で浮かせる。
+ * 評価（★）には枠を付けない（星の周りに枠が出て見た目が悪いため）。
+ * 評価の段階はフォーム上部の案内文（review-tutorial-hint）で「★をタップ」と誘導する。
+ */
+.review-submit.is-tutorial-target.primary-btn {
+  border-radius: 10px;
+  box-shadow: 0 0 0 3px var(--primary-light);
 }
 
 @keyframes review-form-slide-in {

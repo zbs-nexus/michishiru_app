@@ -38,13 +38,13 @@ export const DEFAULT_MASCOT_LEVEL = MASCOT_MIN_LEVEL;
 export const MASCOT_LEVELS = [
   { level: 1, mascotName: 'ミチのタマゴ', mascotImage: mascotLv01Image },
   { level: 2, mascotName: 'よちよちヒナ', mascotImage: mascotLv02Image },
-  { level: 3, mascotName: 'てくてくフクロウ', mascotImage: mascotLv03Image },
+  { level: 3, mascotName: 'おさんぽビギナー', mascotImage: mascotLv03Image },
   { level: 4, mascotName: 'みならいガイド', mascotImage: mascotLv04Image },
   { level: 5, mascotName: 'まちの案内人', mascotImage: mascotLv05Image },
-  { level: 6, mascotName: 'みちしるべの使者', mascotImage: mascotLv06Image },
-  { level: 7, mascotName: 'たびびとフクロウ', mascotImage: mascotLv07Image },
-  { level: 8, mascotName: '星導の賢者', mascotImage: mascotLv08Image },
-  { level: 9, mascotName: '大樹の道標', mascotImage: mascotLv09Image },
+  { level: 6, mascotName: 'さすらいの旅人', mascotImage: mascotLv06Image },
+  { level: 7, mascotName: 'みちしるべの使者', mascotImage: mascotLv07Image },
+  { level: 8, mascotName: '導きの王', mascotImage: mascotLv08Image },
+  { level: 9, mascotName: '導きの覇王', mascotImage: mascotLv09Image },
   { level: 10, mascotName: '極・ミチシル', mascotImage: mascotLv10Image }
 ];
 

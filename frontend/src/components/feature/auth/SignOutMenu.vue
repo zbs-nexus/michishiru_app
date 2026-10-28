@@ -3,12 +3,25 @@ import { onBeforeUnmount, onMounted, ref } from 'vue';
 
 /**
  * @description ヘッダー右上のハンバーガーメニュー。
- * 開閉の状態だけを自分で持ち、ログアウトの処理は親へ委ねる。
+ * 開閉の状態だけを自分で持ち、各項目の処理は親へ委ねる。
  *
- * 表示上の文言は「ログアウト」、コード上の名前は signOut に統一している
- * （Cognito と認証ライブラリのAPI名が signOut のため）。
+ * 「ログアウト」の表示上の文言とコード上の名前（signOut）が揃っていないのは、
+ * Cognito と認証ライブラリのAPI名が signOut のため。
+ * 「チュートリアル」は親でチュートリアルを開始するために startTutorial を通知する。
+ * チュートリアル中は「チュートリアルを終了」を出し、endTutorial で終了を通知する。
  */
-const emit = defineEmits(['signOut']);
+const props = defineProps({
+  /**
+   * チュートリアル中かどうか。
+   * 真のとき、メニューの「チュートリアル」を「チュートリアルを終了」に差し替える。
+   */
+  isTutorialActive: {
+    type: Boolean,
+    default: false
+  }
+});
+
+const emit = defineEmits(['signOut', 'startTutorial', 'endTutorial']);
 
 /** メニューを開いているかどうか */
 const isOpen = ref(false);
@@ -40,6 +53,26 @@ const closeMenu = () => {
 const handleSignOut = () => {
   closeMenu();
   emit('signOut');
+};
+
+/**
+ * @description チュートリアルの開始を親へ通知する。
+ * ログアウトと同じく、通知の前にメニューを閉じる。
+ * @returns {void}
+ */
+const handleStartTutorial = () => {
+  closeMenu();
+  emit('startTutorial');
+};
+
+/**
+ * @description チュートリアルの終了を親へ通知する。
+ * 終了してホーム画面へ戻す処理は親に委ねる。通知の前にメニューを閉じる。
+ * @returns {void}
+ */
+const handleEndTutorial = () => {
+  closeMenu();
+  emit('endTutorial');
 };
 
 /**
@@ -117,6 +150,28 @@ onBeforeUnmount(() => {
       id="signout-menu-list"
       class="menu-list"
     >
+      <li>
+        <!--
+          チュートリアル中は「チュートリアルを終了」を出し、押すとチュートリアルを
+          終わらせてホーム画面へ戻す。チュートリアル外は「チュートリアル」で開始する。
+        -->
+        <button
+          v-if="props.isTutorialActive"
+          class="menu-item"
+          type="button"
+          @click="handleEndTutorial"
+        >
+          チュートリアルを終了
+        </button>
+        <button
+          v-else
+          class="menu-item"
+          type="button"
+          @click="handleStartTutorial"
+        >
+          チュートリアル
+        </button>
+      </li>
       <li>
         <button
           class="menu-item"
