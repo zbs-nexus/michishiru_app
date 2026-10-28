@@ -485,6 +485,23 @@ describe('RouteNavigationView の画面上部の並び', () => {
     expect(rectSpy.mock.contexts).toContain(wrapper.find('.review-toggles').element);
   });
 
+  test('地図の上下が画面の操作で隠れる高さ（上部の操作の下端・終了ボタンの上端から下）を地図へ渡す', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 236.4, top: 700 });
+
+    const wrapper = mountNavigationViewWithRoute();
+    await nextTick();
+
+    const map = wrapper.findComponent(RouteNavigationMap);
+
+    // 上は画面上部の操作の入れ物の下端（切り上げ）
+    expect(map.props('topInsetPx')).toBe(237);
+    expect(rectSpy.mock.contexts).toContain(wrapper.find('.navigation-top').element);
+    // 下は画面の下端から終了ボタンの上端まで（jsdom の innerHeight は 768）
+    expect(map.props('bottomInsetPx')).toBe(window.innerHeight - 700);
+  });
+
   test('バナーの高さが変わったら、現在地へ戻るボタンの位置を測り直し、画面を離れたら見張りをやめる', async () => {
     const rectSpy = vi
       .spyOn(HTMLElement.prototype, 'getBoundingClientRect')

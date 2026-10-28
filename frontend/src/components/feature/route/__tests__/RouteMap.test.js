@@ -28,6 +28,12 @@ const addedLayers = [];
 /** 地図へ追加されたコントロールの記録（追加した順） */
 const addedControls = [];
 
+/** fitBounds に渡された引数（[bounds, options]）の記録 */
+const fitBoundsCalls = [];
+
+/** easeTo に渡されたオプションの記録 */
+const easeToCalls = [];
+
 vi.mock('maplibre-gl', () => {
   class FakeMarker {
     constructor(options = {}) {
@@ -101,13 +107,17 @@ vi.mock('maplibre-gl', () => {
       addedControls.push(control);
     }
 
-    fitBounds() {}
+    fitBounds(bounds, options) {
+      fitBoundsCalls.push([bounds, options]);
+    }
 
     getZoom() {
       return 15;
     }
 
-    easeTo() {}
+    easeTo(options) {
+      easeToCalls.push(options);
+    }
 
     remove() {}
   }
@@ -125,6 +135,9 @@ vi.mock('maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url', () => ({ default: 
 
 const { default: RouteMap } = await import('@/components/feature/route/RouteMap.vue');
 const {
+  MAP_FIT_PADDING_PX,
+  MAX_FIT_ZOOM_LEVEL,
+  NAVIGATION_ZOOM_LEVEL,
   ROUTE_CURRENT_LEG_CASING_WIDTH_PX,
   ROUTE_CURRENT_LEG_COLOR,
   ROUTE_CURRENT_LEG_WIDTH_PX,
@@ -654,6 +667,191 @@ describe('RouteMap（地図のコントロール）', () => {
     expect(containers).toHaveLength(1);
     expect(containers[0].querySelector('.recenter-btn')).not.toBeNull();
     expect(containers[0].querySelector('.maplibregl-ctrl-zoom-in')).toBeNull();
+  });
+});
+
+describe('RouteMap（初期表示の位置と現在地へ戻るときの位置）', () => {
+  /** スタート地点（経路の先頭） */
+  const origin = [139.7036, 35.6862];
+
+  /** 最初の区間（スタート地点→1スポット目） */
+  const firstLeg = {
+    type: 'LineString',
+    coordinates: [origin, [139.7046, 35.6872]]
+  };
+
+  /** 2つ目の区間。最初の区間から遠くへ延びる */
+  const secondLeg = {
+    type: 'LineString',
+    coordinates: [[139.7046, 35.6872], [139.72, 35.7]]
+  };
+
+  /** 経路全体（最初の区間より広い） */
+  const wholeGeometry = {
+    type: 'LineString',
+    coordinates: [...firstLeg.coordinates, [139.72, 35.7]]
+  };
+
+  /** 案内開始直後の区間の描き分け */
+  const startSections = { walkedLegs: [], currentLeg: firstLeg, upcomingLegs: [secondLeg] };
+
+  /**
+   * @description 囲む矩形の中心を求める
+   * @param {number[][]} bounds [[南西], [北東]]
+   * @returns {number[]} [経度, 緯度]
+   */
+  const centerOf = ([[west, south], [east, north]]) => [(west + east) / 2, (south + north) / 2];
+
+  /** 地図の枠の高さ。jsdom は配置を計算せず 0 になるため差し替える */
+  let clientHeightSpy = null;
+
+  /**
+   * @description 地図の枠の高さを差し替える
+   * @param {number} heightPx 高さ（ピクセル）
+   * @returns {void}
+   */
+  const setMapHeight = (heightPx) => {
+    clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(heightPx);
+  };
+
+  beforeEach(() => {
+    createdMarkers.length = 0;
+    createdSources.clear();
+    addedLayers.length = 0;
+    addedControls.length = 0;
+    fitBoundsCalls.length = 0;
+    easeToCalls.length = 0;
+  });
+
+  afterEach(() => {
+    clientHeightSpy?.mockRestore();
+    clientHeightSpy = null;
+    vi.clearAllMocks();
+  });
+
+  test('案内画面では、スタート地点を中央にしたまま最初の区間が収まる範囲に寄せる', () => {
+    setMapHeight(800);
+
+    mountAndLoad({
+      geometry: wholeGeometry,
+      legSections: startSections,
+      shouldCenterOnOrigin: true,
+      topInsetPx: 236,
+      bottomInsetPx: 100
+    });
+
+    expect(fitBoundsCalls).toHaveLength(1);
+    const [bounds, options] = fitBoundsCalls[0];
+    const [centerLng, centerLat] = centerOf(bounds);
+
+    // 矩形の中心がスタート地点になる
+    expect(centerLng).toBeCloseTo(origin[0], 10);
+    expect(centerLat).toBeCloseTo(origin[1], 10);
+    // 最初の区間の終点（1スポット目）が収まる
+    expect(bounds[1][0]).toBeCloseTo(139.7046, 10);
+    expect(bounds[1][1]).toBeCloseTo(35.6872, 10);
+    // 経路全体（遠くへ延びる2つ目の区間）までは収めない
+    expect(bounds[1][0]).toBeLessThan(139.72);
+    // 上下は画面の操作で隠れる高さを足し、見えている範囲の中央に置く
+    expect(options).toEqual({
+      padding: {
+        top: 236 + MAP_FIT_PADDING_PX,
+        bottom: 100 + MAP_FIT_PADDING_PX,
+        left: MAP_FIT_PADDING_PX,
+        right: MAP_FIT_PADDING_PX
+      },
+      maxZoom: MAX_FIT_ZOOM_LEVEL,
+      animate: false
+    });
+  });
+
+  test('1スポット目へ進めた後に読み込みが終わっても、最初の区間（歩き終えた区間の先頭）を使う', () => {
+    setMapHeight(800);
+
+    mountAndLoad({
+      geometry: wholeGeometry,
+      legSections: { walkedLegs: [firstLeg], currentLeg: secondLeg, upcomingLegs: [] },
+      shouldCenterOnOrigin: true
+    });
+
+    const [bounds] = fitBoundsCalls[0];
+
+    expect(bounds[1][0]).toBeCloseTo(139.7046, 10);
+    expect(centerOf(bounds)[0]).toBeCloseTo(origin[0], 10);
+  });
+
+  test('区間の描き分けが無いルートでは、1スポット目の座標で最初の区間の代わりにする', () => {
+    setMapHeight(800);
+
+    mountAndLoad({
+      geometry: wholeGeometry,
+      spots: [{ ...spots[1], lng: 139.705, lat: 35.688 }],
+      shouldCenterOnOrigin: true
+    });
+
+    const [bounds] = fitBoundsCalls[0];
+    const [centerLng, centerLat] = centerOf(bounds);
+
+    expect(centerLng).toBeCloseTo(origin[0], 10);
+    expect(centerLat).toBeCloseTo(origin[1], 10);
+    expect(bounds[1][0]).toBeCloseTo(139.705, 10);
+    expect(bounds[1][1]).toBeCloseTo(35.688, 10);
+  });
+
+  test('隠れる高さが地図の高さを超えて収められないときは、固定の倍率でスタート地点を中央に置く', () => {
+    setMapHeight(300);
+
+    mountAndLoad({
+      geometry: wholeGeometry,
+      legSections: startSections,
+      shouldCenterOnOrigin: true,
+      topInsetPx: 236,
+      bottomInsetPx: 100
+    });
+
+    expect(fitBoundsCalls).toHaveLength(0);
+    expect(easeToCalls).toEqual([
+      { center: origin, zoom: NAVIGATION_ZOOM_LEVEL, offset: [0, (236 - 100) / 2], duration: 0 }
+    ]);
+  });
+
+  test('提案画面（shouldCenterOnOrigin が偽）は従来どおりルート全体を収める', () => {
+    setMapHeight(800);
+
+    mountAndLoad({ geometry: wholeGeometry, spots: [], legSections: startSections });
+
+    expect(fitBoundsCalls).toEqual([
+      [
+        [
+          [139.7036, 35.6862],
+          [139.72, 35.7]
+        ],
+        { padding: MAP_FIT_PADDING_PX, maxZoom: MAX_FIT_ZOOM_LEVEL, animate: false }
+      ]
+    ]);
+  });
+
+  test('現在地へ戻るボタンは、固定の倍率で現在地を見えている範囲の中央に置く', () => {
+    setMapHeight(800);
+
+    mountAndLoad({
+      geometry: wholeGeometry,
+      legSections: startSections,
+      shouldCenterOnOrigin: true,
+      showCurrentLocation: true,
+      currentLocation: { lng: 139.71, lat: 35.69 },
+      topInsetPx: 236,
+      bottomInsetPx: 100
+    });
+
+    const button = addedControls[0].onAdd().querySelector('.recenter-btn');
+    button.click();
+
+    // 初期表示の倍率（最初の区間の長さで変わる）ではなく、常に同じ倍率にする
+    expect(easeToCalls).toEqual([
+      { center: [139.71, 35.69], zoom: NAVIGATION_ZOOM_LEVEL, offset: [0, (236 - 100) / 2] }
+    ]);
+    expect(NAVIGATION_ZOOM_LEVEL).toBe(17);
   });
 });
 
