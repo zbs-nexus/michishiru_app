@@ -175,11 +175,18 @@ const { myReviews, loadMyReviews } = useMyReviews();
 // 口コミが付いた場所の一覧（自分のぶんを除いて紫ピンにする）
 const { reviewSpots, loadReviewSpots } = useReviewSpots();
 
-/** 自分の口コミのオレンジピンを表示するか（既定は表示） */
-const showMyReviews = ref(true);
+/**
+ * 自分の口コミのオレンジピンを表示するか。
+ * 既定は非表示（ピンが経路に重なって巡る道筋が見にくくなるため）。札を押すと出る
+ */
+const showMyReviews = ref(false);
 
-/** 他の人の口コミの紫ピンを表示するか（既定は表示） */
-const showOtherReviews = ref(true);
+/**
+ * 他の人の口コミの紫ピンを表示するか。
+ * 既定は非表示（理由は showMyReviews と同じ）。ただしチュートリアル中は表示で始める。
+ * 紫のピンをタップさせる段階（OPEN_REVIEW）があり、非表示だと先へ進めなくなるため
+ */
+const showOtherReviews = ref(tutorialStore.isActive);
 
 /**
  * 他の人の口コミの場所（紫ピン）。
