@@ -606,6 +606,21 @@ textarea {
 }
 
 /*
+ * 画面下部に固定したボタンは translateX(-50%) で中央に寄せている。
+ * ホバーの transform: translateY(-1px) で上書きすると中央寄せが外れて右へ飛ぶため、
+ * 固定ボタンだけは中央寄せを保ったまま持ち上げる。
+ * 無効（距離未選択などで disabled）のときは持ち上げず、中央寄せだけを保つ。
+ */
+.primary-btn.full-width:hover {
+  transform: translateX(-50%) translateY(-1px);
+}
+
+.primary-btn.full-width:disabled,
+.primary-btn.full-width:disabled:hover {
+  transform: translateX(-50%);
+}
+
+/*
  * 無効時。押せないことを見た目でも示すため淡くし、ホバーの持ち上げも効かせない。
  * チュートリアルの「ルートを作成」ボタンが、作成の段階に進むまで無効になる場面で使う。
  */

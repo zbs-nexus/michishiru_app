@@ -64,15 +64,40 @@ const props = defineProps({
   tutorialGenreValue: {
     type: String,
     default: null
+  },
+  /**
+   * チュートリアルで合わせさせる距離の上限（km）。
+   * 距離の区画が有効なとき、スライダーの最大値をこの値へ下げ、
+   * 目標（5km）を超えて動かせないようにする。null のときは下げない。
+   */
+  tutorialMaxDistanceKm: {
+    type: Number,
+    default: null
   }
 });
 
 defineEmits(['selectGenre', 'selectDistance', 'toggleGenreRandom', 'toggleDistanceRandom']);
 
-/** 距離スライダーの目盛り。下限と上限のラベルを表示する */
+/**
+ * 距離スライダーの最大値（km）。
+ * チュートリアルで距離の区画を操作させる段階では、目標（tutorialMaxDistanceKm）を
+ * 超えて動かせないよう上限を下げる。それ以外はマスタの上限をそのまま使う。
+ */
+const distanceMaxKm = computed(() => {
+  if (isTutorialDistanceActive.value && props.tutorialMaxDistanceKm !== null) {
+    return props.tutorialMaxDistanceKm;
+  }
+
+  return props.distanceRange.maxKm;
+});
+
+/** 距離スライダーの目盛り。下限と、スライダーで動かせる上限のラベルを表示する */
 const distanceScaleLabels = computed(() => [
   props.distanceRange.minLabel,
-  props.distanceRange.maxLabel
+  // チュートリアルで上限を下げたときは、その値をラベルに出す（目盛りと可動域を一致させる）
+  isTutorialDistanceActive.value && props.tutorialMaxDistanceKm !== null
+    ? `${props.tutorialMaxDistanceKm}km`
+    : props.distanceRange.maxLabel
 ]);
 
 /** チュートリアルでジャンルの区画を操作させる段階かどうか */
@@ -87,7 +112,9 @@ const isTutorialDistanceActive = computed(
 
 /**
  * @description チュートリアル中に、指定したジャンルのボタンを押せないようにするか判定する。
- * ジャンルの区画が有効で、かつ対象のジャンル（tutorialGenreValue）でないボタンを無効にする。
+ * ジャンルの区画が有効なときは、対象のジャンル（tutorialGenreValue）以外を無効にする。
+ * ジャンルを選び終えた後（距離・作成の段階）は、選択済みのジャンルだけ押せるまま残し、
+ * それ以外を無効にして選び直しを防ぐ。選択済みは見た目も薄くしない。
  * チュートリアル外では常に押せる。
  * @param {string} value ジャンルの値（genreId）
  * @returns {boolean} 無効にする場合はtrue
@@ -97,8 +124,28 @@ const isGenreButtonLocked = (value) => {
     return false;
   }
 
-  // ジャンルの区画が有効なときだけ、対象のジャンル以外を押せるようにする
-  return !(isTutorialGenreActive.value && value === props.tutorialGenreValue);
+  // ジャンルを選ぶ段階では、対象のジャンルだけ押せるようにする
+  if (isTutorialGenreActive.value) {
+    return value !== props.tutorialGenreValue;
+  }
+
+  // 選び終えた後は、今選ばれているジャンル以外を無効にする（選択済みは押せるまま＝固定）
+  return value !== props.genre;
+};
+
+/**
+ * @description チュートリアル中に、ジャンルのボタンを薄く（ロック表示）するか判定する。
+ * 無効でも、選択済みのジャンルは固定したうえで通常の見た目を保つため薄くしない。
+ * @param {string} value ジャンルの値（genreId）
+ * @returns {boolean} 薄くする場合はtrue
+ */
+const isGenreButtonDimmed = (value) => {
+  // 選択済みのジャンルは、ロック（選び直し防止）していても薄くしない
+  if (props.isTutorial && value === props.genre) {
+    return false;
+  }
+
+  return isGenreButtonLocked(value);
 };
 </script>
 
@@ -129,7 +176,7 @@ const isGenreButtonLocked = (value) => {
           class="select-btn"
           :class="{
             selected: genre === option.value,
-            'is-tutorial-locked': isGenreButtonLocked(option.value),
+            'is-tutorial-locked': isGenreButtonDimmed(option.value),
             'is-tutorial-target':
               isTutorialGenreActive && option.value === tutorialGenreValue
           }"
@@ -189,7 +236,7 @@ const isGenreButtonLocked = (value) => {
         <BaseSlider
           :model-value="distanceKm"
           :min-value="distanceRange.minKm"
-          :max-value="distanceRange.maxKm"
+          :max-value="distanceMaxKm"
           :scale-labels="distanceScaleLabels"
           unit="km"
           labelled-by="distance-label"

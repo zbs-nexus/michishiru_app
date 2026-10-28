@@ -274,6 +274,19 @@ const isTutorialAdvanceStep = computed(() =>
 );
 
 /**
+ * チュートリアル中、地図の操作（ドラッグ・ズーム）を止めるかどうか。
+ * ダミールートを見せるだけで動かす必要がなく、操作を一本道に保つため、
+ * チュートリアル中は常に止める。口コミの紫ピンのタップはマーカー自身が受けるため動く。
+ */
+const isMapInteractive = computed(() => !tutorialStore.isActive);
+
+/**
+ * 「次の目的地へ」の段階で、ボタン・マスコット・吹き出し以外をグレーアウトして
+ * 操作できなくするかどうか。地図・口コミの表示切り替え・終了ボタンにかける。
+ */
+const isAdvanceSpotFocus = computed(() => isTutorialAdvanceStep.value);
+
+/**
  * チュートリアルで「終了」をハイライトする段階かどうか。
  * 「終了」を押すと終了確認（CONFIRM_END）へ進むが、そこでキャンセルすると
  * モーダルだけ閉じてステップは CONFIRM_END のまま残る。このとき終了ボタンを
@@ -899,6 +912,23 @@ const handleAdvanceToNextSpot = () => {
 };
 
 /**
+ * @description 前の目的地へ戻す。チュートリアル中は、この操作に合わせて案内ステップも1つ戻す。
+ * 「次の目的地へ」で進んだステップ（ADVANCE_SPOT → OPEN_REVIEW）を、戻す操作で元に戻すことで、
+ * ボタン操作と案内の進み具合を一致させる。
+ * 戻す操作そのものは useRouteProgress が担う。
+ * @returns {void}
+ */
+const handleReturnToPreviousSpot = () => {
+  returnToPreviousSpot();
+
+  // 「次の目的地へ」で OPEN_REVIEW まで進んでいたら、戻す操作で ADVANCE_SPOT へ戻す。
+  // 戻し専用の revertStep は、今のステップが OPEN_REVIEW のときだけ1つ前へ戻す
+  if (tutorialStore.isActive) {
+    tutorialStore.revertStep(tutorialStore.STEP.OPEN_REVIEW);
+  }
+};
+
+/**
  * @description 終了確認を表示する。チュートリアル中は終了確認のステップへ進める。
  * @returns {void}
  */
@@ -1016,7 +1046,7 @@ const handleConfirmEnd = async () => {
           class="previous-spot-btn"
           type="button"
           aria-label="前の目的地に戻る"
-          @click="returnToPreviousSpot"
+          @click="handleReturnToPreviousSpot"
         >
           前の目的地へ
         </button>
@@ -1025,14 +1055,29 @@ const handleConfirmEnd = async () => {
           次の目的地を切り替える唯一の手段（現在地からの自動切り替えは行わない）。
           押したスポットは巡ったものとして扱う。すべて巡った後は進める先が無いため出さない。
         -->
+        <!--
+          次の目的地へのボタンは常に is-highlighted で素通し（display: contents）にして、
+          flex の margin-left: auto による右寄せを保つ。段階によるロックは is-locked にはせず、
+          ボタン自身の disabled で行う。is-locked（display: block）に切り替えると
+          右寄せが外れてボタンの位置が動くため。
+        -->
         <TutorialSpotlight
           v-if="nextSpot"
+          class="next-spot-slot"
           :is-active="tutorialStore.isActive"
-          :is-highlighted="isTutorialAdvanceStep"
+          :is-highlighted="true"
         >
+          <!--
+            チュートリアル中は「次の目的地へ」の段階だけ押せるようにする。
+            一度押すと段階が進み、半透明のまま押せてしまうのを防ぐため、disabled で確実に止める。
+            （TutorialSpotlight の pointer-events: none はボタン側の pointer-events: auto に
+            上書きされてしまうため、ボタン自身を無効化する）
+          -->
           <button
             class="next-spot-btn"
+            :class="{ 'is-locked': tutorialStore.isActive && !isTutorialAdvanceStep }"
             type="button"
+            :disabled="tutorialStore.isActive && !isTutorialAdvanceStep"
             @click="handleAdvanceToNextSpot"
           >
             次の目的地へ
@@ -1044,9 +1089,14 @@ const handleConfirmEnd = async () => {
         口コミのピンの表示切り替え。地図を広く見せるため右端に寄せ、
         「口コミ」の見出しの下に自分・みんなを縦に並べる
       -->
+      <!--
+        「次の目的地へ」の段階では、口コミの表示切り替えも暗くして操作できないようにする。
+        次に押すボタンへ注意を集めるため。
+      -->
       <div
         ref="reviewTogglesRef"
         class="review-toggles"
+        :class="{ 'is-tutorial-dimmed': isAdvanceSpotFocus }"
         role="group"
         aria-label="口コミのピンの表示"
       >
@@ -1061,6 +1111,7 @@ const handleConfirmEnd = async () => {
           class="review-toggle review-toggle-mine"
           :class="{ 'is-on': showMyReviews }"
           type="button"
+          :disabled="isAdvanceSpotFocus"
           :aria-pressed="showMyReviews"
           aria-label="自分の口コミ"
           @click="toggleMyReviews"
@@ -1073,6 +1124,7 @@ const handleConfirmEnd = async () => {
           class="review-toggle review-toggle-other"
           :class="{ 'is-on': showOtherReviews }"
           type="button"
+          :disabled="isAdvanceSpotFocus"
           :aria-pressed="showOtherReviews"
           aria-label="みんなの口コミ"
           @click="toggleOtherReviews"
@@ -1106,6 +1158,7 @@ const handleConfirmEnd = async () => {
       :is-tracking="isTracking"
       :tracking-error="trackingError"
       :is-long-press-enabled="true"
+      :is-interactive="isMapInteractive"
       :pin-position="newSpotPin"
       :focus-position="reviewTargetPosition"
       :focus-offset-y="focusOffsetY"
@@ -1123,6 +1176,18 @@ const handleConfirmEnd = async () => {
       @select-review-spot="handleSelectReviewSpot"
     />
 
+    <!--
+      「次の目的地へ」の段階だけ、ボタン・マスコット・吹き出し以外を暗い膜で覆い、
+      操作できないことを見た目でも示す。膜は地図の上・画面上部の操作（.navigation-top、
+      z-index 45）の下に敷くため、次の目的地へのボタンとマスコットの吹き出しだけが明るく残る。
+      終了ボタン（footer）はこの膜より手前にあるため、別途 is-tutorial-dimmed で暗くする。
+    -->
+    <div
+      v-if="isAdvanceSpotFocus"
+      class="tutorial-dim-overlay"
+      aria-hidden="true"
+    />
+
     <ReviewPostForm
       v-if="isReviewFormVisible"
       ref="reviewFormRef"
@@ -1136,6 +1201,7 @@ const handleConfirmEnd = async () => {
       :is-posting="isSubmittingReview"
       :tutorial-message="reviewFormTutorialMessage"
       :tutorial-highlight="reviewFormTutorialHighlight"
+      :tutorial-mascot-level="mascotStore.mascotLevel"
       @submit-review="handleSubmitReview"
       @close="handleCloseReview"
       @change-expanded="handleChangeReviewFormExpanded"
@@ -1143,13 +1209,21 @@ const handleConfirmEnd = async () => {
     />
 
     <template #footer>
+      <!--
+        「次の目的地へ」の段階では終了ボタンも暗くして押せないようにする。
+        TutorialSpotlight の is-locked は固定配置のボタンの位置を崩すため使わず、
+        ボタン自身の disabled と見た目の is-tutorial-dimmed で止める。
+      -->
       <TutorialSpotlight
         :is-active="tutorialStore.isActive"
-        :is-highlighted="isTutorialEndStep"
+        :is-highlighted="isTutorialEndStep || isAdvanceSpotFocus"
       >
         <BaseButton
           ref="endButtonRef"
+          class="end-btn"
+          :class="{ 'is-tutorial-dimmed': isAdvanceSpotFocus }"
           is-full-width
+          :is-disabled="isAdvanceSpotFocus"
           @click="handleRequestEnd"
         >
           終 了
@@ -1261,6 +1335,41 @@ const handleConfirmEnd = async () => {
 
 .next-spot-btn:active {
   background: var(--primary-light);
+}
+
+/*
+ * チュートリアルで「次の目的地へ」の段階を過ぎたときのロック表示。
+ * 半透明にしたうえで disabled を併用し、押下そのものも止める
+ * （pointer-events だけだとボタン側の pointer-events: auto に上書きされるため）。
+ */
+.next-spot-btn.is-locked {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+/*
+ * 「次の目的地へ」の段階で、ボタン・マスコット・吹き出し以外を覆う暗い膜。
+ * 地図（全画面）の上に敷き、画面上部の操作（.navigation-top、z-index 45）の下に置く。
+ * これにより次の目的地へのボタンとマスコットの吹き出しだけが明るく残り、
+ * 膜が操作（地図のドラッグ・タップ）も遮る。
+ */
+.tutorial-dim-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(45, 62, 80, 0.5);
+}
+
+/*
+ * チュートリアルで暗くする部品（口コミの表示切り替え・終了ボタン）の共通表示。
+ * disabled と併せて使い、操作できないことを見た目でも示す。
+ */
+.review-toggles.is-tutorial-dimmed,
+.end-btn.is-tutorial-dimmed {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  pointer-events: none;
 }
 
 /*
