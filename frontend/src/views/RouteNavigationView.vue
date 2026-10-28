@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router';
 import BaseButton from '@/components/base/BaseButton.vue';
 import BaseModal from '@/components/base/BaseModal.vue';
+import BaseProcessingOverlay from '@/components/base/BaseProcessingOverlay.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import DefaultLayout from '@/components/layout/DefaultLayout.vue';
 import MascotExperienceBar from '@/components/feature/mascot/MascotExperienceBar.vue';
@@ -56,6 +57,13 @@ const walkStore = useWalkStore();
  */
 const MEASUREMENT_GAP_THRESHOLD_MS = 60000;
 
+/**
+ * 「投稿中…」を出し続ける最短の時間（ミリ秒）。
+ * 評価だけの投稿は通信がすぐ終わるため、表示が一瞬で消えるとチラつきに見え、
+ * 押せたのかがかえって分かりにくくなる。押したことが目で追える長さに揃える。
+ */
+const MIN_REVIEW_SUBMITTING_DURATION_MS = 500;
+
 /** 終了確認モーダルを表示するかどうか */
 const isEndConfirmVisible = ref(false);
 
@@ -73,6 +81,14 @@ const selectedReviewSpotId = ref(null);
 
 /** 口コミ投稿フォームを表示するかどうか */
 const isReviewFormVisible = ref(false);
+
+/**
+ * 投稿ボタンを押してから、投稿の結果が出るまでの「投稿中」の状態。
+ * 真の間は画面全体に「投稿中…」を出し、投稿ボタンの文言も「投稿中…」にする。
+ * 通信中かどうか（useReviewPosting の isPosting）とは別に持つのは、
+ * 最短の表示時間を足すため、およびチュートリアル（実際には送らない）でも同じ見え方にするため。
+ */
+const isSubmittingReview = ref(false);
 
 /** 次の目的地バナーの要素。可視範囲の上端を測るために参照する */
 const bannerRef = ref(null);
@@ -147,7 +163,6 @@ const {
   userRating,
   existingPhotos,
   isResolving,
-  isPosting,
   errorMessage: reviewErrorMessage,
   resolve: resolveReviewSpot,
   post: postReviewContent,
@@ -793,22 +808,25 @@ const handleChangeReviewRating = () => {
 };
 
 /**
- * @description 口コミを投稿する。
- * 成功したらフォームを閉じて知らせ、失敗したらフォームを残してエラーを出す。
- * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @description 指定した時間だけ待つ
+ * @param {number} durationMs 待つ時間（ミリ秒）
  * @returns {Promise<void>}
  */
-const handleSubmitReview = async (review) => {
-  // チュートリアルは実際に送信せず、投稿できた体験だけを見せる。
-  // ダミーのスポットに本物の口コミが残らないようにする
-  if (tutorialStore.isActive) {
-    handleCloseReview();
-    showMessage('口コミを投稿しました', 'success');
+const waitFor = (durationMs) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
 
-    if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
-      tutorialStore.completeStep(tutorialStore.STEP.SUBMIT_REVIEW);
-    }
-    return;
+/**
+ * @description 口コミを送信し、成否を返す。
+ * チュートリアルは実際に送信せず、成功として扱う
+ * （ダミーのスポットに本物の口コミが残らないようにする）。
+ * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @returns {Promise<boolean>} 成功した場合はtrue
+ */
+const sendReview = async (review) => {
+  if (tutorialStore.isActive) {
+    return true;
   }
 
   const result = await postReviewContent({
@@ -816,13 +834,52 @@ const handleSubmitReview = async (review) => {
     ...review
   });
 
-  if (result === null) {
+  return result !== null;
+};
+
+/**
+ * @description 口コミを投稿する。
+ * 結果が出るまで画面全体に「投稿中…」を出し、押せたことと処理中であることを伝える。
+ * 成功したら「投稿中…」とフォームを閉じて地図へ戻し、トーストで知らせる。
+ * 失敗したら「投稿中…」だけを閉じ、入力を残したフォームとエラーを見せて再送できるようにする。
+ * @param {{spotName: string|null, genreId: string|null, genreName: string|null, rating: number}} review 投稿内容
+ * @returns {Promise<void>}
+ */
+const handleSubmitReview = async (review) => {
+  // 「投稿中…」の間に届いた二度目の送信は受け付けない
+  if (isSubmittingReview.value) {
+    return;
+  }
+
+  isSubmittingReview.value = true;
+
+  let isSucceeded;
+
+  try {
+    // 通信がすぐ終わっても、最短の表示時間は「投稿中…」を出し続ける
+    [isSucceeded] = await Promise.all([
+      sendReview(review),
+      waitFor(MIN_REVIEW_SUBMITTING_DURATION_MS)
+    ]);
+  } finally {
+    isSubmittingReview.value = false;
+  }
+
+  if (!isSucceeded) {
     showMessage(reviewErrorMessage.value ?? '口コミの投稿に失敗しました');
     return;
   }
 
   handleCloseReview();
   showMessage('口コミを投稿しました', 'success');
+
+  if (tutorialStore.isActive) {
+    if (tutorialStore.isStep(tutorialStore.STEP.SUBMIT_REVIEW)) {
+      tutorialStore.completeStep(tutorialStore.STEP.SUBMIT_REVIEW);
+    }
+    return;
+  }
+
   // 新規・編集を地図のピン（オレンジ・紫）へ反映する
   loadMyReviews();
   loadReviewSpots();
@@ -1076,7 +1133,7 @@ const handleConfirmEnd = async () => {
       :initial-rating="userRating"
       :existing-photos="existingPhotos"
       :is-resolving="isResolving"
-      :is-posting="isPosting"
+      :is-posting="isSubmittingReview"
       :tutorial-message="reviewFormTutorialMessage"
       :tutorial-highlight="reviewFormTutorialHighlight"
       @submit-review="handleSubmitReview"
@@ -1109,19 +1166,22 @@ const handleConfirmEnd = async () => {
     </template>
 
     <!--
-      終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。
-      ロード画面（RouteLoadingOverlay）は流用せず、文字だけにする。
-      role="status" で処理中であることを読み上げさせ、終了の二度押しを塞ぐ。
+      口コミの投稿の結果を待つ間に出す「投稿中…」の全画面表示。
+      投稿フォームごと覆い、押せたことを伝えつつ、二度押しや地図の長押しを塞ぐ。
     -->
-    <div
+    <BaseProcessingOverlay
+      v-if="isSubmittingReview"
+      message="投稿中…"
+    />
+
+    <!--
+      終了後の保存・取り直し・判定を待つ間に出す「記録中…」の全画面表示。
+      終了の二度押しを塞ぐ。
+    -->
+    <BaseProcessingOverlay
       v-if="isFinishing"
-      class="finishing-overlay"
-      role="status"
-    >
-      <p class="finishing-text">
-        記録中…
-      </p>
-    </div>
+      message="記録中…"
+    />
   </DefaultLayout>
 </template>
 
@@ -1133,32 +1193,6 @@ const handleConfirmEnd = async () => {
  */
 .primary-btn.full-width {
   bottom: 44px;
-}
-
-/*
- * 終了後の保存・取り直し・判定を待つ間の「記録中…」の全画面表示。
- * 羊皮紙色の膜で地図と操作部をすべて覆い、待っている間の操作（終了の二度押しや
- * 地図の長押しなど）を物理的に塞ぐ。文字だけで、ロード画面の演出は流用しない。
- * 画面上部の操作（z-index 45）より手前に出すため、それらより高くする。
- */
-.finishing-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  /* 羊皮紙色の半透明の膜。下の地図をうっすら残しつつ操作は受け付けない */
-  background: rgba(241, 227, 200, 0.85);
-}
-
-.finishing-text {
-  font-family: var(--font-display);
-  font-size: calc(18px + var(--fit) * 4);
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--primary-color);
-  text-shadow: var(--text-halo);
 }
 
 /*
