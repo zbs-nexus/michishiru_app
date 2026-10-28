@@ -38,7 +38,7 @@ setWorkerUrl(maplibreWorkerUrl);
 /**
  * @description 実地図の上にルートの線とスポットを描画する。
  * 経路の座標列（geometry）から線を引き、ルート全体が収まる位置まで地図を寄せる。
- * 案内画面（shouldCenterOnOrigin）では、スタート地点を中央に置き最初の区間が収まる倍率にする。
+ * 案内画面（shouldCenterOnOrigin）では、固定の倍率でスタート地点を中央に置く。
  *
  * 地図ライブラリはDOM要素を直接必要とするため、生成と破棄をこのコンポーネントが持つ。
  */
@@ -142,7 +142,7 @@ const props = defineProps({
   },
   /**
    * 初期表示でスタート地点を見えている範囲の中央に置くかどうか（案内画面だけが真にする）。
-   * 真の場合は、スタート地点を中央にしたまま最初の区間（開始地点→1スポット目）が収まる倍率にする。
+   * 真の場合は、固定の倍率（NAVIGATION_ZOOM_LEVEL）でスタート地点を中央に置く。
    * 偽の場合はルート全体が収まるように寄せる
    */
   shouldCenterOnOrigin: {
@@ -775,50 +775,14 @@ const fitToRoute = () => {
 };
 
 /**
- * @description 最初の区間（開始地点→1スポット目）の座標列を取り出す。
+ * @description スタート地点を見えている範囲の中央に置き、固定の倍率（NAVIGATION_ZOOM_LEVEL）で表示する。
  *
- * 区間の描き分けがあれば、その最初の区間を使う。歩き終えた区間があれば先頭がそれ、
- * 無ければ今の区間が最初の区間になる。描き分けが無い（区間を確かめられない）場合は、
- * 1スポット目の座標で代わりにする。それも無ければ経路全体を使う。
- * @returns {number[][]} [経度, 緯度] の配列
- */
-const toFirstLegCoordinates = () => {
-  const sections = props.legSections;
-  const firstLegCoordinates = toPlainCoordinates(
-    sections?.walkedLegs?.[0] ?? sections?.currentLeg ?? null
-  );
-
-  if (firstLegCoordinates.length >= 2) {
-    return firstLegCoordinates;
-  }
-
-  const firstSpot = props.spots[0];
-  const firstSpotLng = Number(firstSpot?.lng);
-  const firstSpotLat = Number(firstSpot?.lat);
-
-  if (
-    firstSpot?.lng !== null &&
-    firstSpot?.lat !== null &&
-    Number.isFinite(firstSpotLng) &&
-    Number.isFinite(firstSpotLat)
-  ) {
-    return [[firstSpotLng, firstSpotLat]];
-  }
-
-  return toPlainCoordinates(props.geometry);
-};
-
-/**
- * @description スタート地点を見えている範囲の中央に置き、最初の区間が収まる倍率まで寄せる。
+ * 倍率は1つ目の目的地までの区間の長さでは変えない。区間を収めようとすると、
+ * 目的地が遠いほど縮小されて歩き出す方向が分かりにくくなるため。
+ * 固定の倍率では最初の曲がり角まで見え、遠い目的地はバナーの距離とピンチでの縮小で確かめられる。
  *
- * 最初の区間の各点に、スタート地点を挟んだ反対側の点（点対称の点）を足してから囲む。
- * そうすると囲んだ矩形の中心がスタート地点になり、fitBounds で中央に置いたまま倍率を決められる。
- * 緯度は度のまま折り返すため、地図の投影（メルカトル）では厳密な点対称にならないが、
- * 散歩の区間の広さ（数km以内）ではずれは1ピクセルに満たない。
- *
- * 上下の余白には、画面上部の操作と終了ボタンで隠れる高さを足す。
- * fitBounds は余白を除いた範囲の中央に寄せるため、見えている範囲の中央にスタート地点が来る。
- * 余白が地図の高さを超える（画面が極端に低い）と寄せられないため、その場合は固定の倍率で中央に置く。
+ * 縦のずれ（offset）で、画面上部の操作と終了ボタンに挟まれた範囲の中央へ寄せる。
+ * 寄せ終わった状態を初期表示にするため、アニメーションさせない（duration: 0）。
  * @returns {void}
  */
 const centerOnOrigin = () => {
@@ -829,35 +793,11 @@ const centerOnOrigin = () => {
     return;
   }
 
-  const [originLng, originLat] = originPosition;
-  const symmetricCoordinates = toFirstLegCoordinates().flatMap(([lng, lat]) => [
-    [lng, lat],
-    [originLng * 2 - lng, originLat * 2 - lat]
-  ]);
-  const bounds = toCoordinateBounds([originPosition, ...symmetricCoordinates]);
-
-  const padding = {
-    top: props.topInsetPx + MAP_FIT_PADDING_PX,
-    bottom: props.bottomInsetPx + MAP_FIT_PADDING_PX,
-    left: MAP_FIT_PADDING_PX,
-    right: MAP_FIT_PADDING_PX
-  };
-  const mapHeightPx = mapContainer.value?.clientHeight ?? 0;
-
-  if (mapHeightPx - padding.top - padding.bottom <= 0) {
-    map.easeTo({
-      center: originPosition,
-      zoom: NAVIGATION_ZOOM_LEVEL,
-      offset: [0, toVisibleCenterOffsetY()],
-      duration: 0
-    });
-    return;
-  }
-
-  map.fitBounds(bounds, {
-    padding,
-    maxZoom: MAX_FIT_ZOOM_LEVEL,
-    animate: false
+  map.easeTo({
+    center: originPosition,
+    zoom: NAVIGATION_ZOOM_LEVEL,
+    offset: [0, toVisibleCenterOffsetY()],
+    duration: 0
   });
 };
 
