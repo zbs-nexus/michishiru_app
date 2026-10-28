@@ -101,6 +101,19 @@ defineProps({
   controlsTopPx: {
     type: Number,
     default: 124
+  },
+  /**
+   * 地図の上端から、画面上部の操作で隠れている高さ（ピクセル）。
+   * 案内開始時のスタート地点と、現在地へ戻るときの現在地を、見えている範囲の中央へ寄せるために使う
+   */
+  topInsetPx: {
+    type: Number,
+    default: 0
+  },
+  /** 地図の下端から、終了ボタンで隠れている高さ（ピクセル）。使い方は topInsetPx と同じ */
+  bottomInsetPx: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -130,6 +143,9 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
         :visited-spot-ids="visitedSpotIds"
         :selected-review-spot-id="selectedReviewSpotId"
         :leg-sections="legSections"
+        :top-inset-px="topInsetPx"
+        :bottom-inset-px="bottomInsetPx"
+        should-center-on-origin
         @long-press-map="$emit('longPressMap', $event)"
         @select-review-spot="$emit('selectReviewSpot', $event)"
       />

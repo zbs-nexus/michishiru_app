@@ -17,6 +17,7 @@ import {
   MAP_FIT_PADDING_PX,
   MAP_STYLE,
   MAX_FIT_ZOOM_LEVEL,
+  NAVIGATION_ZOOM_LEVEL,
   ROUTE_CURRENT_LEG_CASING_WIDTH_PX,
   ROUTE_CURRENT_LEG_COLOR,
   ROUTE_CURRENT_LEG_WIDTH_PX,
@@ -37,6 +38,7 @@ setWorkerUrl(maplibreWorkerUrl);
 /**
  * @description 実地図の上にルートの線とスポットを描画する。
  * 経路の座標列（geometry）から線を引き、ルート全体が収まる位置まで地図を寄せる。
+ * 案内画面（shouldCenterOnOrigin）では、スタート地点を中央に置き最初の区間が収まる倍率にする。
  *
  * 地図ライブラリはDOM要素を直接必要とするため、生成と破棄をこのコンポーネントが持つ。
  */
@@ -137,6 +139,31 @@ const props = defineProps({
   legSections: {
     type: Object,
     default: null
+  },
+  /**
+   * 初期表示でスタート地点を見えている範囲の中央に置くかどうか（案内画面だけが真にする）。
+   * 真の場合は、スタート地点を中央にしたまま最初の区間（開始地点→1スポット目）が収まる倍率にする。
+   * 偽の場合はルート全体が収まるように寄せる
+   */
+  shouldCenterOnOrigin: {
+    type: Boolean,
+    default: false
+  },
+  /**
+   * 地図の上端から、画面上部の操作（バナー等）で隠れている高さ（ピクセル）。
+   * 初期表示と現在地へ戻るときに、見えている範囲の中央へ寄せるために使う
+   */
+  topInsetPx: {
+    type: Number,
+    default: 0
+  },
+  /**
+   * 地図の下端から、画面下部の操作（終了ボタン等）で隠れている高さ（ピクセル）。
+   * 使い方は topInsetPx と同じ
+   */
+  bottomInsetPx: {
+    type: Number,
+    default: 0
   }
 });
 
@@ -195,13 +222,6 @@ let currentLocationMarker = null;
 let pinMarker = null;
 let reviewMarkers = [];
 let recenterControl = null;
-
-/**
- * 初期表示の拡大率。
- * ルート全体を収めた直後の値を覚えておき、現在地へ戻るときに復元する。
- * 地図の生成時の値を初期値とし、ルートを収められない場合もこの値を使う。
- */
-let initialZoomLevel = DEFAULT_ZOOM_LEVEL;
 
 // 長押しの検出。地図の生成後にattachし、座標を親へ通知する
 const { attach: attachLongPress } = useMapLongPress({
@@ -372,7 +392,16 @@ const createCurrentLocationElement = () => {
 };
 
 /**
- * @description 地図の中心を現在地へ寄せ、拡大率を初期表示と同じに戻す。
+ * @description 見えている範囲の中央へ寄せるための、地図中央からの縦のずれを求める。
+ * 上が隠れているぶんだけ下へ、下が隠れているぶんだけ上へずらす。
+ * @returns {number} 地図中央からの縦のずれ（ピクセル）。下方向が正
+ */
+const toVisibleCenterOffsetY = () => (props.topInsetPx - props.bottomInsetPx) / 2;
+
+/**
+ * @description 現在地を見えている範囲の中央へ寄せ、拡大率を固定の値（NAVIGATION_ZOOM_LEVEL）にする。
+ * 拡大率をルートや区間の長さで変えないのは、歩いている最中に押したとき、
+ * いつも同じ縮尺で周りの道が見えるようにするため。
  * @returns {void}
  */
 const centerOnCurrentLocation = () => {
@@ -382,7 +411,8 @@ const centerOnCurrentLocation = () => {
 
   map.easeTo({
     center: [props.currentLocation.lng, props.currentLocation.lat],
-    zoom: initialZoomLevel
+    zoom: NAVIGATION_ZOOM_LEVEL,
+    offset: [0, toVisibleCenterOffsetY()]
   });
 };
 
@@ -744,10 +774,107 @@ const fitToRoute = () => {
     maxZoom: MAX_FIT_ZOOM_LEVEL,
     animate: false
   });
+};
 
-  // 現在地へ戻るときに初期表示と同じ倍率へ復元できるよう、この時点の倍率を覚えておく。
-  // animate: false のため、ここでは寄せ終わった後の値が取れる
-  initialZoomLevel = map.getZoom();
+/**
+ * @description 最初の区間（開始地点→1スポット目）の座標列を取り出す。
+ *
+ * 区間の描き分けがあれば、その最初の区間を使う。歩き終えた区間があれば先頭がそれ、
+ * 無ければ今の区間が最初の区間になる。描き分けが無い（区間を確かめられない）場合は、
+ * 1スポット目の座標で代わりにする。それも無ければ経路全体を使う。
+ * @returns {number[][]} [経度, 緯度] の配列
+ */
+const toFirstLegCoordinates = () => {
+  const sections = props.legSections;
+  const firstLegCoordinates = toPlainCoordinates(
+    sections?.walkedLegs?.[0] ?? sections?.currentLeg ?? null
+  );
+
+  if (firstLegCoordinates.length >= 2) {
+    return firstLegCoordinates;
+  }
+
+  const firstSpot = props.spots[0];
+  const firstSpotLng = Number(firstSpot?.lng);
+  const firstSpotLat = Number(firstSpot?.lat);
+
+  if (
+    firstSpot?.lng !== null &&
+    firstSpot?.lat !== null &&
+    Number.isFinite(firstSpotLng) &&
+    Number.isFinite(firstSpotLat)
+  ) {
+    return [[firstSpotLng, firstSpotLat]];
+  }
+
+  return toPlainCoordinates(props.geometry);
+};
+
+/**
+ * @description スタート地点を見えている範囲の中央に置き、最初の区間が収まる倍率まで寄せる。
+ *
+ * 最初の区間の各点に、スタート地点を挟んだ反対側の点（点対称の点）を足してから囲む。
+ * そうすると囲んだ矩形の中心がスタート地点になり、fitBounds で中央に置いたまま倍率を決められる。
+ * 緯度は度のまま折り返すため、地図の投影（メルカトル）では厳密な点対称にならないが、
+ * 散歩の区間の広さ（数km以内）ではずれは1ピクセルに満たない。
+ *
+ * 上下の余白には、画面上部の操作と終了ボタンで隠れる高さを足す。
+ * fitBounds は余白を除いた範囲の中央に寄せるため、見えている範囲の中央にスタート地点が来る。
+ * 余白が地図の高さを超える（画面が極端に低い）と寄せられないため、その場合は固定の倍率で中央に置く。
+ * @returns {void}
+ */
+const centerOnOrigin = () => {
+  const originPosition = toOriginPosition(props.geometry);
+
+  if (originPosition === null) {
+    fitToRoute();
+    return;
+  }
+
+  const [originLng, originLat] = originPosition;
+  const symmetricCoordinates = toFirstLegCoordinates().flatMap(([lng, lat]) => [
+    [lng, lat],
+    [originLng * 2 - lng, originLat * 2 - lat]
+  ]);
+  const bounds = toCoordinateBounds([originPosition, ...symmetricCoordinates]);
+
+  const padding = {
+    top: props.topInsetPx + MAP_FIT_PADDING_PX,
+    bottom: props.bottomInsetPx + MAP_FIT_PADDING_PX,
+    left: MAP_FIT_PADDING_PX,
+    right: MAP_FIT_PADDING_PX
+  };
+  const mapHeightPx = mapContainer.value?.clientHeight ?? 0;
+
+  if (mapHeightPx - padding.top - padding.bottom <= 0) {
+    map.easeTo({
+      center: originPosition,
+      zoom: NAVIGATION_ZOOM_LEVEL,
+      offset: [0, toVisibleCenterOffsetY()],
+      duration: 0
+    });
+    return;
+  }
+
+  map.fitBounds(bounds, {
+    padding,
+    maxZoom: MAX_FIT_ZOOM_LEVEL,
+    animate: false
+  });
+};
+
+/**
+ * @description 初期表示の位置まで地図を寄せる。
+ * 案内画面はスタート地点を中央に、それ以外（提案画面）はルート全体を収める。
+ * @returns {void}
+ */
+const fitToInitialView = () => {
+  if (props.shouldCenterOnOrigin) {
+    centerOnOrigin();
+    return;
+  }
+
+  fitToRoute();
 };
 
 /**
@@ -938,7 +1065,7 @@ onMounted(() => {
     renderCurrentLocationMarker();
     renderPinMarker();
     renderReviewMarkers();
-    fitToRoute();
+    fitToInitialView();
   });
 });
 
@@ -955,7 +1082,7 @@ watch(
     renderSpotMarkers();
     // 巡る口コミの場所が変わると、口コミのピンから外す場所も変わるため描き直す
     renderReviewMarkers();
-    fitToRoute();
+    fitToInitialView();
   }
 );
 
