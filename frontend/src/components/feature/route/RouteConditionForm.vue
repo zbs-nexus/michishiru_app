@@ -346,11 +346,10 @@ const isGenreButtonDimmed = (value) => {
 
 /*
  * チュートリアルでロックする距離の区画。
- * ジャンルの段階では距離を触らせないため、区画ごと淡くして操作を止める。
+ * 操作だけを止め、見た目は通常のまま（淡くしない）にする。
+ * 距離を選び終えた後にスライダーが薄くなるのを避け、選んだ値がそのまま見えるようにする。
  */
 .input-section.is-tutorial-locked {
-  opacity: 0.4;
-  filter: grayscale(0.5);
   pointer-events: none;
 }
 
