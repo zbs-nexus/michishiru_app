@@ -1,6 +1,7 @@
 ﻿<script setup>
 import { computed } from 'vue';
 import BaseSlider from '@/components/base/BaseSlider.vue';
+import { getGenreImage } from '@/constants/genreImages';
 
 /**
  * @description ルート作成条件（ジャンル・距離）の入力フォーム。
@@ -137,7 +138,19 @@ const isGenreButtonLocked = (value) => {
           :disabled="isGenreButtonLocked(option.value)"
           @click="$emit('selectGenre', option.value)"
         >
-          <span class="btn-icon">{{ option.icon }}</span>
+          <!--
+            ジャンルのアイコンは同梱した画像に固定する（option.icon の絵文字は使わない）。
+            画像はラベルで内容が分かるため、読み上げの重複を避けて装飾扱い（alt は空）にする。
+            対応する画像が無いジャンルは画像を出さず、ラベルだけを見せる。
+          -->
+          <span class="btn-icon">
+            <img
+              v-if="getGenreImage(option.value)"
+              class="btn-icon-image"
+              :src="getGenreImage(option.value)"
+              alt=""
+            >
+          </span>
           <span>{{ option.label }}</span>
         </button>
       </div>
@@ -283,5 +296,20 @@ const isGenreButtonLocked = (value) => {
 .input-section.is-tutorial-target {
   position: relative;
   z-index: 1;
+}
+
+/*
+ * ジャンルのアイコン画像。
+ * 背景を透過したピクセルアートのため、額縁は付けず絵柄だけを見せる。
+ * 絵文字のときと同じ程度の大きさ（global.css の .btn-icon の font-size を踏襲）で、
+ * 画面の高さに合わせて少し伸び縮みさせる。
+ * contain で全体を収め、ピクセルの輪郭がにじまないよう最近傍で拡大する。
+ */
+.btn-icon-image {
+  display: block;
+  width: calc(28px + var(--fit) * 8);
+  height: calc(28px + var(--fit) * 8);
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 </style>

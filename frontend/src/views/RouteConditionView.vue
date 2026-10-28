@@ -239,10 +239,6 @@ const isTutorialCreateStep = computed(() =>
     v-else
     class="is-home"
   >
-    <template #background>
-      <div class="paper-map-bg" />
-    </template>
-
     <BaseToast
       v-if="toastMessage"
       :message="toastMessage"
