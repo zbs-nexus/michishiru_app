@@ -282,10 +282,10 @@ inclusion: always
 | 表示範囲 | bounds | 地図に収める矩形。`[[南西の経度, 緯度], [北東の経度, 緯度]]` |
 | 地図スタイル | mapStyle | 地図の見た目とタイル配信元の定義 |
 | 地図のコントロールの上端 | mapControlsTopPx / controlsTopPx | 案内画面で地図のコントロール（現在地へ戻るボタン）を置く上端（ピクセル）。口コミの表示切り替えの札（右寄せ）の下端＋余白。拡大・縮小のボタンは置かない。目的地の名前でバナーが伸びるため測って追従させる。View では `mapControlsTopPx`、`RouteNavigationMap` の props では `controlsTopPx` |
-| スタート地点を中央に置くか | shouldCenterOnOrigin | 真のとき、地図の初期表示でスタート地点（経路の先頭）を見えている範囲の中央に置き、最初の区間（legs[0]）が収まる倍率にする。案内画面だけが真にする（`RouteNavigationMap` が `RouteMap` へ渡す）。偽のときはルート全体を収める |
+| スタート地点を中央に置くか | shouldCenterOnOrigin | 真のとき、地図の初期表示でスタート地点（経路の先頭）を見えている範囲の中央に置き、固定の倍率（NAVIGATION_ZOOM_LEVEL）で表示する。1つ目の目的地までの区間の長さでは倍率を変えない。案内画面だけが真にする（`RouteNavigationMap` が `RouteMap` へ渡す）。偽のときはルート全体を収める |
 | 地図の上側の隠れている高さ | mapTopInsetPx / topInsetPx | 地図の上端から、画面上部の操作（バナー・前後のボタン・口コミの表示切り替え・チュートリアルの吹き出し）で隠れている高さ（ピクセル）。案内開始時のスタート地点と、現在地へ戻るときの現在地を見えている範囲の中央へ置くために使う。View では `mapTopInsetPx`、`RouteNavigationMap` / `RouteMap` の props では `topInsetPx` |
 | 地図の下側の隠れている高さ | mapBottomInsetPx / bottomInsetPx | 地図の下端から、終了ボタンで隠れている高さ（ピクセル）。使い方は mapTopInsetPx と同じ。View では `mapBottomInsetPx`、props では `bottomInsetPx` |
-| 案内中のズームレベル | NAVIGATION_ZOOM_LEVEL | 案内開始時に最初の区間を収められない（画面が極端に低い）場合に、スタート地点を中央に置くときの倍率（17）。現在地へ戻るボタンはこの値を使わず、押した時点の倍率のまま現在地へ寄せる。`constants/mapDefaults.js` の定数 |
+| 案内開始時のズームレベル | NAVIGATION_ZOOM_LEVEL | 案内画面を開いた直後に、スタート地点を中央に置くときの固定の倍率（17。横幅 約190m）。現在地へ戻るボタンはこの値を使わず、押した時点の倍率のまま現在地へ寄せる。`constants/mapDefaults.js` の定数 |
 
 ### 環境とデプロイ
 
@@ -457,3 +457,4 @@ inclusion: always
 | 2026/10/28 | 案内開始時にスタート地点を見えている範囲の中央へ置き、現在地へ戻るボタンを固定の倍率にしたことに伴い「地図」へ shouldCenterOnOrigin / mapTopInsetPx / topInsetPx / mapBottomInsetPx / bottomInsetPx / NAVIGATION_ZOOM_LEVEL を追加 |
 | 2026/10/28 | 口コミの投稿中に全画面で「投稿中…」を出すようにしたことに伴い「口コミ」へ isSubmittingReview / MIN_REVIEW_SUBMITTING_DURATION_MS / BaseProcessingOverlay を追加。「記録中…」も同じ部品（BaseProcessingOverlay）へ置き換えた |
 | 2026/10/28 | 現在地へ戻るボタンを、固定の倍率から押した時点の倍率のまま寄せる動きに変更。NAVIGATION_ZOOM_LEVEL の説明を、案内開始時に最初の区間を収められない場合の代わりの倍率へ改めた |
+| 2026/10/28 | 案内開始時の倍率を、最初の区間を収める倍率から固定の倍率（NAVIGATION_ZOOM_LEVEL = 17）に変更したことに伴い、shouldCenterOnOrigin と NAVIGATION_ZOOM_LEVEL の説明を更新 |
