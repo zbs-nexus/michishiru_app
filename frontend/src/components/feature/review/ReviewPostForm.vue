@@ -4,6 +4,7 @@ import BaseButton from '@/components/base/BaseButton.vue';
 import ReviewPhotoInput from '@/components/feature/review/ReviewPhotoInput.vue';
 import ReviewPhotoViewer from '@/components/feature/review/ReviewPhotoViewer.vue';
 import ReviewRatingInput from '@/components/feature/review/ReviewRatingInput.vue';
+import { getGenreImage } from '@/constants/genreImages';
 
 /** 1つの場所に付けられる写真の最大枚数 */
 const PHOTO_MAX_COUNT = 4;
@@ -206,9 +207,13 @@ const existingGenre = computed(() => {
     (option) => option.value === props.existingSpot.genreId
   );
 
+  const label =
+    props.existingSpot.genreName ?? matched?.label ?? props.existingSpot.genreId;
+
   return {
-    icon: matched?.icon ?? '',
-    label: props.existingSpot.genreName ?? matched?.label ?? props.existingSpot.genreId
+    // アイコンは絵文字ではなく同梱画像に固定する（ジャンル選択と見た目を揃える）
+    image: getGenreImage(props.existingSpot.genreId, label),
+    label
   };
 });
 
@@ -478,7 +483,12 @@ const handleSubmit = () => {
         </p>
         <p class="review-existing-meta">
           <span class="review-existing-genre">
-            <span>{{ existingGenre.icon }}</span>
+            <img
+              v-if="existingGenre.image"
+              class="review-existing-genre-image"
+              :src="existingGenre.image"
+              alt=""
+            >
             <span>{{ existingGenre.label }}</span>
           </span>
         </p>
@@ -548,7 +558,19 @@ const handleSubmit = () => {
             :aria-pressed="selectedGenreId === option.value"
             @click="handleSelectGenre(option.value)"
           >
-            <span class="btn-icon">{{ option.icon }}</span>
+            <!--
+              ジャンルのアイコンは同梱した画像に固定する（option.icon の絵文字は使わない）。
+              ホーム画面のジャンル選択（RouteConditionForm）と見た目を揃える。
+              画像はラベルで内容が分かるため装飾扱い（alt は空）にし、対応画像が無ければ出さない。
+            -->
+            <span class="btn-icon">
+              <img
+                v-if="getGenreImage(option.value, option.label)"
+                class="btn-icon-image"
+                :src="getGenreImage(option.value, option.label)"
+                alt=""
+              >
+            </span>
             <span>{{ option.label }}</span>
           </button>
         </div>
@@ -795,6 +817,20 @@ const handleSubmit = () => {
   font-size: 20px;
 }
 
+/*
+ * ジャンルのアイコン画像。
+ * 背景を透過したピクセルアートのため額縁は付けず絵柄だけを見せる。
+ * 全画面地図の上に重ねるフォームなので、ホームのジャンル選択より少し小さめにする。
+ * ピクセルの輪郭がにじまないよう最近傍で拡大する。
+ */
+.genre-grid .btn-icon-image {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  image-rendering: pixelated;
+}
+
 .review-hint {
   font-size: 12px;
   color: var(--text-gray);
@@ -889,6 +925,15 @@ const handleSubmit = () => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+}
+
+/* 固定表示のジャンルアイコン。文字と並ぶため、文字高に近い小さめの画像にする */
+.review-existing-genre-image {
+  display: block;
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  image-rendering: pixelated;
 }
 
 .review-existing-photos {

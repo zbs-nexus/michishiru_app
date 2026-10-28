@@ -145,9 +145,9 @@ const isGenreButtonLocked = (value) => {
           -->
           <span class="btn-icon">
             <img
-              v-if="getGenreImage(option.value)"
+              v-if="getGenreImage(option.value, option.label)"
               class="btn-icon-image"
-              :src="getGenreImage(option.value)"
+              :src="getGenreImage(option.value, option.label)"
               alt=""
             >
           </span>
