@@ -10,6 +10,7 @@ import BaseProcessingOverlay from '@/components/base/BaseProcessingOverlay.vue';
 import BaseToast from '@/components/base/BaseToast.vue';
 import { postReview } from '@/services/reviewService';
 import { useRouteStore } from '@/stores/routeStore';
+import { useTutorialStore } from '@/stores/tutorialStore';
 import { useWalkStore } from '@/stores/walkStore';
 
 /**
@@ -371,14 +372,50 @@ describe('RouteNavigationView の前の目的地に戻るボタン', () => {
     const mineToggle = wrapper.find('.review-toggle-mine');
     const otherToggle = wrapper.find('.review-toggle-other');
 
+    await mineToggle.trigger('click');
+
     expect(mineToggle.attributes('aria-pressed')).toBe('true');
-    expect(otherToggle.attributes('aria-pressed')).toBe('true');
+    expect(mineToggle.classes()).toContain('is-on');
+    expect(otherToggle.attributes('aria-pressed')).toBe('false');
 
     await mineToggle.trigger('click');
 
     expect(mineToggle.attributes('aria-pressed')).toBe('false');
     expect(mineToggle.classes()).not.toContain('is-on');
-    expect(otherToggle.attributes('aria-pressed')).toBe('true');
+  });
+});
+
+describe('RouteNavigationView の口コミのピンの初期表示', () => {
+  test('開いた直後は自分・みんなの口コミのピンをどちらも出さない', () => {
+    const wrapper = mountNavigationViewWithRoute();
+    const map = wrapper.findComponent(RouteNavigationMap);
+
+    // ピンが経路に重なって巡る道筋が見にくくなるため、既定は非表示
+    expect(map.props('showMyReviews')).toBe(false);
+    expect(map.props('showOtherReviews')).toBe(false);
+    expect(wrapper.find('.review-toggle-mine').attributes('aria-pressed')).toBe('false');
+    expect(wrapper.find('.review-toggle-other').attributes('aria-pressed')).toBe('false');
+  });
+
+  test('札を押すと、その種類のピンだけが出る', async () => {
+    const wrapper = mountNavigationViewWithRoute();
+
+    await wrapper.find('.review-toggle-other').trigger('click');
+
+    const map = wrapper.findComponent(RouteNavigationMap);
+    expect(map.props('showOtherReviews')).toBe(true);
+    expect(map.props('showMyReviews')).toBe(false);
+  });
+
+  test('チュートリアル中は、紫のピンをタップさせるため「みんな」だけを出して始める', () => {
+    useTutorialStore().start();
+
+    const wrapper = mountNavigationViewWithRoute();
+    const map = wrapper.findComponent(RouteNavigationMap);
+
+    expect(map.props('showOtherReviews')).toBe(true);
+    expect(map.props('showMyReviews')).toBe(false);
+    expect(wrapper.find('.review-toggle-other').attributes('aria-pressed')).toBe('true');
   });
 });
 
@@ -480,8 +517,8 @@ describe('RouteNavigationView の画面上部の並び', () => {
     const children = [...togglesEl.children].map((child) => child.className);
     expect(children).toEqual([
       'review-toggles-label',
-      'review-toggle review-toggle-mine is-on',
-      'review-toggle review-toggle-other is-on'
+      'review-toggle review-toggle-mine',
+      'review-toggle review-toggle-other'
     ]);
   });
 
