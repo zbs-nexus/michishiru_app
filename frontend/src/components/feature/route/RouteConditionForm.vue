@@ -115,7 +115,7 @@ const isGenreButtonLocked = (value) => {
           :disabled="isTutorial"
           @click="$emit('toggleGenreRandom')"
         >
-          ？
+          おまかせ
         </button>
       </div>
       <div
@@ -169,7 +169,7 @@ const isGenreButtonLocked = (value) => {
           :disabled="isTutorial"
           @click="$emit('toggleDistanceRandom')"
         >
-          ？
+          おまかせ
         </button>
       </div>
       <template v-if="!isDistanceRandom">
@@ -214,15 +214,16 @@ const isGenreButtonLocked = (value) => {
  * 見出しの行の高さを決めるため、低い画面では少し小さくする（28〜32px）。
  */
 .random-icon-btn {
-  width: calc(28px + var(--fit) * 4);
   height: calc(28px + var(--fit) * 4);
+  padding: 0 calc(10px + var(--fit) * 2);
   border: 2px solid var(--border-ink);
-  border-radius: 50%;
+  border-radius: calc(14px + var(--fit) * 2);
   background-color: var(--surface);
   color: var(--text-dark);
   font-family: var(--font-display);
-  font-size: 1.2rem;
+  font-size: 0.95rem;
   font-weight: bold;
+  white-space: nowrap;
   box-shadow: var(--shadow);
   cursor: pointer;
   transition: all 0.2s;
