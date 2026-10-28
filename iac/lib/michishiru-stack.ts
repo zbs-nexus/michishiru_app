@@ -778,7 +778,13 @@ export class MichishiruStack extends cdk.Stack {
         sources: [s3deploy.Source.asset(frontendDistDir)],
         destinationBucket: siteBucket,
         distribution,
-        distributionPaths: ['/*']
+        distributionPaths: ['/*'],
+        // 既定の 128MB では、裏で動くアップロード用 Lambda が dist を展開する際に
+        // メモリを使い切り Runtime.OutOfMemory でクラッシュする（マスコット画像を
+        // 大容量 PNG に差し替えて成果物が増えたため）。クラッシュすると CloudFormation へ
+        // 完了・失敗のどちらも通知されず、デプロイがタイムアウトまで待ち続ける。
+        // 成果物の増加に余裕を持たせて引き上げる。
+        memoryLimit: 512
       });
     } else {
       cdk.Annotations.of(this).addInfo(
