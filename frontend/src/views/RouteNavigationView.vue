@@ -85,18 +85,24 @@ const bannerRef = ref(null);
  */
 const navigationTopRef = ref(null);
 
-/** 前の目的地・次の目的地へのボタンの段。地図のズームボタンをこの下へ逃がすために測る */
-const spotStepRowRef = ref(null);
+/**
+ * 口コミの表示切り替えの札。前後のボタンの段の下・右端に置く。
+ * 地図の現在地へ戻るボタンをこの下へ逃がすために測る
+ */
+const reviewTogglesRef = ref(null);
 
-/** 測れるまでの、地図のズームボタンの上端（ピクセル）。名前が1行のときの段の下端＋余白 */
-const DEFAULT_MAP_CONTROLS_TOP_PX = 124;
+/**
+ * 測れるまでの、地図の現在地へ戻るボタンの上端（ピクセル）。
+ * 名前が1行のときの口コミの表示切り替えの札の下端（約228）＋余白
+ */
+const DEFAULT_MAP_CONTROLS_TOP_PX = 236;
 
-/** ボタンの段の下端からズームボタンまでの余白（ピクセル） */
+/** 口コミの表示切り替えの札の下端から現在地へ戻るボタンまでの余白（ピクセル） */
 const MAP_CONTROLS_GAP_PX = 8;
 
 /**
- * 地図のズームボタンを置く上端（ピクセル）。
- * 目的地の名前が長いとバナーが伸びてボタンの段も下がるため、段の下端を測って追従させる。
+ * 地図の現在地へ戻るボタンを置く上端（ピクセル）。
+ * 目的地の名前が長いとバナーが伸びて下の段も下がるため、口コミの表示切り替えの札の下端を測って追従させる。
  */
 const mapControlsTopPx = ref(DEFAULT_MAP_CONTROLS_TOP_PX);
 
@@ -538,22 +544,23 @@ const measureVisibleCenterOffsetY = () => {
 };
 
 /**
- * @description 前後のボタンの段の下端を測り、地図のズームボタンをその下へ置く。
- * 段が描画されていない（測れない）ときは値を変えない。
+ * @description 口コミの表示切り替えの札の下端を測り、地図の現在地へ戻るボタンをその下へ置く。
+ * 札が描画されていない（測れない）ときは値を変えない。
  * @returns {void}
  */
 const measureMapControlsTop = () => {
-  const rowEl = spotStepRowRef.value;
+  const togglesEl = reviewTogglesRef.value;
 
-  if (!rowEl) {
+  if (!togglesEl) {
     return;
   }
 
   // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準の下端をそのまま使える
-  mapControlsTopPx.value = Math.ceil(rowEl.getBoundingClientRect().bottom) + MAP_CONTROLS_GAP_PX;
+  mapControlsTopPx.value =
+    Math.ceil(togglesEl.getBoundingClientRect().bottom) + MAP_CONTROLS_GAP_PX;
 };
 
-// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、ズームボタンの位置を測り直す
+// バナーの高さ（目的地の名前の行数・画面幅）が変わるたびに、現在地へ戻るボタンの位置を測り直す
 onMounted(() => {
   measureMapControlsTop();
 
@@ -897,10 +904,7 @@ const handleConfirmEnd = async () => {
       <!--
         ボタンが片方だけでも段の高さを保ち、下の口コミの表示切り替えが跳ねないようにする
       -->
-      <div
-        ref="spotStepRowRef"
-        class="spot-step-row"
-      >
+      <div class="spot-step-row">
         <!--
           誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
           到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
@@ -912,7 +916,7 @@ const handleConfirmEnd = async () => {
           aria-label="前の目的地に戻る"
           @click="returnToPreviousSpot"
         >
-          ← 前の目的地
+          前の目的地へ
         </button>
 
         <!--
@@ -934,7 +938,12 @@ const handleConfirmEnd = async () => {
         </TutorialSpotlight>
       </div>
 
+      <!--
+        口コミのピンの表示切り替え。地図を広く見せるため右端に寄せ、
+        「口コミ」の見出しの下に自分・みんなを縦に並べる
+      -->
       <div
+        ref="reviewTogglesRef"
         class="review-toggles"
         role="group"
         aria-label="口コミのピンの表示"
@@ -1200,21 +1209,21 @@ const handleConfirmEnd = async () => {
 }
 
 /*
- * 口コミピンの表示切り替え（自分・他の人の2つ）を1本のピルにまとめる。
- * 前後のボタンの段の下・左端に置き、ズームコントロール（右）と重ならないようにする。
+ * 口コミピンの表示切り替え（自分・他の人の2つ）を1枚の札にまとめる。
+ * 前後のボタンの段の下・右端（「次の目的地へ」の下）に置き、
+ * 「口コミ」の見出しの下に自分・みんなを縦に並べる。
+ * 現在地へ戻るボタンはこの札の下に置く（下端を測って controlsTopPx で渡す）。
  * 入れ物は幅いっぱいに広げるため、align-self で中身の幅に縮める。
  */
 .review-toggles {
   touch-action: manipulation; /* 理由は global.css の共通ルールのコメント */
-  align-self: flex-start;
-  display: inline-flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 2px;
-  min-height: 32px;
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   box-sizing: border-box;
-  /* 上下の余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
-  padding: 0 0 0 10px;
+  /* 余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
+  padding: 0;
   /*
    * 2つのトグルを1枚の札にまとめているため、ドット絵の枠はこの外枠にだけ付ける。
    * 内側のトグルに付けると、枠（--pixel-frame-width × 2）の分だけ札の中で膨らむ。
@@ -1226,19 +1235,23 @@ const handleConfirmEnd = async () => {
   box-shadow: var(--shadow);
 }
 
+/* 見出し。下の2つのトグルと罫線で区切る */
 .review-toggles-label {
-  margin-right: 2px;
+  padding: 4px 10px;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
   color: var(--text-gray);
+  border-bottom: 1px solid var(--border-ink);
 }
 
 .review-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 4px 10px;
+  padding: 4px 12px 4px 10px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-gray);

@@ -25,6 +25,9 @@ const createdSources = new Map();
 /** 追加されたレイヤーの記録（追加した順） */
 const addedLayers = [];
 
+/** 地図へ追加されたコントロールの記録（追加した順） */
+const addedControls = [];
+
 vi.mock('maplibre-gl', () => {
   class FakeMarker {
     constructor(options = {}) {
@@ -94,7 +97,9 @@ vi.mock('maplibre-gl', () => {
       addedLayers.push(layer);
     }
 
-    addControl() {}
+    addControl(control) {
+      addedControls.push(control);
+    }
 
     fitBounds() {}
 
@@ -111,7 +116,6 @@ vi.mock('maplibre-gl', () => {
     MapLibreMap: FakeMap,
     Marker: FakeMarker,
     Popup: FakePopup,
-    NavigationControl: class {},
     setWorkerUrl: () => {}
   };
 });
@@ -623,6 +627,33 @@ describe('RouteMap（区間ごとの描き分け）', () => {
     expect(linesOf('route')).toEqual([geometry.coordinates]);
     expect(linesOf('route-walked-legs')).toEqual([]);
     expect(linesOf('route-current-leg')).toEqual([]);
+  });
+});
+
+describe('RouteMap（地図のコントロール）', () => {
+  beforeEach(() => {
+    createdMarkers.length = 0;
+    createdSources.clear();
+    addedLayers.length = 0;
+    addedControls.length = 0;
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('拡大・縮小のボタンは置かず、現在地へ戻るボタンだけを置く', () => {
+    mountAndLoad({
+      showCurrentLocation: true,
+      currentLocation: { lng: 139.7036, lat: 35.6862 }
+    });
+
+    const containers = addedControls.map((control) => control.onAdd());
+
+    // 拡大・縮小のボタンを置くと、地図の右上が埋まり見づらくなる
+    expect(containers).toHaveLength(1);
+    expect(containers[0].querySelector('.recenter-btn')).not.toBeNull();
+    expect(containers[0].querySelector('.maplibregl-ctrl-zoom-in')).toBeNull();
   });
 });
 

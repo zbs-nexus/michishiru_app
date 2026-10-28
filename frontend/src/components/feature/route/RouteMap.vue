@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
 // MapLibre GL v6 は名前付きエクスポートのみを提供する（既定エクスポートは無い）。
 // 地図クラスは組み込みの Map と名前が衝突するため、別名の MapLibreMap を使う。
-import { MapLibreMap, Marker, NavigationControl, Popup, setWorkerUrl } from 'maplibre-gl';
+import { MapLibreMap, Marker, Popup, setWorkerUrl } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 // MapLibre v6 は geojson の処理を担うワーカーを別ファイルに分けており、
 // その URL を `new URL(`./${変数}`, ...)` と動的に組み立てる。
@@ -388,8 +388,8 @@ const centerOnCurrentLocation = () => {
 
 /**
  * @description 現在地へ戻るコントロールを組み立てる。
- * MapLibreのコントロールとして追加することで、ズームボタンと同じ枠に
- * 同じ見た目で並ぶ（後から追加したものが下に来る）。
+ * MapLibreのコントロールとして追加することで、地図の右上に
+ * 他の札と同じ見た目（global.css の .maplibregl-ctrl-group）で並ぶ。
  * @returns {object} MapLibreのIControlを満たすオブジェクト
  */
 const createRecenterControl = () => {
@@ -915,9 +915,8 @@ onMounted(() => {
     console.error('地図の描画に失敗しました', event.error ?? event);
   });
 
-  if (props.isInteractive) {
-    map.addControl(new NavigationControl({ showCompass: false }), 'top-right');
-  }
+  // 拡大・縮小のボタン（NavigationControl）は地図を見やすくするため置かない。
+  // 拡大率はピンチ・ダブルタップで変えられる
 
   if (props.isLongPressEnabled) {
     attachLongPress(map);

@@ -278,7 +278,7 @@ inclusion: always
 | 座標列 | coordinates | `geometry` が持つ `[経度, 緯度]` の配列。経路上の座標点（= `waypoint`）の集まり |
 | 表示範囲 | bounds | 地図に収める矩形。`[[南西の経度, 緯度], [北東の経度, 緯度]]` |
 | 地図スタイル | mapStyle | 地図の見た目とタイル配信元の定義 |
-| ズームボタンの上端 | mapControlsTopPx / controlsTopPx | 案内画面で地図のズームボタンを置く上端（ピクセル）。前後のボタンの段の下端＋余白。目的地の名前でバナーが伸びるため測って追従させる。View では `mapControlsTopPx`、`RouteNavigationMap` の props では `controlsTopPx` |
+| 地図のコントロールの上端 | mapControlsTopPx / controlsTopPx | 案内画面で地図のコントロール（現在地へ戻るボタン）を置く上端（ピクセル）。口コミの表示切り替えの札（右寄せ）の下端＋余白。拡大・縮小のボタンは置かない。目的地の名前でバナーが伸びるため測って追従させる。View では `mapControlsTopPx`、`RouteNavigationMap` の props では `controlsTopPx` |
 
 ### 環境とデプロイ
 
@@ -446,3 +446,4 @@ inclusion: always
 | 2026/10/21 | レベルアップの判定を案内画面の終了処理へ移し検知ロジックを mascotStore へ集約したことに伴い「マスコット」へ pendingLevelUpLevels / refreshAndDetectLevelUp / clearPendingLevelUp / isFinishing を追加。levelBeforeWalk を mascotStore 内のローカル変数へ、isCelebrationVisible を WalkResultView.vue の状態へ説明変更。useMascotLevelUp は役割が mascotStore へ移ったため削除 |
 | 2026/10/21 | 案内画面の次の目的地の名前を省略せず全文出し、前後のボタンと重ならないよう上部の操作を縦に積んだことに伴い「地図」へ mapControlsTopPx / controlsTopPx を追加 |
 | 2026/10/21 | ルートの口コミの場所を自分の口コミ（オレンジ）と他の人の口コミ（紫）に描き分けたことに伴い「ルートとスポット」へ isMyReviewSpot を追加。isReviewSpot の説明と、口コミのピンの色の表の注記（ルートのスポットも同じ色の意味）を更新 |
+| 2026/10/28 | 案内画面の拡大・縮小のボタンを削除し、口コミの表示切り替えを右寄せの縦並びにしたことに伴い、「地図」の mapControlsTopPx / controlsTopPx を「地図のコントロールの上端」へ改め、基準を口コミの表示切り替えの札の下端に変更 |

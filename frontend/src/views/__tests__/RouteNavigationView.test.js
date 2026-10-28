@@ -124,7 +124,9 @@ const mountNavigationViewWithRoute = (legs) => {
     shallow: true,
     global: {
       stubs: {
-        DefaultLayout: { template: '<div><slot /><slot name="footer" /></div>' }
+        DefaultLayout: { template: '<div><slot /><slot name="footer" /></div>' },
+        // 「次の目的地へ」はチュートリアルの包みの中にあるため、中身を描くスタブにする
+        TutorialSpotlight: { template: '<slot />' }
       }
     }
   });
@@ -451,10 +453,27 @@ describe('RouteNavigationView の画面上部の並び', () => {
     // 前後のボタンは同じ段に並べる（前が左、次が右）
     const rowButtons = [...rowEl.querySelectorAll('button')].map((button) => button.className);
     expect(rowButtons).toEqual(['previous-spot-btn', 'next-spot-btn']);
+
+    // 前の目的地のボタンは矢印を付けず、「次の目的地へ」と文言を揃える
+    expect(wrapper.find('.previous-spot-btn').text()).toBe('前の目的地へ');
   });
 
-  test('地図のズームボタンは、前後のボタンの段の下端＋余白に置く', async () => {
-    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ bottom: 150.2 });
+  test('口コミの表示切り替えは、見出しの下に自分・みんなを縦に並べる', () => {
+    const wrapper = mountNavigationViewWithRoute();
+    const togglesEl = wrapper.find('.review-toggles').element;
+
+    const children = [...togglesEl.children].map((child) => child.className);
+    expect(children).toEqual([
+      'review-toggles-label',
+      'review-toggle review-toggle-mine is-on',
+      'review-toggle review-toggle-other is-on'
+    ]);
+  });
+
+  test('地図の現在地へ戻るボタンは、口コミの表示切り替えの札の下端＋余白に置く', async () => {
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue({ bottom: 150.2 });
 
     const wrapper = mountNavigationViewWithRoute();
     // 描画後に測るため、測った値が地図へ渡るのは次の描画
@@ -462,9 +481,11 @@ describe('RouteNavigationView の画面上部の並び', () => {
 
     // 151（切り上げ）+ 余白8
     expect(wrapper.findComponent(RouteNavigationMap).props('controlsTopPx')).toBe(159);
+    // 測ったのは口コミの表示切り替えの札
+    expect(rectSpy.mock.contexts).toContain(wrapper.find('.review-toggles').element);
   });
 
-  test('バナーの高さが変わったら、ズームボタンの位置を測り直し、画面を離れたら見張りをやめる', async () => {
+  test('バナーの高さが変わったら、現在地へ戻るボタンの位置を測り直し、画面を離れたら見張りをやめる', async () => {
     const rectSpy = vi
       .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
       .mockReturnValue({ bottom: 130 });
@@ -497,7 +518,7 @@ describe('RouteNavigationView の画面上部の並び', () => {
       expect(observed).toEqual([wrapper.findComponent(RouteNextSpotBanner).element]);
       expect(map().props('controlsTopPx')).toBe(138);
 
-      // 長い名前でバナーが伸び、段が下がった
+      // 長い名前でバナーが伸び、口コミの表示切り替えの札が下がった
       rectSpy.mockReturnValue({ bottom: 170 });
       resizeCallback();
       await nextTick();
