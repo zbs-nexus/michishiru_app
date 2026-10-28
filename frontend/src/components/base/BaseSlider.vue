@@ -16,10 +16,20 @@ const props = defineProps({
     type: Number,
     required: true
   },
-  /** 選択できる値の上限 */
+  /** 選択できる値の上限（スライダーの可動域・目盛りの上限） */
   maxValue: {
     type: Number,
     required: true
+  },
+  /**
+   * 選べる値の頭打ち（km等）。目盛りや可動域（maxValue）は変えずに、
+   * 実際に選べる値だけをこの値で止めたいときに渡す。
+   * ドラッグし続けてもこれを超える値は発行せず、つまみもここで止まる。null のときは頭打ちしない。
+   * チュートリアルで上限10kmのまま5kmまでしか選ばせない用途で使う。
+   */
+  valueMaxValue: {
+    type: Number,
+    default: null
   },
   /** 値の刻み幅 */
   stepValue: {
@@ -45,23 +55,55 @@ const props = defineProps({
 
 const emit = defineEmits(['update:modelValue']);
 
-/** 読み上げ用の文字列 */
-const valueText = computed(() => `${props.modelValue} ${props.unit}`.trim());
+/**
+ * @description 値を頭打ち（valueMaxValue）で抑える。
+ * 頭打ちが指定されていない場合はそのまま返す。
+ * @param {number} value 抑える前の値
+ * @returns {number} 頭打ち後の値
+ */
+const clampValue = (value) => {
+  if (props.valueMaxValue !== null && value > props.valueMaxValue) {
+    return props.valueMaxValue;
+  }
+
+  return value;
+};
 
 /**
- * @description 入力された値を数値へ変換して親へ通知する
+ * つまみと目盛りに反映する表示値。頭打ちを効かせた値にする。
+ * 親から渡る modelValue が頭打ちを超えていても、つまみは頭打ちの位置で止まる。
+ */
+const displayValue = computed(() => clampValue(props.modelValue));
+
+/** 読み上げ用の文字列 */
+const valueText = computed(() => `${displayValue.value} ${props.unit}`.trim());
+
+/**
+ * @description 入力された値を頭打ちで抑えてから親へ通知する。
+ *
+ * range入力はドラッグ中もinputを発行するため、ここで頭打ちを超える値を切り落とす。
+ * ネイティブのつまみはドラッグ中に内部状態で動き、modelValueの再束縛だけでは
+ * 頭打ちの位置へ戻りきらない端末があるため、input要素のvalueも頭打ちの値へ書き戻して
+ * つまみそのものを押し戻す。
  * @param {Event} event inputイベント
  * @returns {void}
  */
 const handleInput = (event) => {
-  emit('update:modelValue', Number(event.target.value));
+  const clamped = clampValue(Number(event.target.value));
+
+  // つまみを頭打ちの位置へ戻す（ドラッグし続けても超えて見えないようにする）
+  if (Number(event.target.value) !== clamped) {
+    event.target.value = String(clamped);
+  }
+
+  emit('update:modelValue', clamped);
 };
 </script>
 
 <template>
   <div class="slider-wrapper">
     <output class="distance-value">
-      {{ modelValue }}<small v-if="unit">{{ unit }}</small>
+      {{ displayValue }}<small v-if="unit">{{ unit }}</small>
     </output>
     <input
       class="distance-slider"
@@ -69,7 +111,7 @@ const handleInput = (event) => {
       :min="minValue"
       :max="maxValue"
       :step="stepValue"
-      :value="modelValue"
+      :value="displayValue"
       :aria-labelledby="labelledBy"
       :aria-valuetext="valueText"
       @input="handleInput"
