@@ -312,6 +312,7 @@ const isTutorialCreateStep = computed(() =>
         :is-tutorial="tutorialStore.isActive"
         :tutorial-section="tutorialFormSection"
         :tutorial-genre-value="TUTORIAL_GENRE_ID"
+        :tutorial-max-distance-km="TUTORIAL_DISTANCE_KM"
         @select-genre="handleSelectGenre"
         @select-distance="handleSelectDistance"
         @toggle-genre-random="routeStore.toggleGenreRandom"

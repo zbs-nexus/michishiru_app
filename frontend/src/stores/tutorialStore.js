@@ -55,6 +55,24 @@ export const useTutorialStore = defineStore('tutorial', () => {
   };
 
   /**
+   * @description 指定したステップが今のステップなら、1つ前のステップへ戻す。
+   * 画面側の「前の目的地へ」のような戻し操作に合わせて呼ばれる。
+   * 今のステップと一致しない操作では何もしないため、想定外の順序では戻さない。
+   * 先頭のステップより前には戻さない。
+   * @param {string} step 戻す起点とみなす今のステップ名（TUTORIAL_STEP のいずれか）
+   * @returns {void}
+   */
+  const revertStep = (step) => {
+    if (!isActive.value || currentStep.value !== step) {
+      return;
+    }
+
+    if (stepIndex.value > 0) {
+      stepIndex.value -= 1;
+    }
+  };
+
+  /**
    * @description チュートリアルを終了して初期状態へ戻す
    * @returns {void}
    */
@@ -77,6 +95,7 @@ export const useTutorialStore = defineStore('tutorial', () => {
     currentMessage,
     start,
     completeStep,
+    revertStep,
     finish,
     isStep,
     // ステップ名の定数を画面から参照できるように再公開する

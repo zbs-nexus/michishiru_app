@@ -155,7 +155,9 @@ export const TUTORIAL_OTHER_REVIEW_SPOT = {
   spotName: '夕暮れがきれいな小さな橋',
   genreId: TUTORIAL_GENRE_ID,
   genreName: '写真',
-  position: { lng: ORIGIN.lng + 0.002, lat: ORIGIN.lat + 0.0022 },
+  // 起点・スポット1・スポット2を結んだ三角形の内側に収まる固定座標。
+  // 相対ずれではなく実座標で指定し、紫ピンを必ずこの位置に出す。
+  position: { lng: 139.7096096695339, lat: 35.68575734290154 },
   ratingAverage: 4.5,
   ratingCount: 12,
   photoKeys: [],

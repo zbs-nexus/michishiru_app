@@ -43,6 +43,11 @@ defineProps({
     type: Boolean,
     default: false
   },
+  /** 地図の操作（ドラッグ・ズーム）を許可するかどうか。チュートリアル中は止める */
+  isInteractive: {
+    type: Boolean,
+    default: true
+  },
   /** 新規で口コミを投稿する場所に立てる赤いピンの座標 { lng, lat }。未設定の場合はnull */
   pinPosition: {
     type: Object,
@@ -129,6 +134,7 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
       <RouteMap
         :geometry="geometry"
         :spots="spots"
+        :is-interactive="isInteractive"
         :show-current-location="isTracking"
         :current-location="currentLocation"
         :current-accuracy="currentAccuracy"
