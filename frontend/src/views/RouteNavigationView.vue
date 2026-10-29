@@ -109,12 +109,17 @@ const reviewTogglesRef = ref(null);
 
 /**
  * 測れるまでの、地図の現在地へ戻るボタンの上端（ピクセル）。
- * 名前が1行のときの口コミの表示切り替えの札の下端（約228）＋余白
+ * 名前が1行のときの口コミの表示切り替えの札の下端（約212）＋余白
  */
-const DEFAULT_MAP_CONTROLS_TOP_PX = 236;
+const DEFAULT_MAP_CONTROLS_TOP_PX = 218;
 
-/** 口コミの表示切り替えの札の下端から現在地へ戻るボタンまでの余白（ピクセル） */
-const MAP_CONTROLS_GAP_PX = 8;
+/**
+ * 口コミの表示切り替えの札の下端から現在地へ戻るボタンまでの余白（ピクセル）。
+ * 画面上部の段の間隔（.navigation-top の gap）と同じ値にして、縦の並びの間隔を揃える。
+ * MapLibre がコントロールに付ける既定の余白は RouteNavigationMap.vue で打ち消しているため、
+ * この値がそのまま見た目の間隔になる
+ */
+const MAP_CONTROLS_GAP_PX = 6;
 
 /**
  * 地図の現在地へ戻るボタンを置く上端（ピクセル）。
@@ -1375,6 +1380,9 @@ const handleConfirmEnd = async () => {
  *
  * 入れ物自体は地図の上に広がるため、空いている所では地図を操作できるよう
  * pointer-events を切り、中の部品だけで受け付ける。
+ *
+ * 段の間隔（gap: 6px）は、口コミの表示切り替えの札と地図の現在地へ戻るボタンの間
+ * （MAP_CONTROLS_GAP_PX）と同じ値にしている。変えるときは両方直す。
  */
 .navigation-top {
   position: fixed;
@@ -1520,7 +1528,7 @@ const handleConfirmEnd = async () => {
   flex-direction: column;
   align-items: stretch;
   box-sizing: border-box;
-  /* 余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
+  /* 余白を持たせず、内側のトグルの高さ（26px）をそのままタップ領域にする */
   padding: 0;
   /*
    * 2つのトグルを1枚の札にまとめているため、ドット絵の枠はこの外枠にだけ付ける。
@@ -1533,9 +1541,13 @@ const handleConfirmEnd = async () => {
   box-shadow: var(--shadow);
 }
 
-/* 見出し。下の2つのトグルと罫線で区切る */
+/*
+ * 見出し。下の2つのトグルと罫線で区切る。
+ * 札を小さくするため上下の余白だけを詰める。文字（11px）は下げない
+ * （ドット文字は小さくすると潰れて読めなくなるため）。
+ */
 .review-toggles-label {
-  padding: 4px 10px;
+  padding: 2px 8px;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
@@ -1544,12 +1556,16 @@ const handleConfirmEnd = async () => {
   border-bottom: 1px solid var(--border-ink);
 }
 
+/*
+ * 地図を広く見せるため、1行の高さは前後のボタン（32px）より一回り小さい 26px にする。
+ * 押せる大きさの最低基準（WCAG 2.5.8 の 24px）は上回るようにしている。
+ */
 .review-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 4px 12px 4px 10px;
+  min-height: 26px;
+  padding: 2px 10px 2px 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-gray);

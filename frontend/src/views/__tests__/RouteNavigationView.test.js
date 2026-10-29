@@ -531,8 +531,8 @@ describe('RouteNavigationView の画面上部の並び', () => {
     // 描画後に測るため、測った値が地図へ渡るのは次の描画
     await nextTick();
 
-    // 151（切り上げ）+ 余白8
-    expect(wrapper.findComponent(RouteNavigationMap).props('controlsTopPx')).toBe(159);
+    // 151（切り上げ）+ 余白6（画面上部の段の間隔と同じ）
+    expect(wrapper.findComponent(RouteNavigationMap).props('controlsTopPx')).toBe(157);
     // 測ったのは口コミの表示切り替えの札
     expect(rectSpy.mock.contexts).toContain(wrapper.find('.review-toggles').element);
   });
@@ -585,14 +585,14 @@ describe('RouteNavigationView の画面上部の並び', () => {
       await nextTick();
 
       expect(observed).toEqual([wrapper.findComponent(RouteNextSpotBanner).element]);
-      expect(map().props('controlsTopPx')).toBe(138);
+      expect(map().props('controlsTopPx')).toBe(136);
 
       // 長い名前でバナーが伸び、口コミの表示切り替えの札が下がった
       rectSpy.mockReturnValue({ bottom: 170 });
       resizeCallback();
       await nextTick();
 
-      expect(map().props('controlsTopPx')).toBe(178);
+      expect(map().props('controlsTopPx')).toBe(176);
 
       wrapper.unmount();
       expect(disconnect).toHaveBeenCalledTimes(1);
