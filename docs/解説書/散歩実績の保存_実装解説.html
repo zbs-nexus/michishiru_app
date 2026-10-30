@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>散歩実績の保存 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>散歩実績の保存 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-14 〜 2026-10-21<br>
+            <strong>📅 マージ日:</strong> 2026-10-14（本体）, 2026-10-21（保存のタイミングの変更）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-176, feature/NZ-236<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>dc87c1c</code>（実績の保存API・退避と再送。同じマージの「計測の信頼性」の部分は <a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a> で扱う）,
+            <code>c20633a</code>（保存を結果画面から案内画面の終了処理へ移動）
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>実績はまず画面の中で計測される</strong><br>
+            歩いた距離・巡ったスポット数・所要時間は、案内中に <code>walkStore</code> へ積み上げられます。
+            積み上げ方は <a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a> を参照してください。この解説書は、その値を<strong>サーバーへ残す</strong>部分です。
+        </div>
+        <div class="prereq">
+            <strong>Lambda のレイヤー責務（handler / service / repository）</strong><br>
+            handler はリクエストの受付と返却、service は業務の判断、repository は DynamoDB への読み書きだけを担います。
+            詳しくは <a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a> の解説を参照してください。
+        </div>
+        <div class="prereq">
+            <strong>冪等（べきとう）</strong><br>
+            「同じ要求を何回送っても、結果が1回送ったときと同じになる」性質です。通信が不安定だと同じ実績を送り直すことがあるため、
+            散歩ごとのID（<code>walkId</code>）で「もう保存済みか」を見分け、累計が二重に増えないようにしています。
+        </div>
+        <div class="prereq">
+            <strong>localStorage</strong><br>
+            ブラウザが端末内に持つ小さな保存領域です。画面を閉じても残りますが、ブラウザのデータ削除や別ブラウザへの乗り換えで消えます。
+            保存に失敗した実績の一時的な退避先として使っています。
+        </div>
+        <div class="prereq">
+            <strong>Cognito の sub</strong><br>
+            ログインした利用者ごとに Cognito が発行する変わらないIDです。API Gateway のオーソライザーが検証したトークンから取り出すので、
+            利用者が他人の ID を名乗ることはできません（<a href="./APIの認可_実装解説.html">APIの認可</a> を参照）。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            散歩を終えたとき、その回の実績（総距離・スポット数・所要時間・計測状態など）を DynamoDB の
+            <code>WalkResult-&lt;環境&gt;</code> テーブルへ保存し、同時に利用者ごとの累計（散歩の回数・累計距離・累計スポット数・累計時間）へ足す機能です。
+        </p>
+        <p>
+            通信できずに保存に失敗した場合は、端末の localStorage へ退避し、次にログインしたときや通信が戻ったときに自動で送り直します。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            これまでの実績は <code>walkStore</code> にしか無く、画面を再読み込みすると消えていました。
+            1回ごとの散歩結果（US-8）を見せるだけならそれで足りますが、「これまでに何km歩いたか」を使う機能
+            （<a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a>）には、利用者ごとに積み上がった記録が必要です。
+        </p>
+        <p>
+            前提条件書の「ユーザー単位のデータ管理」は「未定（キーに sub を含めるか）」のままですが、
+            この実績テーブルは sub をキーにして利用者ごとに分けています。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 終了の確定（案内画面）</strong><br>
+            終了確認で「終了する」を押すと、<code>RouteNavigationView</code> の <code>handleConfirmEnd</code> が
+            「記録中…」を全画面に出し、<code>walkStore.endWalk()</code> で終了時刻を確定します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 送る内容の組み立て（useWalkResultSave）</strong><br>
+            <code>saveCurrentWalkResult()</code> がストアの値を API の形に変換します（時刻はISO形式、距離は整数のメートル、ジャンルは英語ID）。
+            このとき <code>walkId</code> を <code>crypto.randomUUID()</code> で1回だけ決めます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 送信（walkResultService）</strong><br>
+            <code>POST /api/v1/walk-results</code> を idToken 付きで送ります。失敗したときは
+            「時間を置けば通る（通信不能・429・5xx）」と「何度送っても通らない（その他の4xx）」に分けて例外を投げます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: サーバー側の保存（createWalkResult Lambda）</strong><br>
+            handler がトークンの <code>sub</code> を利用者IDとし、validator で値を検証します。
+            service は計測状態を見て「累計にも足す」か「記録だけ残す」かを選び、repository が DynamoDB へ書き込みます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: 失敗時の退避</strong><br>
+            「時間を置けば通る」失敗だけを localStorage へ退避し、「通信が回復したときに自動で保存します」とトーストで知らせます。
+            通らない失敗は退避せず「実績を保存できませんでした」と出します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 6: 結果画面へ</strong><br>
+            保存の後にマスコットの実績を取り直してレベルアップを判定し（<a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a>）、
+            結果画面へ進みます。保存に失敗しても結果画面には進みます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 7: 退避した実績の再送（App.vue）</strong><br>
+            ログイン済みになったとき（再読み込み直後を含む）と、ブラウザが <code>online</code> に戻ったときに
+            <code>flushPendingWalkResults()</code> が退避分を順に送り直します。
+        </div>
+
+        <h3>どのマージが何を担っているか</h3>
+        <table>
+            <tr><th>マージ</th><th>担っている部分</th></tr>
+            <tr><td><code>dc87c1c</code></td><td>Step 2〜5・7 の全体。API・テーブル・退避と再送。当初は結果画面を開いたときに保存していた</td></tr>
+            <tr><td><code>c20633a</code></td><td>Step 1・6。保存を案内画面の終了処理へ移し、保存 → 取り直し → レベルアップ判定の順に待ってから結果画面へ進むようにした（結果が一瞬見えてから演出が重なるちらつきを防ぐため）</td></tr>
+        </table>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>テーブルの形（WalkResult-&lt;環境&gt;）</h3>
+        <p>1つのテーブルに2種類のアイテムを入れています（単一テーブル設計）。</p>
+        <table>
+            <tr><th>アイテム</th><th>pk</th><th>sk</th><th>主な属性</th></tr>
+            <tr><td>1回分の実績</td><td><code>USER#&lt;sub&gt;</code></td><td><code>WALK#&lt;endedAt&gt;#&lt;walkId&gt;</code></td><td>totalDistanceM / spotCount / elapsedMinutes / startedAt / endedAt / measurementStatus / routeTitle / genreId</td></tr>
+            <tr><td>利用者の累計</td><td><code>USER#&lt;sub&gt;</code></td><td><code>TOTAL</code></td><td>walkCount / cumulativeDistanceM / cumulativeSpotCount / cumulativeMinutes / updatedAt</td></tr>
+        </table>
+        <p>
+            sk を終了時刻から始めているので、将来「履歴を新しい順に出す」ときも pk で絞って <code>WALK#</code> の前方一致で引けます。そのため GSI は作っていません。
+        </p>
+
+        <h3>backend/functions/createWalkResult/service.js</h3>
+        <div class="code-block"><pre>const { isStored } =
+  item.measurementStatus === MEASUREMENT_STATUS_UNAVAILABLE
+    ? await repositories.createWalkResultWithoutTotals(item)
+    : await repositories.createWalkResultWithTotals(item);
+
+if (!isStored) {
+  return { walkId: item.walkId, isAlreadySaved: true };
+}</pre></div>
+        <ul>
+            <li>一度も測位できなかった散歩（<code>unavailable</code>）は、距離もスポット数も実際の行動を表していないので、記録だけ残して累計には足しません</li>
+            <li>途中まで測れた散歩（<code>partial</code>）は、測れた分に意味があるので累計に足します</li>
+            <li>同じ <code>walkId</code> が保存済みなら <code>isAlreadySaved: true</code> の<strong>成功</strong>として返します。退避分の再送で必ず通る道なので、エラーにすると利用者に無意味な失敗が見えてしまいます</li>
+        </ul>
+
+        <h3>backend/functions/createWalkResult/repository.js（累計と同時に保存）</h3>
+        <div class="code-block"><pre>new TransactWriteCommand({
+  TransactItems: [
+    { Put: { ..., Item: toWalkResultItem(walkResult),
+             ConditionExpression: 'attribute_not_exists(pk)' } },
+    { Update: { ..., Key: { pk: ..., sk: TOTAL_SORT_KEY },
+                UpdateExpression:
+                  'ADD walkCount :one, cumulativeDistanceM :distanceM, ...' } }
+  ]
+})</pre></div>
+        <ul>
+            <li><strong>トランザクション</strong>（2つの書き込みを「両方成功」か「両方なし」にまとめる仕組み）で、1回分の保存と累計の加算を同時に行います</li>
+            <li>1回分の Put は「同じキーがまだ無いこと」が条件です。再送でキーが重なるとトランザクション全体が止まるので、累計も二重に増えません</li>
+            <li>累計は <code>ADD</code> でサーバー側に足させるので、累計アイテムを先に作っておく必要がありません（初回の散歩で自動的にできます）</li>
+            <li>テーブル名の環境変数が未設定なら保存せずエラーにします。成功を装うと退避も働かず、実績が失われるためです</li>
+        </ul>
+
+        <h3>validator.js の主な検証</h3>
+        <table>
+            <tr><th>項目</th><th>上限など</th></tr>
+            <tr><td><code>walkId</code></td><td>UUID v4 の形式</td></tr>
+            <tr><td><code>totalDistanceM</code></td><td>200,000m（200km）まで。巨大な誤値が累計に入るのを防ぐ</td></tr>
+            <tr><td><code>spotCount</code></td><td>50 まで</td></tr>
+            <tr><td><code>elapsedMinutes</code></td><td>1,440分（24時間）まで。案内画面の閉じ忘れなどの異常値を弾く</td></tr>
+            <tr><td><code>measurementStatus</code></td><td><code>complete</code> / <code>partial</code> / <code>unavailable</code> のいずれか（フロントの <code>walkStore</code> と同じ3値）</td></tr>
+            <tr><td><code>routeTitle</code></td><td>120文字を超えたら<strong>エラーにせず切り詰める</strong></td></tr>
+        </table>
+
+        <h3>frontend/src/composables/useWalkResultSave.js</h3>
+        <table>
+            <tr><th>関数</th><th>入力 → 出力</th><th>ポイント</th></tr>
+            <tr><td><code>saveCurrentWalkResult()</code></td><td>なし → 保存できたか（boolean）</td><td>案内を経ていない（<code>startedAt</code> が無い）なら送らずに成功扱い。失敗時は種類に応じて退避するか決め、<code>saveErrorMessage</code> に文言を入れる</td></tr>
+            <tr><td><code>flushPendingWalkResults()</code></td><td>なし → なし</td><td>退避した本人（<code>ownerUsername</code>）がログインしているときだけ送る。通らない内容は捨て、通信がまだ戻っていなければ途中で切り上げる</td></tr>
+        </table>
+        <div class="code-block"><pre>// 退避した本人がサインインしているときだけ送る。別のユーザーの分は
+// 消さずに残し、その人がサインインしたときに送られるようにする
+if (pendingResult.ownerUsername !== authStore.username) {
+  continue;
+}</pre></div>
+        <p>
+            保存APIは「送ってきたトークンの持ち主」の実績として保存します。localStorage はサインアウトしても消えないので、
+            持ち主を確かめずに送ると、同じ端末で別の人がログインしたときにその人の累計へ足されてしまいます。
+        </p>
+        <p>
+            再送中の旗 <code>isFlushing</code> は <code>ref</code> ではなくファイル直下の普通の変数です。
+            「ログイン」と「通信の復帰」がほぼ同時に起きても、composable を呼んだ場所をまたいで二重送信を防ぐためです。
+        </p>
+
+        <h3>frontend/src/utils/pendingWalkResults.js</h3>
+        <p>
+            localStorage のキー <code>michishiru.pendingWalkResults</code> に、退避分を最大20件まで配列で持ちます（超えたら古いものから捨てる）。
+            読み書きに失敗しても例外を投げません。退避はできたらする（best effort）ものなので、ここで落ちると「保存に失敗した」と知らせる本来の処理まで止まるためです。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>利用者IDはリクエストから読まない</strong><br>
+            handler は <code>event.requestContext.authorizer.claims.sub</code> だけを使います。ボディに <code>userId</code> を入れても無視されます。
+            新しく利用者ごとのAPIを作るときも同じ方針にしてください。
+        </div>
+        <div class="important">
+            <strong>計測状態の3値はフロントとバックエンドの両方にある</strong><br>
+            <code>backend/functions/createWalkResult/constants.js</code> の <code>MEASUREMENT_STATUSES</code> と、
+            <code>frontend/src/stores/walkStore.js</code> の <code>MEASUREMENT_STATUS</code> は同じ値でなければなりません。片方だけ増やすと保存が 400 で落ちます。
+        </div>
+        <div class="important">
+            <strong>useWalkResultSave.js 冒頭のコメントが古い</strong><br>
+            ファイル冒頭に「保存の起点は結果画面（<code>WalkResultView.vue</code>）」とありますが、<code>c20633a</code> 以降の保存の起点は
+            案内画面の終了処理（<code>RouteNavigationView.vue</code> の <code>handleConfirmEnd</code>）です。結果画面は保存しません。
+        </div>
+        <div class="important">
+            <strong>チュートリアル中は保存しない</strong><br>
+            チュートリアルの終了処理は保存・取り直しを飛ばして結果画面へ進みます（<a href="./チュートリアル_実装解説.html">チュートリアル</a>）。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>ローカルで保存まで確かめるには、AWS の認証情報と環境変数 <code>WALK_RESULT_TABLE_NAME</code>（例: <code>WalkResult-dev</code>）が必要です。未設定だと API は 503 を返し、フロントは退避へ積みます（その動きも確認対象）</li>
+            <li><code>npm run dev</code> で起動し、ルートを作って案内を開始し、少し歩いて（または短時間で）終了する</li>
+            <li>「記録中…」の後に結果画面が出ること、DynamoDB の <code>WalkResult-dev</code> に1回分のアイテムと <code>TOTAL</code> のアイテムがあることを確かめる</li>
+            <li>ブラウザの開発者ツールでオフラインにして終了し、「通信が回復したときに自動で保存します」と出ること、localStorage に <code>michishiru.pendingWalkResults</code> が積まれることを確かめる。オンラインに戻すと送られて消えることも確かめる</li>
+            <li>テスト: <code>backend</code> で <code>npm test</code>（<code>functions/createWalkResult/__tests__/</code> の repository / service / validator）、
+                <code>frontend</code> で <code>npm test</code>（<code>useWalkResultSave</code> / <code>walkResultService</code> / <code>pendingWalkResults</code> / <code>App</code> / <code>RouteNavigationView</code> / <code>WalkResultView</code> のテスト）、<code>iac</code> で <code>npm test</code></li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>backend/functions/createWalkResult/handler.js</code></td><td>sub の取り出し・検証の呼び出し・応答</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>backend/functions/createWalkResult/validator.js</code></td><td>入力の検証</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>backend/functions/createWalkResult/service.js</code></td><td>累計に足すかの判断・保存済みの扱い</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>backend/functions/createWalkResult/repository.js</code></td><td>DynamoDB への書き込み（トランザクション / 条件付きPut）</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>backend/functions/createWalkResult/constants.js</code></td><td>テーブル名と各上限</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>backend/shared/constants/errorCodes.js</code></td><td>エラーコードの追加</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>frontend/src/services/walkResultService.js</code></td><td>API呼び出しと失敗の種類分け</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>frontend/src/composables/useWalkResultSave.js</code></td><td>組み立て・保存・退避・再送</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>frontend/src/utils/pendingWalkResults.js</code></td><td>localStorage の退避キュー</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>frontend/src/App.vue</code></td><td>ログイン時・通信復帰時の再送の起点</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td>終了処理で保存（<code>c20633a</code> 以降）</td><td>feature/NZ-176, feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/views/WalkResultView.vue</code></td><td>結果の表示（<code>dc87c1c</code> 時点では保存の起点だった）</td><td>feature/NZ-176, feature/NZ-236</td></tr>
+                <tr><td><code>iac/lib/michishiru-stack.ts</code></td><td><code>WalkResultTable</code>・<code>CreateWalkResultFunction</code>（PutItem / UpdateItem だけを許可）・<code>POST /api/v1/walk-results</code>（Cognito 認可付き）</td><td>feature/NZ-176</td></tr>
+                <tr><td><code>tools/localApiServer.js</code></td><td>ローカルAPIへ <code>/api/v1/walk-results</code> を追加</td><td>feature/NZ-176</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-8（散歩結果確認）の受け入れ条件と、「ユーザー単位のデータ管理」の未決事項</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>walkId / walkCount / cumulativeDistanceM / pendingWalkResults / ownerUsername の定義</td></tr>
+            <tr><td><a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a></td><td>保存する値（距離・計測状態）の求め方（前提になる機能）</td></tr>
+            <tr><td><a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a></td><td>保存した累計を使う機能（続きの機能）</td></tr>
+            <tr><td><a href="./APIの認可_実装解説.html">APIの認可</a></td><td>Cognito オーソライザーと sub の扱い</td></tr>
+        </table>
+    </div>
+</body>
+</html>
