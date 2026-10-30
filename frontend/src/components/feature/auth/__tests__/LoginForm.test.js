@@ -178,3 +178,59 @@ describe('LoginForm のパスワード表示切替', () => {
   });
 });
 
+describe('LoginForm の初期値（QRコードのURLパラメータ）', () => {
+  test('初期値を渡すと入力欄にあらかじめ埋める', () => {
+    const wrapper = mount(LoginForm, {
+      props: {
+        initialUsername: 'michishiru-demo',
+        initialPassword: 'Michishiru-demo@2026'
+      }
+    });
+
+    expect(wrapper.find('#login-username').element.value).toBe(
+      'michishiru-demo'
+    );
+    expect(wrapper.find('#login-password').element.value).toBe(
+      'Michishiru-demo@2026'
+    );
+  });
+
+  test('初期値を渡さない場合は空欄のまま', () => {
+    const wrapper = mount(LoginForm);
+
+    expect(wrapper.find('#login-username').element.value).toBe('');
+    expect(wrapper.find('#login-password').element.value).toBe('');
+  });
+
+  test('埋めた初期値でそのまま送信できる', async () => {
+    const wrapper = mount(LoginForm, {
+      props: {
+        initialUsername: 'michishiru-demo',
+        initialPassword: 'Michishiru-demo@2026'
+      }
+    });
+
+    await wrapper.find('form').trigger('submit');
+
+    expect(wrapper.emitted('submitLogin')).toEqual([
+      [{ username: 'michishiru-demo', password: 'Michishiru-demo@2026' }]
+    ]);
+  });
+
+  test('埋めた初期値を手で編集してから送信できる', async () => {
+    const wrapper = mount(LoginForm, {
+      props: {
+        initialUsername: 'michishiru-demo',
+        initialPassword: 'Michishiru-demo@2026'
+      }
+    });
+
+    await wrapper.find('#login-username').setValue('another-user');
+    await wrapper.find('form').trigger('submit');
+
+    expect(wrapper.emitted('submitLogin')).toEqual([
+      [{ username: 'another-user', password: 'Michishiru-demo@2026' }]
+    ]);
+  });
+});
+
