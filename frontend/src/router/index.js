@@ -103,7 +103,14 @@ router.beforeEach(async (to) => {
   }
 
   if (!authStore.isSignedIn) {
-    return { name: 'login' };
+    // デモ用QRコードのように user / pass を付けたURLで来た場合、
+    // ログイン画面でも自動入力できるようクエリを引き継ぐ
+    const { user, pass } = to.query;
+    const loginQuery = {};
+    if (typeof user === 'string') loginQuery.user = user;
+    if (typeof pass === 'string') loginQuery.pass = pass;
+
+    return { name: 'login', query: loginQuery };
   }
 
   if (!to.meta.requiresRoute) {
