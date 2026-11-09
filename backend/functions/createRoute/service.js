@@ -122,7 +122,7 @@ const collectMyReviewedSpotIds = async (userId, repositories) => {
 };
 
 /**
- * @description 検索条件のジャンルに合い、現在地から選択された距離以内にある
+ * @description 検索条件のジャンルに合い、現在地から指定した範囲（周辺検索と同じ半径）以内にある
  * 口コミの場所を、評価の高い順に集める。
  *
  * ジャンルは口コミの投稿時に選んだ genreId と、検索条件のジャンルID（おまかせなら選ばれた全件）を
@@ -133,7 +133,7 @@ const collectMyReviewedSpotIds = async (userId, repositories) => {
  * （地図のオレンジのピンと同じ判定）。
  * @param {object} params パラメータ
  * @param {{lat: number, lng: number}} params.currentLocation 現在地
- * @param {number} params.radiusM 候補にする範囲（m）。選択された距離
+ * @param {number} params.radiusM 候補にする範囲（m）。周辺検索と同じ半径（resolveQueryRadiusM）
  * @param {string[]} params.genreIds 検索条件のジャンルID（英語。例: nature）
  * @param {string|null} params.userId 呼び出し元のユーザーID（Cognito の sub）。分からなければnull
  * @param {object} repositories データ取得に使うリポジトリ
@@ -906,7 +906,10 @@ export const createRoute = async (
     collectReviewCandidateSpots(
       {
         currentLocation,
-        radiusM: selectedDistanceKm * METERS_PER_KM,
+        // 周辺検索と同じ半径にそろえる。選択された距離いっぱいまで探すと、
+        // 往復だけで許容距離（目標×DISTANCE_UPPER_RATIO）を超える遠い場所が候補に入り、
+        // 距離超過でスポットを削っても口コミの場所が残ってルートを作れなくなるため
+        radiusM: queryRadiusM,
         // 周辺検索と同じジャンル（おまかせなら選ばれたすべて）に合う口コミの場所だけを候補にする
         genreIds: selectedGenres.map((genre) => genre.genreId),
         userId
