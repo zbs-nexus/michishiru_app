@@ -57,7 +57,7 @@ inclusion: always
 | スポット | spot | ユーザーが立ち寄る場所（公園・神社・カフェ等） |
 | スポットID | spotId | スポットを一意に識別する値 |
 | 候補スポット | candidateSpots | 周辺検索で得た、選定前のスポットの一覧 |
-| 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から選択された距離以内にある口コミが付いた場所（平均評価の高い順）。ルートの候補に混ぜる |
+| 口コミの場所の候補 | reviewCandidates | 検索条件のジャンル（genreId）に合い、現在地から周辺検索（Places）と同じ半径以内にある口コミが付いた場所（平均評価の高い順）。ルートの候補に混ぜる。半径は選択された距離の半分（500m〜5km）で、往復で許容距離を超える遠い場所を候補に入れない |
 | 口コミの場所か | isReviewSpot | ルートのスポットが口コミの付いた場所か。地図では番号の丸で描き、押すと口コミを開く（`spot-marker is-review`）。他の人の口コミの場所は紫（`--review-purple`）、自分の口コミの場所はオレンジ（isMyReviewSpot）。その場所の口コミのピンは重ねて描かない |
 | 自分の口コミの場所か | isMyReviewSpot | ルートの口コミの場所（isReviewSpot が真）のうち、自分が口コミ投稿済みの場所か。地図では番号の丸の色をオレンジ（`--review-orange`）に描き分ける（`spot-marker is-review is-mine`）。判定は地図のオレンジのピン（myReviews）と同じく自分の口コミ（`GSI-UserReview`）を reviewSpotId と突き合わせて行い、ルート作成時点で決める。口コミの場所でないスポットでは常に偽 |
 | 巡る口コミの場所のID | reviewSpotId | ルートのスポットのもとになった口コミの場所の spotId。ピンを押して口コミを開くために使う。口コミの場所でなければ null |
@@ -458,3 +458,4 @@ inclusion: always
 | 2026/10/28 | 口コミの投稿中に全画面で「投稿中…」を出すようにしたことに伴い「口コミ」へ isSubmittingReview / MIN_REVIEW_SUBMITTING_DURATION_MS / BaseProcessingOverlay を追加。「記録中…」も同じ部品（BaseProcessingOverlay）へ置き換えた |
 | 2026/10/28 | 現在地へ戻るボタンを、固定の倍率から押した時点の倍率のまま寄せる動きに変更。NAVIGATION_ZOOM_LEVEL の説明を、案内開始時に最初の区間を収められない場合の代わりの倍率へ改めた |
 | 2026/10/28 | 案内開始時の倍率を、最初の区間を収める倍率から固定の倍率（NAVIGATION_ZOOM_LEVEL = 17）に変更したことに伴い、shouldCenterOnOrigin と NAVIGATION_ZOOM_LEVEL の説明を更新 |
+| 2026/11/02 | 口コミの場所の候補を探す範囲を、選択された距離から周辺検索と同じ半径（距離の半分）へ狭めたことに伴い、reviewCandidates の説明を更新 |
