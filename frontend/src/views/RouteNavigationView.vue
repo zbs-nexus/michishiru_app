@@ -329,6 +329,17 @@ const isTutorialLongPressStep = computed(() =>
 );
 
 /**
+ * チュートリアルで新規投稿を体験させている間（長押し・入力・投稿の段階）かどうか。
+ * フォームを×で閉じた後も、この間は長押しで開き直せるようにするために使う。
+ */
+const isTutorialNewReviewPhase = computed(
+  () =>
+    isTutorialLongPressStep.value ||
+    tutorialStore.isStep(tutorialStore.STEP.INPUT_NEW_REVIEW) ||
+    tutorialStore.isStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW)
+);
+
+/**
  * 「みんな」の口コミのトグルを操作できるかどうか。
  * チュートリアル外は常に操作できる。チュートリアル中は一本道を保つため、
  * 「みんなを表示」段階（SHOW_OTHER_REVIEWS）でだけ操作できるようにする。
@@ -751,11 +762,12 @@ const showReviewFormAt = async (position) => {
  * @returns {Promise<void>}
  */
 const handleLongPressMap = async (position) => {
-  // チュートリアル中は、新規投稿を体験させる段階（LONG_PRESS_MAP）でだけ長押しを受け付ける。
+  // チュートリアル中は、新規投稿を体験させる段階（長押し・入力・投稿）でだけ長押しを受け付ける。
+  // 入力・投稿の段階で×ボタンでフォームを閉じても、長押しで開き直せるようにする。
   // 実APIの解決は呼ばず、未投稿扱いの新規モードでフォームを開いて自由入力を体験させる。
   // それ以外の段階では長押しを無視して操作を一本道に保つ。
   if (tutorialStore.isActive) {
-    if (!isTutorialLongPressStep.value) {
+    if (!isTutorialNewReviewPhase.value) {
       return;
     }
 
@@ -764,8 +776,11 @@ const handleLongPressMap = async (position) => {
     isExistingSpotSelected.value = false;
     selectedReviewSpotId.value = null;
 
-    // 入力フォームを開く段階（INPUT_NEW_REVIEW）へ進め、吹き出しの案内を切り替える
-    tutorialStore.completeStep(tutorialStore.STEP.LONG_PRESS_MAP);
+    // 入力フォームを開く段階（INPUT_NEW_REVIEW）へ進め、吹き出しの案内を切り替える。
+    // 開き直しの場合は既に先の段階にいるため、進めない
+    if (isTutorialLongPressStep.value) {
+      tutorialStore.completeStep(tutorialStore.STEP.LONG_PRESS_MAP);
+    }
 
     // resolvedSpot は null のまま（新規モード）。押した位置に赤いピンを立てて開く
     await showReviewFormAt(position);
@@ -1003,25 +1018,12 @@ const handleAdvanceToNextSpot = () => {
 };
 
 /**
- * @description 前の目的地へ戻す。チュートリアル中は、この操作に合わせて案内ステップも1つ戻す。
- * 「次の目的地へ」で進んだステップ（ADVANCE_SPOT → OPEN_REVIEW）を、戻す操作で元に戻すことで、
- * ボタン操作と案内の進み具合を一致させる。
+ * @description 前の目的地へ戻す。
+ * チュートリアル中はボタン自体を出さない（テンプレート側）。
  * 戻す操作そのものは useRouteProgress が担う。
  * @returns {void}
  */
 const handleReturnToPreviousSpot = () => {
-  // チュートリアル中は、スポットを戻すのではなく、案内（解説）を1つ前へ戻す。
-  // とくにフォームを開く段階では、開いているフォームを閉じてから前の解説へ戻し、
-  // 「前の目的地へ」で手順をやり直せるようにする。
-  if (tutorialStore.isActive) {
-    if (isReviewFormVisible.value) {
-      handleCloseReview();
-    }
-
-    tutorialStore.goBack();
-    return;
-  }
-
   returnToPreviousSpot();
 };
 
@@ -1138,8 +1140,11 @@ const handleConfirmEnd = async () => {
           誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
           到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
         -->
+        <!--
+          チュートリアル中は出さない。戻すと案内の進行とスポットの状態がずれ、意図しない挙動になるため。
+        -->
         <button
-          v-if="canReturnToPreviousSpot"
+          v-if="canReturnToPreviousSpot && !tutorialStore.isActive"
           class="previous-spot-btn"
           type="button"
           aria-label="前の目的地に戻る"
