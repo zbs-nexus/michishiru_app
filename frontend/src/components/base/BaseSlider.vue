@@ -31,6 +31,16 @@ const props = defineProps({
     type: Number,
     default: null
   },
+  /**
+   * 選べる値の下限の頭打ち（km等）。目盛りや可動域（minValue）は変えずに、
+   * 実際に選べる値だけをこの値で下支えしたいときに渡す。
+   * ドラッグし続けてもこれを下回る値は発行せず、つまみもここで止まる。null のときは頭打ちしない。
+   * チュートリアルで一度5kmに合わせたら5km未満へ戻せなくする用途で使う。
+   */
+  valueMinValue: {
+    type: Number,
+    default: null
+  },
   /** 値の刻み幅 */
   stepValue: {
     type: Number,
@@ -56,14 +66,18 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue']);
 
 /**
- * @description 値を頭打ち（valueMaxValue）で抑える。
- * 頭打ちが指定されていない場合はそのまま返す。
+ * @description 値を頭打ち（valueMaxValue / valueMinValue）で抑える。
+ * 頭打ちが指定されていない側はそのまま通す。
  * @param {number} value 抑える前の値
  * @returns {number} 頭打ち後の値
  */
 const clampValue = (value) => {
   if (props.valueMaxValue !== null && value > props.valueMaxValue) {
     return props.valueMaxValue;
+  }
+
+  if (props.valueMinValue !== null && value < props.valueMinValue) {
+    return props.valueMinValue;
   }
 
   return value;

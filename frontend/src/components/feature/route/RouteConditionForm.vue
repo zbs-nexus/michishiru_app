@@ -95,6 +95,26 @@ const distanceValueMaxKm = computed(() => {
 });
 
 /**
+ * スライダーで選べる値の下限（km）。
+ * チュートリアルで距離を操作させる段階では、いったん上限（tutorialMaxDistanceKm = 5km）まで
+ * 合わせたら、そこから5km未満へは戻せないようにする。
+ * スライダーを右端まで動かした後につまみを左へ戻す操作を封じることで、距離を5kmに固定する。
+ * まだ5kmへ届いていない間は下限を設けず、下から5kmまで動かせるようにする。
+ * 頭打ちしない場合は null。
+ */
+const distanceValueMinKm = computed(() => {
+  if (
+    props.isTutorial &&
+    props.tutorialMaxDistanceKm !== null &&
+    props.distanceKm >= props.tutorialMaxDistanceKm
+  ) {
+    return props.tutorialMaxDistanceKm;
+  }
+
+  return null;
+});
+
+/**
  * 距離スライダーの目盛り。本番と同じく、マスタの下限と上限（10km）のラベルを表示する。
  * チュートリアルでも可動域は変えず、選べる値だけを頭打ちにするため目盛りは本番のままにする。
  */
@@ -241,6 +261,7 @@ const isGenreButtonDimmed = (value) => {
           :min-value="distanceRange.minKm"
           :max-value="distanceRange.maxKm"
           :value-max-value="distanceValueMaxKm"
+          :value-min-value="distanceValueMinKm"
           :scale-labels="distanceScaleLabels"
           unit="km"
           labelled-by="distance-label"

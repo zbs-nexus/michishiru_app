@@ -79,7 +79,7 @@ export const TUTORIAL_STEPS = [
     step: TUTORIAL_STEP.SHOW_OTHER_REVIEWS,
     routeName: 'route-navigation',
     message:
-      'みんなの口コミも見てみよう。右上の「みんな」を押すと、口コミのある場所が紫のピンで地図に出るよ。'
+      'みんなの口コミも見てみよう。口コミの「みんな」を押すと、口コミのある場所が紫のピンで地図に出るよ。'
   },
   {
     step: TUTORIAL_STEP.OPEN_REVIEW,
