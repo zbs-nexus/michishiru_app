@@ -1141,13 +1141,16 @@ const handleConfirmEnd = async () => {
           到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
         -->
         <!--
-          チュートリアル中は出さない。戻すと案内の進行とスポットの状態がずれ、意図しない挙動になるため。
+          チュートリアル中は表示したまま押せなくする（非活性）。
+          戻すと案内の進行とスポットの状態がずれ、意図しない挙動になるため。
         -->
         <button
-          v-if="canReturnToPreviousSpot && !tutorialStore.isActive"
+          v-if="canReturnToPreviousSpot"
           class="previous-spot-btn"
+          :class="{ 'is-locked': tutorialStore.isActive }"
           type="button"
           aria-label="前の目的地に戻る"
+          :disabled="tutorialStore.isActive"
           @click="handleReturnToPreviousSpot"
         >
           前の目的地へ
@@ -1517,6 +1520,17 @@ const handleConfirmEnd = async () => {
 
 .previous-spot-btn:active {
   background: var(--bg-deep);
+}
+
+/* チュートリアル中の非活性表示。disabled と併用して押下そのものも止める */
+.previous-spot-btn.is-locked {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+.previous-spot-btn.is-locked:active {
+  background: var(--surface);
 }
 
 /*
