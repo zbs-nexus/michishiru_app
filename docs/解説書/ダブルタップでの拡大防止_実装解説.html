@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ダブルタップでの拡大防止 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>ダブルタップでの拡大防止 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-21<br>
+            <strong>📅 マージ日:</strong> 2026-10-21（12:51）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-306<br>
+            <strong>🔖 対象マージ:</strong> <code>37fe610</code>（ダブルタップでの画面拡大防止）<br>
+            <small>※ 同じブランチの <code>10ca729</code>（フクロウ画像の追加）は <a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a> で扱います。</small>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>スマートフォンのダブルタップ拡大</strong><br>
+            スマートフォンのブラウザは、画面を素早く2回たたくとページを拡大します。ボタンを素早く2回押したときにも起き、意図せず画面が拡大されて戻しにくくなります。
+        </div>
+        <div class="prereq">
+            <strong>CSS の touch-action</strong><br>
+            その要素の上で、ブラウザにどのタッチ操作（スクロール・ピンチ・ダブルタップ拡大）を任せるかを指定するプロパティです。
+            <code>manipulation</code> は「スクロールとピンチは許可、ダブルタップ拡大だけ止める」指定です。
+        </div>
+        <div class="prereq">
+            <strong>:where() と詳細度</strong><br>
+            CSS では、より具体的なセレクタの指定が勝ちます（詳細度）。<code>:where(...)</code> で囲んだ部分は詳細度が0になるので、各コンポーネントの個別の指定が必ず優先されます。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            ボタン・リンク・入力欄などの操作部品の上でダブルタップしても、画面が拡大しないようにした変更です。
+            ピンチでの拡大は残しています。地図の中は対象外で、地図のダブルタップ拡大は従来どおり動きます。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            案内画面では「次の目的地へ」や口コミの表示切り替えを歩きながら素早く押すため、2回押しで画面が拡大する誤操作が起きていました。
+            一方で、文字を大きくして読みたい人のためにピンチ拡大は止めてはいけません（アクセシビリティ）。そこでダブルタップ拡大だけを部品単位で止めています。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 共通ルール（global.css）</strong><br>
+            操作部品（<code>button, a, label, summary, select, input, textarea, [role="button"]</code>）に <code>touch-action: manipulation</code> を付けます。地図の中（<code>.maplibregl-canvas-container</code> の子孫）は除きます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: ボタン以外の重なり部品にも個別に付ける</strong><br>
+            トースト（<code>.toast</code>）、次の目的地のバナー（<code>.next-spot-banner</code>）、口コミの表示切り替え（<code>.review-toggles</code>）、口コミフォーム（<code>.review-form</code>）、
+            ポップアップ（<code>.popup</code>）、下部のボタン置き場（<code>.bottom-actions</code>）にも同じ指定を足しています。部品のすき間をたたいても拡大しないようにするためです。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+        <h3>frontend/src/assets/styles/global.css</h3>
+        <div class="code-block"><pre>:where(button, a, label, summary, select, input, textarea, [role="button"]):not(.maplibregl-canvas-container *) {
+  touch-action: manipulation;
+}</pre></div>
+        <ul>
+            <li><code>:where</code> で詳細度を0にしているので、スワイプのために <code>touch-action: none</code> を持つ部品（写真の全画面表示・口コミフォームのハンドル）の指定が常に勝ちます</li>
+            <li>地図の拡大縮小は MapLibre GL が自分で <code>touch-action</code> を設定して扱うため、上書きしません</li>
+            <li><code>index.html</code> の viewport に <code>user-scalable=no</code> や <code>maximum-scale</code> は書きません。ページ全体の拡大が止まってしまい、iOS はそもそも無視するためです</li>
+        </ul>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>操作部品でない場所のダブルタップでは拡大が残る</strong><br>
+            見出しや本文など、対象に含めていない場所をダブルタップすると拡大することがあります（検証記録で既知の範囲外としている）。
+        </div>
+        <div class="important">
+            <strong>新しい重なり部品を作るときは同じ指定を足す</strong><br>
+            ボタン以外の要素（<code>div</code> など）で作った浮いた部品は共通ルールの対象外です。トーストやバナーと同じく <code>touch-action: manipulation</code> を足してください。
+        </div>
+        <div class="important">
+            <strong>自動テストでは実際の拡大は確かめられない</strong><br>
+            <code>src/assets/styles/__tests__/global.test.js</code> は CSS の宣言があるかどうかを確かめるだけです。実際の動きは実機（iPhone Safari / Android Chrome）で確認します。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>スマートフォンから dev 環境（またはローカルを同じネットワークで公開したもの）を開く</li>
+            <li>案内画面で口コミの表示切り替え・「次の目的地へ」・「前の目的地へ」・終了ボタンを素早く2回押し、画面が拡大しないことを確かめる</li>
+            <li>トーストや終了ボタン付近でピンチすると、従来どおり拡大できることを確かめる</li>
+            <li>地図のダブルタップ・ピンチ・ドラッグ・長押し、写真の全画面表示のスワイプ、距離スライダーが従来どおり動くことを確かめる</li>
+            <li>テスト: <code>frontend</code> で <code>npm test</code>（<code>src/assets/styles/__tests__/global.test.js</code>）</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>frontend/src/assets/styles/global.css</code></td><td>共通ルールと <code>.popup</code> / <code>.bottom-actions</code> への指定</td><td>feature/NZ-306</td></tr>
+                <tr><td><code>frontend/src/components/base/BaseToast.vue</code></td><td><code>.toast</code> への指定</td><td>feature/NZ-306</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteNextSpotBanner.vue</code></td><td><code>.next-spot-banner</code> への指定</td><td>feature/NZ-306</td></tr>
+                <tr><td><code>frontend/src/components/feature/review/ReviewPostForm.vue</code></td><td><code>.review-form</code> への指定</td><td>feature/NZ-306</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td><code>.review-toggles</code> への指定</td><td>feature/NZ-306</td></tr>
+                <tr><td><code>frontend/src/assets/styles/__tests__/global.test.js</code></td><td>（新規）宣言の有無と範囲のテスト</td><td>feature/NZ-306</td></tr>
+                <tr><td><code>.agents/tasks/disable-double-tap-zoom/</code></td><td>計画・レビュー・検証の記録（実機確認の項目を含む）</td><td>feature/NZ-306</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-6（案内画面）の受け入れ条件</td></tr>
+            <tr><td><a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a></td><td><code>global.css</code> の役割と全体のスタイルの決まり</td></tr>
+            <tr><td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td><td>連打されやすい案内画面のボタン</td></tr>
+        </table>
+    </div>
+</body>
+</html>

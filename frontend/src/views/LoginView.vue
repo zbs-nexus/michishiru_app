@@ -32,6 +32,13 @@ if (route.query.registered === '1') {
   showMessage('パスワードを再設定しました。新しいパスワードでログインしてください。');
 }
 
+// デモ用のQRコードから開いた場合、URLのクエリパラメータ（user / pass）を
+// 入力欄の初期値にする。パラメータが無ければ空欄のまま。
+// クエリは文字列または配列で来るため、文字列以外は空文字へ寄せる
+const toQueryString = (value) => (typeof value === 'string' ? value : '');
+const initialUsername = toQueryString(route.query.user);
+const initialPassword = toQueryString(route.query.pass);
+
 /**
  * @description 入力された資格情報でサインインし、成功したらホームへ進む。
  * 失敗の理由はストアが保持し、フォーム側に表示される。
@@ -80,6 +87,8 @@ const handleLogin = async ({ username, password }) => {
     <LoginForm
       :is-signing-in="authStore.isSigningIn"
       :error-message="authStore.errorMessage"
+      :initial-username="initialUsername"
+      :initial-password="initialPassword"
       @submit-login="handleLogin"
     />
 

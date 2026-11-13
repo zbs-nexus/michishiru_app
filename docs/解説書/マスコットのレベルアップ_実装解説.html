@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>マスコットのレベルアップ - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>マスコットのレベルアップ - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-21 〜 2026-10-28<br>
+            <strong>📅 マージ日:</strong> 2026-10-21（5件）, 2026-10-28（2件）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-236, feature/NZ-306, NZ-286<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>7d58840</code>（経験値とレベルの本体・実績取得API）,
+            <code>ce94517</code>（必要経験値の丸め・取得前のちらつき防止・画像の差し替え。同じマージに含まれるドット絵風デザインの再適用は <a href="./マスコットとファンタジー調デザイン_実装解説.html">デザインの解説書</a> で扱う）,
+            <code>e8cd294</code>（提案画面のレベル表示を RouteInfoCard へ統合）,
+            <code>31fcd2c</code>（レベルアップのお祝い演出）,
+            <code>c20633a</code>（判定をストアへ移動・自動送りの廃止）,
+            <code>10ca729</code>（画像素材の追加のみ）,
+            <code>0b675e9</code>（Lv.2〜10の画像とレベル名の差し替え）,
+            <code>cabcdf5</code>（画像の大容量化に伴うデプロイ設定の修正）
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>マスコット（フクロウ）と吹き出し</strong><br>
+            各画面に1体だけ出てくる案内役です。表示部品（<code>MascotAvatar</code> / <code>MascotSpeechBubble</code>）の作りは
+            <a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a> で説明しています。
+            この解説書は、その姿を<strong>実績に応じて Lv.1〜Lv.10 へ育てる仕組み</strong>を扱います。
+        </div>
+        <div class="prereq">
+            <strong>累計の実績</strong><br>
+            散歩を終えると、その回の距離と時間がサーバー（DynamoDB の <code>WalkResult-&lt;環境&gt;</code> テーブル）の累計へ足されます。
+            足す仕組みは <a href="./散歩実績の保存_実装解説.html">散歩実績の保存</a> を参照してください。レベルはこの累計と口コミの投稿件数から決まります。
+        </div>
+        <div class="prereq">
+            <strong>純関数</strong><br>
+            同じ入力には必ず同じ出力を返し、外の状態を書き換えない関数です。経験値とレベルの計算は
+            <code>utils/mascotLevelProgress.js</code> の純関数にまとめてあり、Vue を使わずにテストできます。
+        </div>
+        <div class="prereq">
+            <strong>Pinia のストア</strong><br>
+            画面をまたいで値を共有する入れ物です。レベルはホーム・ロード・提案・案内・結果の各画面で使うので、
+            <code>mascotStore</code> に1つだけ持たせています。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            利用者の実績（口コミの投稿件数・歩いた累計距離・歩いた累計時間）を経験値に換算し、
+            マスコットのレベル（1〜10）と次のレベルまでの進み具合（経験値バー）を表示する機能です。
+            散歩を終えてレベルが上がった場合は、散歩結果画面の前に全画面の「レベルアップ！」演出を見せます。
+        </p>
+        <table>
+            <tr><th>実績</th><th>経験値</th></tr>
+            <tr><td>口コミの投稿 1件</td><td>100</td></tr>
+            <tr><td>歩いた距離 1km</td><td>100</td></tr>
+            <tr><td>歩いた時間 1分</td><td>10</td></tr>
+        </table>
+        <p>
+            次のレベルまでに必要な経験値は Lv.1→2 が 1,000 で、そこから1段ごとに約1.3倍（10の位で丸め）に増えます。
+            到達に必要な累計は Lv.2 = 1,000、Lv.5 = 6,190、Lv.10 = 32,080 です。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            散歩を続けるきっかけを作るためです。歩いた分・口コミを書いた分だけ案内役が育つと、
+            「もう少し歩こう」「口コミも残そう」という動機になります。
+        </p>
+        <p>
+            前提条件書では「マスコットのレベルの決め方」が「今後追加予定の要素（未対応）」として残っています。
+            このマージ群で実績・しきい値・画像がそろい、実際にレベルが変わるようになりました（前提条件書側は未更新です）。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 実績の取得（ホーム画面を開いたとき）</strong><br>
+            <code>RouteConditionView</code> の <code>onMounted</code> で <code>mascotStore.loadExperience()</code> を呼び、
+            <code>GET /api/v1/experience</code> から累計距離・累計時間・投稿件数を受け取ります。
+            ルート提案画面へ直接来た（再読み込みした）場合は、提案画面でも取り直します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: サーバー側（getUserExperience Lambda）</strong><br>
+            Cognito の <code>sub</code> で利用者を特定し、<code>WalkResult</code> テーブルの累計アイテムを <code>GetItem</code>、
+            <code>Review</code> テーブルの <code>GSI-UserReview</code> を件数だけ <code>Query</code> して返します。
+            <strong>経験値やレベルはサーバーでは計算しません。</strong>生の実績だけを返します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 経験値とレベルの計算（フロント）</strong><br>
+            ストアの computed が <code>toExperiencePoints</code> → <code>toMascotLevelProgress</code> の順に呼び、
+            レベル・レベル内の経験値・次までの必要経験値・割合を求めます。各画面はこれを読んでマスコットの姿と経験値バーを描きます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 散歩の終了時にレベルアップを判定（案内画面）</strong><br>
+            終了確認で「終了する」を押すと、実績を保存した<strong>後で</strong> <code>mascotStore.refreshAndDetectLevelUp()</code> を呼びます。
+            取り直す前後のレベルを比べ、上がっていれば経由したレベルの一覧（例: <code>[4, 5]</code>）を
+            <code>pendingLevelUpLevels</code> へ積みます。この間は全画面に「記録中…」を出します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: お祝い演出（散歩結果画面）</strong><br>
+            <code>WalkResultView</code> は <code>pendingLevelUpLevels</code> が空でなければ最初に <code>MascotLevelUpCelebration</code> を出し、
+            1段ずつタップで進めます。最後の段を閉じると <code>clearPendingLevelUp()</code> で一覧を消し、結果の本体を表示します。
+        </div>
+
+        <h3>どのマージが何を担っているか</h3>
+        <table>
+            <tr><th>マージ</th><th>担っている部分</th></tr>
+            <tr><td><code>7d58840</code></td><td>Step 1〜3 の全体。<code>getUserExperience</code> Lambda、経験値の定数、計算の純関数、ストア、経験値バー、Lv.1〜10 の画像（PNG）</td></tr>
+            <tr><td><code>ce94517</code></td><td>必要経験値を10の位で丸めた表に変更。取得が終わるまでホームのマスコットを出さない（<code>isExperienceLoaded</code>）</td></tr>
+            <tr><td><code>e8cd294</code></td><td>提案画面のレベル表示をルート情報のカード（<code>RouteInfoCard</code>）の中へ移動</td></tr>
+            <tr><td><code>31fcd2c</code></td><td>Step 5 のお祝い演出（当初は結果画面で判定する <code>useMascotLevelUp.js</code> を使っていた）</td></tr>
+            <tr><td><code>c20633a</code></td><td>判定を Step 4（案内画面の終了処理＋ストア）へ移し、<code>useMascotLevelUp.js</code> を削除。演出の時間による自動送りを廃止</td></tr>
+            <tr><td><code>0b675e9</code> / <code>cabcdf5</code></td><td>Lv.2〜10 の画像を高解像度版に差し替え、一部のレベル名を変更。成果物が大きくなったためデプロイ用 Lambda のメモリを 512MB に引き上げ</td></tr>
+        </table>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/constants/mascotExperience.js</h3>
+        <p>係数とレベル表の唯一の定義元です。</p>
+        <div class="code-block"><pre>export const MASCOT_LEVEL_REQUIREMENTS = [
+  1000, 1300, 1690, 2200, 2860, 3720, 4840, 6290, 8180
+];
+
+export const MASCOT_LEVEL_THRESHOLDS = MASCOT_LEVEL_REQUIREMENTS.reduce(
+  (thresholds, requirement) => [
+    ...thresholds,
+    thresholds[thresholds.length - 1] + requirement
+  ],
+  [0]
+);</pre></div>
+        <p>
+            「各レベルの必要経験値」だけを手で書き、「到達に必要な累計」は足し上げて作ります。
+            両方を手で書くと、片方だけ直したときにレベルが黙って狂うためです。
+        </p>
+
+        <h3>frontend/src/utils/mascotLevelProgress.js</h3>
+        <div class="code-block"><pre>export const toExperiencePoints = ({ cumulativeDistanceM, cumulativeMinutes, reviewCount }) => {
+  const reviewPoints = toFiniteNumber(reviewCount) * EXPERIENCE_PER_REVIEW;
+  const distancePoints =
+    (toFiniteNumber(cumulativeDistanceM) / METERS_PER_KM) * EXPERIENCE_PER_KM;
+  const minutePoints = toFiniteNumber(cumulativeMinutes) * EXPERIENCE_PER_MINUTE;
+
+  return Math.floor(reviewPoints + distancePoints + minutePoints);
+};</pre></div>
+        <ul>
+            <li><strong>入力:</strong> 累計距離（メートル）・累計時間（分）・投稿件数</li>
+            <li><strong>出力:</strong> 累計経験値（整数）</li>
+            <li>切り捨ては3項の合計に対して1回だけ行います。項ごとに丸めると、同じ距離でも分け方で結果が変わるためです</li>
+            <li>数値でない値（欠けた応答など）は 0 として扱います</li>
+        </ul>
+        <p>
+            <code>toMascotLevelProgress(totalExperiencePoints)</code> はレベルと進捗をまとめて返します。
+            Lv.10 は次が無いので、<code>experienceToNextLevel</code> を <code>null</code>、割合を 1 にします（0 で割らないため）。
+            経験値バーはこのとき「MAX」と表示します。
+        </p>
+
+        <h3>frontend/src/stores/mascotStore.js</h3>
+        <table>
+            <tr><th>名前</th><th>役割</th></tr>
+            <tr><td><code>loadExperience()</code></td><td>実績を取得する。失敗しても例外を投げず、<code>hasExperience = false</code>（Lv.1・バーなし）で続ける</td></tr>
+            <tr><td><code>hasExperience</code></td><td>取得に成功したか。「実績0で取得できた」と「取得できなかった」を区別する</td></tr>
+            <tr><td><code>isExperienceLoaded</code></td><td>取得を一度でも終えたか（成否を問わない）。ホームはこれが真になるまでマスコットを出さない</td></tr>
+            <tr><td><code>mascotLevel</code></td><td>画面に出すレベル。取得できていなければ Lv.1</td></tr>
+            <tr><td><code>refreshAndDetectLevelUp()</code></td><td>取り直してレベルアップを判定し、<code>pendingLevelUpLevels</code> へ積む</td></tr>
+            <tr><td><code>clearPendingLevelUp()</code></td><td>演出を見せ終えたら一覧を消す</td></tr>
+            <tr><td><code>resetExperience()</code></td><td>サインアウト時に初期化し、次の利用者に前の人のレベルを出さない</td></tr>
+        </table>
+        <div class="code-block"><pre>const refreshAndDetectLevelUp = async () => {
+  const levelBeforeWalk = isExperienceLoaded.value ? mascotLevel.value : null;
+
+  await loadExperience();
+
+  if (!hasExperience.value || levelBeforeWalk === null) {
+    pendingLevelUpLevels.value = [];
+    return;
+  }
+  ...
+  for (let level = levelBeforeWalk + 1; level &lt;= levelAfterWalk; level += 1) {
+    levels.push(level);
+  }
+  pendingLevelUpLevels.value = levels;
+};</pre></div>
+        <p>
+            散歩前のレベルが分からない（一度も取得していない）ときは <code>null</code> にして判定しません。
+            未取得の Lv.1 を基準にすると、取り直しただけで「Lv.1 → Lv.5 にレベルアップ」と誤って祝ってしまうためです。
+        </p>
+
+        <h3>backend/functions/getUserExperience/</h3>
+        <p>handler → service → repository の3層です（バリデーションする入力が無いため validator はありません）。</p>
+        <div class="code-block"><pre>export const getUserExperience = async ({ userId }, repository = experienceRepository) => {
+  const [walkTotals, reviewCount] = await Promise.all([
+    repository.getWalkTotalsByUserId(userId),
+    repository.getReviewCountByUserId(userId)
+  ]);
+
+  return {
+    cumulativeDistanceM: walkTotals?.cumulativeDistanceM ?? 0,
+    cumulativeMinutes: walkTotals?.cumulativeMinutes ?? 0,
+    reviewCount
+  };
+};</pre></div>
+        <ul>
+            <li>2つの取得は互いに依存しないので <code>Promise.all</code> で同時に行います</li>
+            <li>まだ散歩を保存していない人には累計アイテムが無いので、0 として返します（エラーにしない）</li>
+            <li>件数は <code>Select: 'COUNT'</code> で数え、口コミの本文は受け取りません。1回の応答は1MBで切れるため、続きがある限りページを送って合算します</li>
+            <li>テーブル名の環境変数が未設定なら、0 ではなくエラー（<code>DATA_SOURCE_ERROR</code>）にします。「実績0」と「読めなかった」を取り違えると、レベルが下がったように見えるためです</li>
+        </ul>
+
+        <h3>frontend/src/components/feature/mascot/MascotLevelUpCelebration.vue</h3>
+        <ul>
+            <li><strong>入力:</strong> <code>levels</code>（見せるレベルの昇順の配列）</li>
+            <li><strong>出力:</strong> 最後の段を閉じたとき <code>close</code> を emit</li>
+            <li>タップ・Enter・Space で次の段へ進み、Esc でいつでも閉じられます。時間では進みません</li>
+            <li>画像は1枚絵なので、旧→新は「フェードアウト → 光 → フェードイン」で切り替えます</li>
+            <li>開いたときにフォーカスを演出へ移し、閉じたら元の要素へ戻します（キーボード・読み上げの利用者が迷わないため）</li>
+        </ul>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>レベルアップの判定は案内画面の終了処理でだけ行う</strong><br>
+            ホームや提案画面の <code>loadExperience()</code> でも実績は取り直しますが、そこではレベルアップを判定しません。
+            判定を <code>refreshAndDetectLevelUp()</code> に閉じ込めることで、画面を行き来しただけで演出が出る誤発火を防いでいます。
+            チュートリアル中は経験値を動かさないため、判定も演出も行いません。
+        </div>
+        <div class="important">
+            <strong>係数・レベル表を変えるときはフロントだけ直す</strong><br>
+            API は生の実績を返すだけなので、係数（1km=100 など）やレベル表を変えてもバックエンドとAPIはそのままで済みます。
+            ただし変えると、既存の利用者のレベルが一斉に変わります。
+        </div>
+        <div class="important">
+            <strong>API のパスが単数（<code>/experience</code>）</strong><br>
+            規約は「パスは複数形」ですが、<code>experiences</code> だと「体験」に読めるため意図的に単数にしています（<code>michishiru-stack.ts</code> のコメントに記載）。
+        </div>
+        <div class="important">
+            <strong>画像の容量</strong><br>
+            <code>0b675e9</code> で Lv.2〜10 の画像が 1〜3.7MB に増えました（Lv.1 は約42KB のまま）。成果物が増えた結果、S3 へ配置する裏方の Lambda が
+            既定の 128MB でメモリ不足になり、デプロイがタイムアウトまで止まる問題が起きたため、<code>cabcdf5</code> で <code>memoryLimit: 512</code> にしています。
+            また、使われていない画像フォルダ（<code>assets/images/mascot _bk/</code> / <code>assets/images/mascot20261021/</code>）がリポジトリに残っています。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>ローカルで実績を読むには AWS の認証情報と環境変数 <code>WALK_RESULT_TABLE_NAME</code> / <code>REVIEW_TABLE_NAME</code> が必要です。未設定だと API は 503 を返し、画面は Lv.1・経験値バーなしで続きます（その動きも確認対象）</li>
+            <li><code>npm run dev</code> で起動し、ホーム画面でマスコットのレベル名と経験値バーが出ることを確かめる</li>
+            <li>散歩を最後まで行い（短い距離で可）、「終了する」の後に「記録中…」が出て、レベルが上がったときだけ演出が出ることを確かめる</li>
+            <li>演出をタップで進め、閉じた後に結果画面が出ること、結果画面から戻って再び来ても演出が再演されないことを確かめる</li>
+            <li>テスト: <code>frontend</code> で <code>npm test</code>（<code>src/constants/__tests__/mascotExperience.test.js</code> / <code>src/utils/__tests__/mascotLevelProgress.test.js</code>）、
+                <code>backend</code> で <code>npm test</code>（<code>functions/getUserExperience/__tests__/</code>）、<code>iac</code> で <code>npm test</code></li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>backend/functions/getUserExperience/</code>（handler / service / repository / constants）</td><td>累計の実績と投稿件数を返すAPI</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/services/experienceService.js</code></td><td><code>GET /api/v1/experience</code> を idToken 付きで呼ぶ</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/constants/mascotExperience.js</code></td><td>係数と必要経験値の表</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/utils/mascotLevelProgress.js</code></td><td>経験値とレベルの計算（純関数）</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/stores/mascotStore.js</code></td><td>実績の保持・レベルアップ判定</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/constants/mascotLevels.js</code></td><td>レベルごとの名前と画像</td><td>feature/NZ-236, NZ-286</td></tr>
+                <tr><td><code>frontend/src/assets/images/mascot/mascot-lv01.png</code>〜<code>lv10.png</code></td><td>各レベルの姿</td><td>feature/NZ-236, NZ-286</td></tr>
+                <tr><td><code>frontend/src/components/feature/mascot/MascotExperienceBar.vue</code></td><td>経験値バー（表示のみ）</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/components/feature/mascot/MascotLevelUpCelebration.vue</code></td><td>レベルアップの全画面演出</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteInfoCard.vue</code> / <code>RouteNextSpotBanner.vue</code> / <code>RouteLoadingOverlay.vue</code></td><td>提案・案内・ロード中の各画面でレベルを表示</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td>終了処理で保存 → 取り直し → 判定</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>frontend/src/views/WalkResultView.vue</code></td><td>演出の表示と後片付け</td><td>feature/NZ-236</td></tr>
+                <tr><td><code>iac/lib/michishiru-stack.ts</code></td><td><code>GetUserExperienceFunction</code> と <code>GET /api/v1/experience</code>（Cognito 認可付き）。静的ファイル配置のメモリ上限</td><td>feature/NZ-236, NZ-286</td></tr>
+                <tr><td><code>tools/localApiServer.js</code></td><td>ローカルAPIへ <code>/api/v1/experience</code> を追加</td><td>feature/NZ-236</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>「マスコットの表示方法」（確定）と「マスコットのレベルの決め方」（未対応のまま残っている記述）</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>「マスコット」の節。experiencePoints / pendingLevelUpLevels / refreshAndDetectLevelUp などの定義と、reviewCount と ratingCount の違い</td></tr>
+            <tr><td><a href="../キャラクター選定理由・レベルアップ機能.html">キャラクター選定理由・レベルアップ機能</a></td><td>フクロウを選んだ理由とレベルごとの姿の紹介</td></tr>
+            <tr><td><a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a></td><td>マスコットの表示部品と吹き出しの作り（前提になる機能）</td></tr>
+            <tr><td><a href="./散歩実績の保存_実装解説.html">散歩実績の保存</a></td><td>経験値のもとになる累計の距離・時間の保存（前提になる機能）</td></tr>
+            <tr><td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td><td>投稿件数のもとになる口コミと <code>GSI-UserReview</code></td></tr>
+        </table>
+    </div>
+</body>
+</html>

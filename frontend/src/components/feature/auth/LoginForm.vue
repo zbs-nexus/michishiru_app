@@ -26,6 +26,16 @@ const props = defineProps({
   errorMessage: {
     type: String,
     default: null
+  },
+  /** ユーザー名の初期値（QRコードのURLパラメータから渡される）。無い場合は空文字 */
+  initialUsername: {
+    type: String,
+    default: ''
+  },
+  /** パスワードの初期値（QRコードのURLパラメータから渡される）。無い場合は空文字 */
+  initialPassword: {
+    type: String,
+    default: ''
   }
 });
 
@@ -40,11 +50,11 @@ const {
   enablePasswordReveal
 } = usePasswordVisibility();
 
-/** 入力中のユーザー名 */
-const username = ref('');
+/** 入力中のユーザー名。URLパラメータで渡された場合はそれを初期値にする */
+const username = ref(props.initialUsername);
 
-/** 入力中のパスワード */
-const password = ref('');
+/** 入力中のパスワード。URLパラメータで渡された場合はそれを初期値にする */
+const password = ref(props.initialPassword);
 
 /** 項目ごとの入力チェックの結果。問題が無い項目はnull */
 const fieldErrors = ref({

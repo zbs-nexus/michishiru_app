@@ -24,6 +24,8 @@
 </head>
 <body>
     <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
         <h1>NZ-185 おまかせ条件（ジャンル・距離） - 実装解説</h1>
 
         <div class="info-box">
@@ -31,7 +33,15 @@
             <strong>🌿 ブランチ:</strong><br>
             &nbsp;&nbsp;・<code>feature/NZ-185</code>（PR #60 / <code>c4d66d3</code> / 15:22）おまかせ機能の本体<br>
             &nbsp;&nbsp;・<code>feature/NZ-185-omakase-design</code>（PR #63 / <code>9103fce</code> / 15:51）ボタン配置とトーストのデザイン調整<br>
+            &nbsp;&nbsp;・<code>featurea/NZ-319</code>（PR #127 / <code>ab48b44</code> / 2026-10-28 09:33）おまかせボタンの表示を「？」から「おまかせ」の文字に変更<br>
             <strong>📝 課題番号:</strong> NZ-185
+        </div>
+
+        <div class="info-box">
+            <strong>2026-10-28 更新:</strong> おまかせのボタンは「？」の丸いアイコンではなく、<strong>「おまかせ」と書かれた角丸のボタン</strong>になりました（<code>ab48b44</code>。クラス名 <code>random-icon-btn</code> は同じ）。
+            本文中の「<code>？</code> ボタン」は、現在の「おまかせ」ボタンのことです。<br>
+            また、チュートリアル中はおまかせボタンが無効になります（<a href="./チュートリアル_実装解説.html">チュートリアル</a>）。
+            ジャンルのボタンは画像付きの見た目に変わっています（<a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a>）。
         </div>
 
         <h2>📖 この機能について</h2>
@@ -185,6 +195,15 @@ const hasRequiredConditions = computed(() =&gt; Boolean(genre.value) || isGenreR
                 <tr><td><code>frontend/src/composables/useToastMessage.js</code></td><td>トーストの種類（<code>variant</code>）を管理</td></tr>
             </table>
         </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-1（情報入力画面）・US-2（ルート作成処理）の受け入れ条件</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>genreId / genreName と、トーストの <code>variant</code>（<code>error</code> / <code>omakase</code>）</td></tr>
+            <tr><td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td><td>おまかせで選んだ値を使うルート作成の本体</td></tr>
+            <tr><td><a href="./検索条件マスタ_実装解説.html">検索条件マスタ</a></td><td>おまかせで選ぶ元になるジャンル・距離のマスタ</td></tr>
+        </table>
     </div>
 </body>
 </html>

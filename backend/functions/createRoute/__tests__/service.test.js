@@ -626,6 +626,32 @@ describe('createRoute（口コミの場所とチェーン店）', () => {
     assert.ok(result.spots.every((spot) => spot.isReviewSpot === false));
   });
 
+  it('周辺検索の半径（目標距離の半分）より遠い口コミの場所は、選択された距離以内でも候補に入れない', async () => {
+    // 現在地から約2.2km。目標3kmの周辺検索の半径（1.5km）の外で、目標距離（3km）の内側にある。
+    // 往復だけで約4.4kmになり許容距離（4.2km）を超えるため、候補に入れるとルートを作れなくなる
+    const outsideRadiusReviewSpot = {
+      name: '口コミ半径外',
+      genreId: 'nature',
+      position: [139.728, 35.6862],
+      ratingAverage: 5
+    };
+    const { repositories, calls } = createRepositoryStub({
+      reviewSpots: [outsideRadiusReviewSpot, nearReviewSpot],
+      distancesM: [3000]
+    });
+
+    const result = await createRoute(conditions, repositories);
+
+    // Bedrockへ渡す候補に入らない（半径内の口コミの場所だけが入る）
+    const reviewNames = extractCandidates(calls.prompts[0])
+      .filter((spot) => spot.isReviewSpot)
+      .map((spot) => spot.name);
+    assert.deepEqual(reviewNames, ['口コミ近']);
+    // 口コミの場所を通らなかったときの差し込みの対象にもならない
+    assert.ok(calls.calculatedSpotNames.every((names) => !names.includes('口コミ半径外')));
+    assert.ok(result.spots.every((spot) => spot.name !== '口コミ半径外'));
+  });
+
   it('距離超過でスポットを削るときは、口コミの場所を残して口コミでないスポットから外す', async () => {
     // 口コミの場所を最後尾に置く。単純に最後尾を外す実装だと口コミの場所が消えるため、
     // 「口コミでないスポットから外す」ことをこの並びで見分けられる

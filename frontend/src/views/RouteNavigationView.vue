@@ -109,12 +109,17 @@ const reviewTogglesRef = ref(null);
 
 /**
  * 測れるまでの、地図の現在地へ戻るボタンの上端（ピクセル）。
- * 名前が1行のときの口コミの表示切り替えの札の下端（約228）＋余白
+ * 名前が1行のときの口コミの表示切り替えの札の下端（約212）＋余白
  */
-const DEFAULT_MAP_CONTROLS_TOP_PX = 236;
+const DEFAULT_MAP_CONTROLS_TOP_PX = 218;
 
-/** 口コミの表示切り替えの札の下端から現在地へ戻るボタンまでの余白（ピクセル） */
-const MAP_CONTROLS_GAP_PX = 8;
+/**
+ * 口コミの表示切り替えの札の下端から現在地へ戻るボタンまでの余白（ピクセル）。
+ * 画面上部の段の間隔（.navigation-top の gap）と同じ値にして、縦の並びの間隔を揃える。
+ * MapLibre がコントロールに付ける既定の余白は RouteNavigationMap.vue で打ち消しているため、
+ * この値がそのまま見た目の間隔になる
+ */
+const MAP_CONTROLS_GAP_PX = 6;
 
 /**
  * 地図の現在地へ戻るボタンを置く上端（ピクセル）。
@@ -321,6 +326,17 @@ const isTutorialShowOtherReviewsStep = computed(() =>
 /** チュートリアルで地図を長押しして新規投稿を始めさせる段階かどうか */
 const isTutorialLongPressStep = computed(() =>
   tutorialStore.isStep(tutorialStore.STEP.LONG_PRESS_MAP)
+);
+
+/**
+ * チュートリアルで新規投稿を体験させている間（長押し・入力・投稿の段階）かどうか。
+ * フォームを×で閉じた後も、この間は長押しで開き直せるようにするために使う。
+ */
+const isTutorialNewReviewPhase = computed(
+  () =>
+    isTutorialLongPressStep.value ||
+    tutorialStore.isStep(tutorialStore.STEP.INPUT_NEW_REVIEW) ||
+    tutorialStore.isStep(tutorialStore.STEP.SUBMIT_NEW_REVIEW)
 );
 
 /**
@@ -746,11 +762,12 @@ const showReviewFormAt = async (position) => {
  * @returns {Promise<void>}
  */
 const handleLongPressMap = async (position) => {
-  // チュートリアル中は、新規投稿を体験させる段階（LONG_PRESS_MAP）でだけ長押しを受け付ける。
+  // チュートリアル中は、新規投稿を体験させる段階（長押し・入力・投稿）でだけ長押しを受け付ける。
+  // 入力・投稿の段階で×ボタンでフォームを閉じても、長押しで開き直せるようにする。
   // 実APIの解決は呼ばず、未投稿扱いの新規モードでフォームを開いて自由入力を体験させる。
   // それ以外の段階では長押しを無視して操作を一本道に保つ。
   if (tutorialStore.isActive) {
-    if (!isTutorialLongPressStep.value) {
+    if (!isTutorialNewReviewPhase.value) {
       return;
     }
 
@@ -759,8 +776,11 @@ const handleLongPressMap = async (position) => {
     isExistingSpotSelected.value = false;
     selectedReviewSpotId.value = null;
 
-    // 入力フォームを開く段階（INPUT_NEW_REVIEW）へ進め、吹き出しの案内を切り替える
-    tutorialStore.completeStep(tutorialStore.STEP.LONG_PRESS_MAP);
+    // 入力フォームを開く段階（INPUT_NEW_REVIEW）へ進め、吹き出しの案内を切り替える。
+    // 開き直しの場合は既に先の段階にいるため、進めない
+    if (isTutorialLongPressStep.value) {
+      tutorialStore.completeStep(tutorialStore.STEP.LONG_PRESS_MAP);
+    }
 
     // resolvedSpot は null のまま（新規モード）。押した位置に赤いピンを立てて開く
     await showReviewFormAt(position);
@@ -998,25 +1018,12 @@ const handleAdvanceToNextSpot = () => {
 };
 
 /**
- * @description 前の目的地へ戻す。チュートリアル中は、この操作に合わせて案内ステップも1つ戻す。
- * 「次の目的地へ」で進んだステップ（ADVANCE_SPOT → OPEN_REVIEW）を、戻す操作で元に戻すことで、
- * ボタン操作と案内の進み具合を一致させる。
+ * @description 前の目的地へ戻す。
+ * チュートリアル中はボタン自体を出さない（テンプレート側）。
  * 戻す操作そのものは useRouteProgress が担う。
  * @returns {void}
  */
 const handleReturnToPreviousSpot = () => {
-  // チュートリアル中は、スポットを戻すのではなく、案内（解説）を1つ前へ戻す。
-  // とくにフォームを開く段階では、開いているフォームを閉じてから前の解説へ戻し、
-  // 「前の目的地へ」で手順をやり直せるようにする。
-  if (tutorialStore.isActive) {
-    if (isReviewFormVisible.value) {
-      handleCloseReview();
-    }
-
-    tutorialStore.goBack();
-    return;
-  }
-
   returnToPreviousSpot();
 };
 
@@ -1133,11 +1140,17 @@ const handleConfirmEnd = async () => {
           誤って「次の目的地へ」を押したときに1つ前へ戻す。戻したスポットの足跡も消える。
           到達済みが無い（1スポット目）ときは戻す先が無いため出さない。すべて巡った後も戻せる。
         -->
+        <!--
+          チュートリアル中は表示したまま押せなくする（非活性）。
+          戻すと案内の進行とスポットの状態がずれ、意図しない挙動になるため。
+        -->
         <button
           v-if="canReturnToPreviousSpot"
           class="previous-spot-btn"
+          :class="{ 'is-locked': tutorialStore.isActive }"
           type="button"
           aria-label="前の目的地に戻る"
+          :disabled="tutorialStore.isActive"
           @click="handleReturnToPreviousSpot"
         >
           前の目的地へ
@@ -1375,6 +1388,9 @@ const handleConfirmEnd = async () => {
  *
  * 入れ物自体は地図の上に広がるため、空いている所では地図を操作できるよう
  * pointer-events を切り、中の部品だけで受け付ける。
+ *
+ * 段の間隔（gap: 6px）は、口コミの表示切り替えの札と地図の現在地へ戻るボタンの間
+ * （MAP_CONTROLS_GAP_PX）と同じ値にしている。変えるときは両方直す。
  */
 .navigation-top {
   position: fixed;
@@ -1506,6 +1522,17 @@ const handleConfirmEnd = async () => {
   background: var(--bg-deep);
 }
 
+/* チュートリアル中の非活性表示。disabled と併用して押下そのものも止める */
+.previous-spot-btn.is-locked {
+  opacity: 0.4;
+  filter: grayscale(0.5);
+  cursor: not-allowed;
+}
+
+.previous-spot-btn.is-locked:active {
+  background: var(--surface);
+}
+
 /*
  * 口コミピンの表示切り替え（自分・他の人の2つ）を1枚の札にまとめる。
  * 前後のボタンの段の下・右端（「次の目的地へ」の下）に置き、
@@ -1520,7 +1547,7 @@ const handleConfirmEnd = async () => {
   flex-direction: column;
   align-items: stretch;
   box-sizing: border-box;
-  /* 余白を持たせず、内側のトグルの高さ（32px）をそのままタップ領域にする */
+  /* 余白を持たせず、内側のトグルの高さ（26px）をそのままタップ領域にする */
   padding: 0;
   /*
    * 2つのトグルを1枚の札にまとめているため、ドット絵の枠はこの外枠にだけ付ける。
@@ -1533,9 +1560,13 @@ const handleConfirmEnd = async () => {
   box-shadow: var(--shadow);
 }
 
-/* 見出し。下の2つのトグルと罫線で区切る */
+/*
+ * 見出し。下の2つのトグルと罫線で区切る。
+ * 札を小さくするため上下の余白だけを詰める。文字（11px）は下げない
+ * （ドット文字は小さくすると潰れて読めなくなるため）。
+ */
 .review-toggles-label {
-  padding: 4px 10px;
+  padding: 2px 8px;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
@@ -1544,12 +1575,16 @@ const handleConfirmEnd = async () => {
   border-bottom: 1px solid var(--border-ink);
 }
 
+/*
+ * 地図を広く見せるため、1行の高さは前後のボタン（32px）より一回り小さい 26px にする。
+ * 押せる大きさの最低基準（WCAG 2.5.8 の 24px）は上回るようにしている。
+ */
 .review-toggle {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
-  padding: 4px 12px 4px 10px;
+  min-height: 26px;
+  padding: 2px 10px 2px 8px;
   font-size: 12px;
   font-weight: 600;
   color: var(--text-gray);

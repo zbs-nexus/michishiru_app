@@ -118,13 +118,26 @@
 </head>
 <body>
     <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
         <h1>🗺️ NZ-106 ルート作成API - 実装解説</h1>
         
         <div class="info-box">
             <strong>📅 マージ日:</strong> 2026年9月9日<br>
             <strong>🌿 ブランチ:</strong> feature/NZ-106<br>
             <strong>📝 課題番号:</strong> NZ-106<br>
-            <strong>👤 対象読者:</strong> 開発初心者向け
+            <strong>🔖 対象マージ（2026-10-28 に記入）:</strong> <code>82a8af2</code>（createRoute 本体・CDK・地図に線を描く）, <code>eec8b62</code>（フロントの呼び出し）, <code>afcdfec</code>（ジャンル → カテゴリのマスタ引き）, <code>91f35d0</code>（応答を画面用の形へ変換）<br>
+            <strong>🔁 追加の対象（2026-10-28 更新）:</strong><br>
+            &nbsp;&nbsp;・2026-09-16 <code>feature/NZ-137</code> / <code>feature/NZ-137-createroute</code> / <code>fix/createroute-timeout</code>:
+            <code>9f8faf9</code>, <code>f7dfb0b</code>, <code>5bafcb3</code>（距離の調整ループ）, <code>4824242</code>（距離・時間の二重計上の解消・検索半径）,
+            <code>433dd9c</code>（タイムアウト対策: カテゴリ上限・座標の間引き・混雑時の文言）, <code>da45137</code>（ジャンル解決を <code>michimaster</code> へ集約・距離の許容を割合に）,
+            <code>e25f22d</code>（フロントがジャンルIDを送る）, <code>eaca0c2</code>（経路から外れるスポットの除外）<br>
+            &nbsp;&nbsp;・2026-09-16 <code>feature/NZ-143</code>: <code>fc3a531</code>, <code>9d799cc</code>, <code>c6c440c</code>（地図に線が描かれない不具合の修正）<br>
+            &nbsp;&nbsp;・2026-09-30 <code>feature/NZ-158</code> <code>2999924</code>（スポット数の上限15・距離1〜10km・下限0.5倍）, <code>feature/retry-category-search</code> <code>65d961c</code>（スポットが無いとき残りのカテゴリで再検索）<br>
+            <strong>👤 対象読者:</strong> 開発初心者向け<br>
+            <small>※ 9/16 以降の変更は「🆕 その後の変更（2026-09-16 〜）」の節にまとめています。
+            おまかせ（<code>c4d66d3</code>）は <a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a>、口コミの場所とチェーン店（NZ-165）は <a href="./口コミの場所を巡るルート_実装解説.html">口コミの場所を巡るルート</a>、
+            区間ごとの線（NZ-173）は <a href="./区間の描き分け_実装解説.html">区間の描き分け</a>、API の認可は <a href="./APIの認可_実装解説.html">APIの認可</a> で扱います。</small>
         </div>
 
         <h2>📖 この機能について</h2>
@@ -323,18 +336,19 @@
                     <td>スポットを1つずつ減らして再計算</td>
                 </tr>
                 <tr>
-                    <td>距離が短すぎる（目標の0.6倍以下）</td>
-                    <td>AIに「もっと長くして」と再生成を依頼</td>
+                    <td>距離が短すぎる（目標の0.5倍未満。9/30 までは0.6倍）</td>
+                    <td>AIに「もっと長くして」と再生成を依頼（前回の距離を伝え、ばらつき <code>temperature</code> を 0.2 → 0.5 に上げる）</td>
                 </tr>
                 <tr>
-                    <td>許容範囲内（0.6倍〜1.4倍）</td>
+                    <td>許容範囲内（0.5倍〜1.4倍）</td>
                     <td>そのまま採用</td>
                 </tr>
             </table>
             <p>
                 <strong>なぜ完全に一致しないの？</strong><br>
                 スポットの配置や道路の形によって、ちょうど3.0kmにするのは難しいです。
-                そのため、2.0km〜4.2kmの範囲を「許容範囲」として、その中に収まれば良しとしています。
+                そのため、目標3kmなら1.5km〜4.2kmの範囲を「許容範囲」として、その中に収まれば良しとしています（<code>DISTANCE_LOWER_RATIO</code> = 0.5 / <code>DISTANCE_UPPER_RATIO</code> = 1.4）。
+                AIへの依頼は最大3回（<code>MAX_ROUTE_RETRY_COUNT</code>）で、最後まで範囲に入らなければ「目標距離に近いルートを作成できませんでした」のエラー（404）を返します。
             </p>
         </div>
 
@@ -455,7 +469,94 @@ export const generateRoutePlan = async (promptText, temperature) => {
             初回は0.3で、再生成時は0.7にして、違う組み合わせを試すようにしています。
         </p>
 
+        <h2>🆕 その後の変更（2026-09-16 〜）</h2>
+
+        <h3>現在の処理の流れ（2026-10-28 時点）</h3>
+        <ol>
+            <li>おまかせの項目があれば、検索条件マスタからジャンル・距離をランダムに選ぶ（<a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a>）</li>
+            <li>ジャンルID（英語）→ <code>michimaster</code> の数値ジャンルキー（<code>genre_id</code>）→ カテゴリマスタのカテゴリID群、の順に引く（<code>da45137</code> 以降）</li>
+            <li>検索半径を「目標距離 × 0.5」（500m〜5000m に収める）にして、カテゴリごとに Places の周辺検索。同時に口コミの場所も集める</li>
+            <li>カテゴリが8件を超えるときは毎回ランダムに8件選ぶ。1件も見つからなければ、まだ試していないカテゴリで再検索（<code>65d961c</code>）</li>
+            <li>候補を最大20件に絞り、AI（Bedrock）にルート案を作らせる</li>
+            <li>Routes で徒歩経路を計算。経路から150m以上外れるスポット（徒歩で入れない施設など）を除外して計算し直す（<code>eaca0c2</code>）</li>
+            <li>許容範囲（0.5〜1.4倍）に入るまで、長すぎればスポットを減らし、短すぎれば AI に再生成を依頼（最大3回）</li>
+            <li>口コミの場所を1か所も通らなければ差し込みを試す（<a href="./口コミの場所を巡るルート_実装解説.html">口コミの場所を巡るルート</a>）</li>
+            <li>スポットのマーカーは経路上へ寄せた座標で返し、区間ごとの線（<code>legs</code>）も付けて応答する</li>
+        </ol>
+
+        <h3>1. 距離の調整（NZ-137: <code>9f8faf9</code> / <code>f7dfb0b</code> / <code>5bafcb3</code> / <code>da45137</code> / NZ-158: <code>2999924</code>）</h3>
+        <p>距離の許容範囲は何度か変わっています。現在の値は上の Step 5 のとおりです。</p>
+        <table>
+            <tr><th>時期</th><th>許容範囲</th><th>スポット数</th></tr>
+            <tr><td><code>9f8faf9</code>（9/16）</td><td>超過したらスポットを削る（最小2個）</td><td>-</td></tr>
+            <tr><td><code>f7dfb0b</code> / <code>5bafcb3</code>（9/16）</td><td>目標 ±1km。短すぎたら再生成、最後まで外れたら404</td><td>最小1個</td></tr>
+            <tr><td><code>da45137</code>（9/16）</td><td>目標 × 0.6〜1.4（固定の±1kmは短距離に厳しすぎたため割合へ）</td><td>-</td></tr>
+            <tr><td><code>2999924</code>（9/30）</td><td>目標 × 0.5〜1.4。受け付ける目標距離は1〜10km</td><td>最大15個。プロンプトの「2〜3か所」の制限を外し、AI が距離に応じて数を決める</td></tr>
+        </table>
+        <p>歩く速さは時速4km（秒速1.11m。<code>WALKING_METERS_PER_SECOND</code>）で、所要時間を API から取れないときの概算に使います（<code>5bafcb3</code>）。</p>
+
+        <h3>2. 距離・時間の二重計上の解消と検索半径（<code>4824242</code>）</h3>
+        <p>
+            Routes の応答は、経路全体の集計（<code>Summary</code>）・区間ごと・さらに細かい単位で、同じ距離を何重にも持っています。
+            以前は応答の中の距離を全部足していたため、実際の何倍にもなっていました。現在は <code>Routes[0].Summary</code> だけを見ます。
+            あわせて、周回コースのスポットは出発地から目標距離の半分より内側にあることが多いので、検索半径を「目標距離 × 0.5」にして遠すぎる候補を検索の段階で外しています（<code>SEARCH_RADIUS_RATIO</code>）。
+        </p>
+
+        <h3>3. タイムアウト対策（<code>433dd9c</code>）</h3>
+        <ul>
+            <li>API Gateway は29秒で打ち切るため、Lambda のタイムアウトも29秒に合わせています。食べ歩きのようにカテゴリが20件を超えるジャンルでは周辺検索の並列数が増えて間に合わなかったため、1回に検索するカテゴリを最大8件（<code>MAX_SEARCH_CATEGORIES</code>）に絞りました。再作成のたびに違う組み合わせが選ばれます</li>
+            <li>経路の座標は Ramer–Douglas–Peucker 法で間引きます（元の線から5m以内の点を省く。<code>SIMPLIFY_TOLERANCE_M</code>）。応答のサイズと地図の描画の負荷を下げるためです</li>
+            <li>フロント（<code>routeService.js</code>）は 502 / 503 / 504 を「一時的に混み合っています。時間を置いて、再試行してください。」と表示します</li>
+        </ul>
+
+        <h3>4. ジャンルの解決を michimaster へ集約（<code>da45137</code> / <code>e25f22d</code>）</h3>
+        <p>
+            以前はジャンルを日本語の名称で専用のジャンルマスタから引いていたため、フロントが送る英語ID（<code>nature</code>）と一致しない不整合がありました。
+            現在は検索条件マスタ（<code>michimaster</code>）の <code>pk = 'GENRE#ALL'</code> / <code>sk = 'METADATA#&lt;genreId&gt;'</code> を英語IDで引き、数値のジャンルキー（<code>genre_id</code>）を得てからカテゴリマスタを引きます。
+            フロントも表示名ではなくジャンルID（<code>genreId</code>）を送るようにしました（<code>e25f22d</code>）。旧ジャンルマスタは廃止です。
+        </p>
+        <div class="code-block">const resolveSpotCategoryIds = async (genreId, repositories) => {
+  const genreNumber = await repositories.queryGenreNumberByGenreId(genreId);
+  ...
+  const spotCategoryIds =
+    await repositories.querySpotCategoryIdsByGenreNumber(genreNumber);
+  ...
+};</div>
+
+        <h3>5. 経路から外れるスポットの除外（<code>eaca0c2</code>）</h3>
+        <p>
+            Routes は各スポットを最寄りの歩ける道へ寄せて（スナップして）経路を引きます。皇居内の施設のように一般の歩行者が入れない場所だと、元の座標と寄せた座標が大きく離れ、
+            マーカーが線から外れた「飛び地」に見えていました。現在は区間の終点を寄せた座標とみなし、元の座標から150m（<code>STRANDED_DISTANCE_THRESHOLD_M</code>）を超えるスポットを外して計算し直します（最小スポット数を下回る場合は残す）。
+            応答のマーカー座標も寄せた座標にしているので、線とマーカーがずれません。プロンプトにも「立入制限区域など、歩行者が自由に入れない施設は選ばない」というルールを足しています。
+        </p>
+
+        <h3>6. スポットが見つからないときの再検索（<code>65d961c</code>）</h3>
+        <div class="code-block">// スポットが見つかるか、すべてのカテゴリを試すまで繰り返す
+while (candidateSpots.length === 0 &amp;&amp; usedCategoryIds.length &lt; allSpotCategoryIds.length) {
+  const spotCategoryIds = limitSearchCategories(allSpotCategoryIds, usedCategoryIds);
+  ...
+}</div>
+        <p>
+            8件ずつ選んだカテゴリで1件も見つからなかったとき、使っていないカテゴリで検索し直します。あわせて、写真映えのジャンル（<code>genre_id = 1</code>）用のカテゴリを
+            カテゴリマスタへ投入するスクリプト（<code>backend/tools/seedPhotoCategories.js</code> / <code>updatePhotoCategories.js</code> / <code>listCategories.js</code>）を追加しています。
+        </p>
+
+        <h3>7. 地図に線が描かれない不具合（NZ-143: <code>fc3a531</code> / <code>9d799cc</code> / <code>c6c440c</code>）</h3>
+        <p>
+            ルートの線が地図に描かれない不具合の修正です。原因の1つは、地図ライブラリが別スレッドで動かす処理（ワーカー）のファイルをビルド後に読み込めなかったことで、
+            <code>RouteMap.vue</code> でワーカーの URL を明示的に指定（<code>setWorkerUrl</code>）して解決しました（<code>c6c440c</code>）。あわせて線とスポットの色を青に変えています（<code>fc3a531</code>）。
+            <code>9d799cc</code> は原因の切り分け用のログの追加です。
+        </p>
+
         <h2>⚠️ 注意ポイント</h2>
+
+        <div class="important">
+            <h3>0. 許容範囲のコメントが一部古い（2026-10-28 追記）</h3>
+            <p>
+                <code>service.js</code> の <code>isWithinTargetRange</code> のコメントは「下限×0.6」のままですが、実際の値は <code>constants.js</code> の <code>DISTANCE_LOWER_RATIO = 0.5</code> です。値は定数を正としてください。
+                また、マスタテーブル（<code>michimaster</code> とカテゴリマスタ）はコンソールで手作りされており、CDK 管理・環境分離・属性名の規約（snake_case の <code>genre_id</code> など）から外れたままです。
+            </p>
+        </div>
 
         <div class="important">
             <h3>1. spotとwaypointの使い分け</h3>
@@ -627,6 +728,10 @@ npm test
             <li><code>.kiro/steering/naming-glossary.md</code> - ドメイン用語辞書（spotとwaypointの違いなど）</li>
             <li><code>.kiro/steering/back-layer-architecture.md</code> - レイヤー構成ルール</li>
             <li><code>docs/設計書.md</code> - API設計書</li>
+            <li><a href="../ルート生成改善レポート.html">ルート生成改善レポート</a> - NZ-158 のパラメータ調整の検証結果（120パターンのテスト）</li>
+            <li><a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a> / <a href="./口コミの場所を巡るルート_実装解説.html">口コミの場所を巡るルート</a> / <a href="./区間の描き分け_実装解説.html">区間の描き分け</a> - このAPIに後から足された機能</li>
+            <li><a href="./検索条件マスタ_実装解説.html">検索条件マスタ</a> - ジャンルの解決に使う <code>michimaster</code></li>
+            <li><a href="./ルート提案と再作成_実装解説.html">ルート提案と再作成</a> - このAPIを呼ぶ画面側の流れ</li>
         </ul>
 
         <hr style="margin: 40px 0; border: none; border-top: 1px solid #ddd;">

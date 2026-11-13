@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>案内開始時の地図表示 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>案内開始時の地図表示 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-28<br>
+            <strong>📅 マージ日:</strong> 2026-10-28（09:41 / 10:25 / 12:57）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-320, feature/NZ-322<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>f6f7d46</code>（ボタン配置の変更: 拡大・縮小ボタンの削除、口コミの表示切り替えを右寄せの縦並びに）,
+            <code>b204971</code>（案内開始時にスタート地点を見えている範囲の中央へ）,
+            <code>24fc296</code>（初期の拡大率を固定値に修正）<br>
+            <small>※ 同じ日の <code>f218133</code>（現在地へ戻るボタンの倍率）は <a href="./現在地へ戻るボタン_実装解説.html">現在地へ戻るボタン</a> で扱います。
+            同じブランチ名の <code>f72fac3</code>（投稿中の画面）は <a href="./口コミ投稿_実装解説.html">口コミ投稿</a> で扱います。</small>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>案内画面の地図は画面いっぱい</strong><br>
+            案内画面では地図を画面全体に敷き、その上に「次の目的地」バナー・前後のボタン・口コミの表示切り替え（上部）と終了ボタン（下部）を重ねています。
+            そのため、地図の本当の中心は、上下の操作に隠れていない「見えている範囲」の中心とずれます。
+        </div>
+        <div class="prereq">
+            <strong>ズームレベル</strong><br>
+            地図の拡大率を表す数字で、1増えると縦横2倍に拡大されます。17 は横幅がおよそ190m（スマートフォンの画面で）で、最初の曲がり角まで見える程度です。
+        </div>
+        <div class="prereq">
+            <strong>easeTo の offset</strong><br>
+            MapLibre GL の <code>easeTo</code> は地図を指定の中心へ動かす命令です。<code>offset: [x, y]</code> を付けると、その座標を地図の中心から x, y ピクセルずらした位置に置けます。
+        </div>
+        <div class="prereq">
+            <strong>ResizeObserver</strong><br>
+            要素の大きさが変わったことを知らせてくれるブラウザの仕組みです。目的地の名前が長いとバナーが伸びるため、伸びたら位置を測り直すのに使います。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>案内画面を開いた直後の地図の見え方と、地図の上のボタン配置を整えた変更です。</p>
+        <ul>
+            <li>案内開始時は、ルート全体を収めるのではなく、<strong>スタート地点を見えている範囲の中央</strong>に置き、<strong>固定の倍率（17）</strong>で表示する</li>
+            <li>拡大・縮小のボタンを置かない（拡大率はピンチ操作で変える）</li>
+            <li>口コミの表示切り替え（自分・みんな）を右寄せの縦並びにし、その下に現在地へ戻るボタンを置く</li>
+        </ul>
+        <p>ルート提案画面の地図は従来どおり、ルート全体を収めて表示します。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            案内を始めた瞬間に知りたいのは「どちらへ歩き出せばいいか」です。ルート全体を収めると縮小されすぎて最初の道が分からず、
+            さらに地図の中心が上下の操作の下に隠れて、スタート地点が見えにくくなっていました（US-6 案内画面表示）。
+        </p>
+        <p>
+            倍率を「1つ目の目的地までの区間が収まる値」にする案も一度実装されましたが（<code>b204971</code>）、目的地が遠いほど縮小されて同じ問題が起きるため、
+            <code>24fc296</code> で固定の倍率に改めました。遠い目的地はバナーの距離とピンチでの縮小で確かめます。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 隠れている高さを測る（RouteNavigationView.vue）</strong><br>
+            <code>onMounted</code> で <code>measureMapLayout()</code> を呼び、上部の操作全体（<code>.navigation-top</code>）の下端を <code>mapTopInsetPx</code>、
+            画面の下端から終了ボタンの上端までを <code>mapBottomInsetPx</code>、口コミの表示切り替えの札の下端＋余白を <code>mapControlsTopPx</code> として求めます。
+            バナーの大きさが変わったら <code>ResizeObserver</code> で測り直します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 地図へ渡す（RouteNavigationMap.vue → RouteMap.vue）</strong><br>
+            案内画面の地図は <code>should-center-on-origin</code> を真にし、<code>top-inset-px</code> / <code>bottom-inset-px</code> / <code>controls-top-px</code> を渡します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: スタート地点を中央に置く（RouteMap.vue の centerOnOrigin）</strong><br>
+            地図の読み込みが終わったら <code>fitToInitialView()</code> が呼ばれ、<code>shouldCenterOnOrigin</code> が真なら <code>centerOnOrigin()</code> で
+            経路の先頭（スタート地点）を、倍率17・見えている範囲の中央へアニメーションなしで置きます。経路が無ければ従来の <code>fitToRoute()</code> に切り替えます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: コントロールの位置</strong><br>
+            地図右上のコントロール（現在地へ戻るボタン）は、CSS 変数 <code>--map-controls-top</code> で口コミの表示切り替えの札の下へ下げます。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/components/feature/route/RouteMap.vue</h3>
+        <div class="code-block"><pre>const toVisibleCenterOffsetY = () => (props.topInsetPx - props.bottomInsetPx) / 2;
+
+const centerOnOrigin = () => {
+  const originPosition = toOriginPosition(props.geometry);
+
+  if (originPosition === null) {
+    fitToRoute();
+    return;
+  }
+
+  map.easeTo({
+    center: originPosition,
+    zoom: NAVIGATION_ZOOM_LEVEL,
+    offset: [0, toVisibleCenterOffsetY()],
+    duration: 0
+  });
+};</pre></div>
+        <ul>
+            <li><code>toVisibleCenterOffsetY</code>: 上が隠れているぶん下へ、下が隠れているぶん上へずらす量（上下の差の半分）。現在地へ戻るボタンとチュートリアルの紫ピンへの移動でも同じ値を使います</li>
+            <li><code>duration: 0</code>: 寄せ終わった状態を初期表示にするため、動かしません</li>
+            <li>props <code>shouldCenterOnOrigin</code> は既定が <code>false</code> で、案内画面だけが真にします</li>
+        </ul>
+
+        <h3>frontend/src/views/RouteNavigationView.vue（測る処理）</h3>
+        <div class="code-block"><pre>const measureMapInsets = () => {
+  // 地図は画面全体に広がり上端が画面上端に一致するため、ビューポート基準で測れる
+  const topBottomPx = navigationTopRef.value?.getBoundingClientRect().bottom;
+
+  if (Number.isFinite(topBottomPx)) {
+    mapTopInsetPx.value = Math.ceil(topBottomPx);
+  }
+  ...
+    mapBottomInsetPx.value = Math.max(0, Math.ceil(window.innerHeight - endButtonTopPx));
+};</pre></div>
+        <p>
+            地図が画面の上端から始まっているので、画面基準の座標（<code>getBoundingClientRect</code>）をそのまま地図の中のピクセルとして使えます。
+            地図の構成を変えて上端がずれた場合は、この前提が崩れる点に注意してください。
+        </p>
+
+        <h3>frontend/src/constants/mapDefaults.js</h3>
+        <table>
+            <tr><th>定数</th><th>値</th><th>使う場面</th></tr>
+            <tr><td><code>NAVIGATION_ZOOM_LEVEL</code></td><td>17</td><td>案内開始時のスタート地点の表示。現在地へ戻るボタンは使わない</td></tr>
+            <tr><td><code>MAX_FIT_ZOOM_LEVEL</code></td><td>17</td><td>ルート全体を収めるとき（提案画面）の拡大の上限</td></tr>
+            <tr><td><code>DEFAULT_ZOOM_LEVEL</code></td><td>14</td><td>地図の生成時の初期値</td></tr>
+        </table>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>拡大・縮小のボタンはもう無い</strong><br>
+            <code>f6f7d46</code> で <code>NavigationControl</code> を外しました。拡大率はピンチ（PCではマウスホイール）で変えます。
+            古い解説書（<a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a> の PR #59、<a href="./現在地へ戻るボタン_実装解説.html">現在地へ戻るボタン</a>）にある「ズームボタン」の記述は当時のものです。
+        </div>
+        <div class="important">
+            <strong>上部の操作を増やしたら測り直しの対象か確認する</strong><br>
+            <code>mapTopInsetPx</code> は <code>.navigation-top</code> の下端で測ります。上部に要素を足すときは <code>.navigation-top</code> の中に入れないと、スタート地点がその要素に隠れます。
+            ResizeObserver が見張っているのはバナーだけなので、ほかの要素の高さが後から変わる場合も測り直しが必要です。
+        </div>
+        <div class="important">
+            <strong>初期表示は地図の読み込み完了時の値で決まる</strong><br>
+            <code>onMounted</code> で測った値が地図の読み込み時に使われます。測る前の値（0）で寄せると中央からずれるため、順序を変えないでください。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li><code>npm run dev</code> で起動し、ルートを作って案内を開始する</li>
+            <li>開いた直後、スタート地点の「S」がバナーと終了ボタンに挟まれた範囲の中央にあり、周囲200m程度が見える倍率であることを確かめる</li>
+            <li>1つ目の目的地が遠いルートでも倍率が変わらないことを確かめる</li>
+            <li>地図の右上に拡大・縮小ボタンが無く、口コミの表示切り替え（縦並び）の下に現在地へ戻るボタンがあることを確かめる。名前の長い目的地でバナーが伸びても重ならないことも確かめる</li>
+            <li>ルート提案画面では従来どおりルート全体が収まることを確かめる</li>
+            <li>テスト: <code>frontend</code> で <code>npm test</code>（<code>RouteMap.test.js</code> の「固定の倍率（17）でスタート地点を…」「倍率は区間の長さで変えない」「拡大・縮小のボタンは置かず…」、<code>RouteNavigationMap.test.js</code>、<code>RouteNavigationView.test.js</code>）</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteMap.vue</code></td><td><code>shouldCenterOnOrigin</code> / <code>topInsetPx</code> / <code>bottomInsetPx</code>、<code>centerOnOrigin</code>、<code>NavigationControl</code> の削除</td><td>feature/NZ-320, feature/NZ-322</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteNavigationMap.vue</code></td><td>props の受け渡し、コントロールの上端（<code>--map-controls-top</code>）</td><td>feature/NZ-320, feature/NZ-322</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td>上下の隠れている高さとコントロールの上端を測る。口コミの表示切り替えを右寄せの縦並びに</td><td>feature/NZ-320, feature/NZ-322</td></tr>
+                <tr><td><code>frontend/src/constants/mapDefaults.js</code></td><td><code>NAVIGATION_ZOOM_LEVEL</code></td><td>feature/NZ-322</td></tr>
+                <tr><td><code>.kiro/steering/naming-glossary.md</code></td><td>shouldCenterOnOrigin / mapTopInsetPx / mapBottomInsetPx / NAVIGATION_ZOOM_LEVEL を登録、mapControlsTopPx の説明を変更</td><td>feature/NZ-320, feature/NZ-322</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-6（案内画面表示）の受け入れ条件</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>「地図」の節の用語の定義</td></tr>
+            <tr><td><a href="./現在地へ戻るボタン_実装解説.html">現在地へ戻るボタン</a></td><td>同じ「見えている範囲の中央」へ寄せるボタン</td></tr>
+            <tr><td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td><td>上部のバナーと前後のボタンの縦積み（<code>mapControlsTopPx</code> の由来）</td></tr>
+            <tr><td><a href="./NZ-197_開始地点の目印_実装解説.html">開始地点の目印</a></td><td>スタート地点の「S」マーカー</td></tr>
+        </table>
+    </div>
+</body>
+</html>

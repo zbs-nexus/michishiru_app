@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>現在地のずれ対策 - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>現在地のずれ対策 - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-14<br>
+            <strong>📅 マージ日:</strong> 2026-10-14（13:56）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-274<br>
+            <strong>🔖 対象マージ:</strong> <code>4d4cbb4</code>（GPS取得処理の修正: 速度で「ありえない移動」を捨てる）
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>現在地の追跡（watchPosition）</strong><br>
+            案内画面はブラウザの <code>watchPosition</code> で現在地を受け取り続けます。仕組みは <a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能の実装解説</a>、
+            精度による測位の取捨（100m・10秒ルール）は <a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a> の「GPSの揺らぎ対策」を先に読んでください。
+        </div>
+        <div class="prereq">
+            <strong>マルチパス</strong><br>
+            高いビルが並ぶ場所で、GPSの電波が壁に反射してから届く現象です。端末が申告する精度（<code>accuracy</code>）は良いままなのに、座標だけが数十〜数百m飛ぶことがあります。
+            そのため「精度が悪い測位を捨てる」だけでは防げません。
+        </div>
+        <div class="prereq">
+            <strong>表示用の座標と計算用の座標</strong><br>
+            この機能では「地図に出す現在地（<code>displayLocation</code>）」と「距離の計算に使う現在地（<code>currentLocation</code>）」を分けます。混ぜると歩いた距離が狂います。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>ビル街で現在地のマーカーが建物の中や隣の通りへ飛ぶ問題への対策で、2つの仕組みからなります。</p>
+        <table>
+            <tr><th>仕組み</th><th>やること</th><th>効く場所</th></tr>
+            <tr><td>② 速さの判定</td><td>前回採用した地点から、徒歩ではあり得ない速さ（秒速3m超）で動いた測位を「座標の飛び」として捨てる</td><td>現在地そのもの（距離の計算にも効く）</td></tr>
+            <tr><td>経路への吸着</td><td>経路の線から40m以内にいる間は、地図の現在地マーカーを線上の最も近い点に寄せて表示する</td><td>地図の表示だけ</td></tr>
+        </table>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            現在地が飛ぶと、案内中に「自分がどこにいるか」を見失います。さらに、飛んだ座標まで歩いたことにすると、散歩の実績の距離が実際より長くなります。
+            関連するユーザーストーリーは US-6（案内画面表示）と US-8（散歩結果の総距離）です。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <pre class="code-block">watchPosition の測位
+   │
+   ▼  useLocationTracking
+① 精度の判定（100m以内 / 初回 / 10秒以上採用が途切れた）
+   │  通らなければ捨てる
+   ▼
+② 速さの判定（isPlausibleWalkingMove）
+   │  徒歩であり得ない → 飛びの候補として数える（3回続けて矛盾しなければ受け入れる）
+   ▼
+currentLocation ──┬─▶ useRouteProgress（次の目的地までの距離）
+                  ├─▶ useWalkRecord（歩いた距離）
+                  └─▶ useRouteSnapping ─▶ displayLocation ─▶ 地図の現在地マーカー</pre>
+
+        <div class="flow-step">
+            <strong>Step 1: 精度の判定（従来どおり）</strong><br>
+            初回の測位はそのまま採用します。2回目以降は精度が100m以内、または最後の採用から10秒以上たったものだけを次へ進めます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 速さの判定（新規）</strong><br>
+            前回採用した測位から今回の測位までの距離を、経過時間で割って速さを求めます。秒速3mを超えれば飛びとして捨てます。
+            精度の救済（10秒ルール）で通った測位にもかけます。精度の悪い測位ほど飛びやすいためです。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 飛びが続いたら受け入れる</strong><br>
+            前回の採用地点そのものが間違っていた場合（初回の測位が飛んでいた等）、正しい測位がずっと「飛び」と判定され、現在地が固まってしまいます。
+            そこで、飛びと判定した測位どうしが互いに矛盾しない（徒歩でつながる）まま3回続いたら、そちらを正しいとみなして受け入れます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 表示だけ経路へ吸着させる</strong><br>
+            <code>RouteNavigationView</code> が <code>useRouteSnapping</code> で吸着後の <code>displayLocation</code> を作り、地図（<code>RouteNavigationMap</code> の <code>current-location</code>）にだけ渡します。
+            距離の計算には吸着前の <code>currentLocation</code> を渡します。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/utils/locationPlausibility.js</h3>
+        <div class="code-block"><pre>export const MAX_WALKING_SPEED_MPS = 3;
+
+export const isPlausibleWalkingMove = (from, to) => {
+  const distanceM = calculateDistanceM(from, to);
+
+  if (distanceM === null) {
+    return true;
+  }
+
+  const marginM =
+    (Number.isFinite(from.accuracy) ? from.accuracy : 0) +
+    (Number.isFinite(to.accuracy) ? to.accuracy : 0);
+
+  const elapsedS = Math.max((to.timestamp - from.timestamp) / 1000, MIN_ELAPSED_S);
+
+  return distanceM - marginM &lt;= MAX_WALKING_SPEED_MPS * elapsedS;
+};</pre></div>
+        <ul>
+            <li><strong>入力:</strong> 前回と今回の測位（緯度・経度・精度・時刻）</li>
+            <li><strong>出力:</strong> 徒歩で起こり得る移動なら <code>true</code></li>
+            <li>距離から<strong>両方の精度の幅を差し引いてから</strong>速さを判定します。精度の円の中の揺れは、本当に動いたのか区別できないので捨てません</li>
+            <li>経過時間が長いほど許す距離も伸びるので、本当に移動した場合は時間がたてば採用されます</li>
+            <li>同じ時刻の測位で0で割らないよう、経過時間は最低1秒として扱います</li>
+            <li>座標が不正で判定できないときは <code>true</code>（捨てない）にしています</li>
+        </ul>
+
+        <h3>frontend/src/composables/useLocationTracking.js（追加部分）</h3>
+        <div class="code-block"><pre>// ② 速さの判定。精度の救済（isPositionStale）で通った測位にも適用する。
+if (
+  !isPlausibleWalkingMove(lastAcceptedFix, fix) &amp;&amp;
+  !recordJump(fix)
+) {
+  return;
+}
+
+acceptFix(fix);</pre></div>
+        <table>
+            <tr><th>名前</th><th>役割</th></tr>
+            <tr><td><code>lastAcceptedFix</code></td><td>直前に採用した測位。速さの判定の起点</td></tr>
+            <tr><td><code>jumpCandidate</code></td><td>飛びと判定して捨てた直近の測位と、矛盾せず続いた回数</td></tr>
+            <tr><td><code>recordJump(fix)</code></td><td>飛びを記録し、<code>MAX_CONSECUTIVE_JUMP_COUNT</code>（3）回続いたら <code>true</code></td></tr>
+            <tr><td><code>acceptFix(fix)</code></td><td>現在地として採用し、飛びの候補を消す</td></tr>
+        </table>
+        <p>測位の時刻は <code>toFixTimestamp</code> で取り出し、測位が時刻を持たない環境では受け取った時刻で代用します。</p>
+
+        <h3>frontend/src/composables/useRouteSnapping.js</h3>
+        <div class="code-block"><pre>const MAX_SNAP_DEVIATION_M = 40;
+...
+const displayLocation = computed(
+  () => snappedPosition.value ?? currentLocation.value
+);</pre></div>
+        <ul>
+            <li>経路の累積距離（<code>routeMeasure</code>）はルートが変わったときだけ作り直します</li>
+            <li>吸着先は <code>utils/routeGeometry.js</code> の <code>snapToRoute</code> が求めます。経路から40mより離れていれば <code>null</code> になり、測位した座標をそのまま表示します（本当に道を外れたことには気付けるように）</li>
+        </ul>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>吸着後の座標を距離の計算に使わない</strong><br>
+            <code>displayLocation</code> を <code>useWalkRecord</code> や <code>useRouteProgress</code> に渡すと、経路から外れて近道した区間も経路沿いの長さで数えてしまいます。
+            地図のマーカー以外では必ず <code>currentLocation</code> を使ってください。
+        </div>
+        <div class="important">
+            <strong>しきい値は互いに関係している</strong><br>
+            速さの上限（秒速3m）は早歩き・小走りを捨てない値です。小さくしすぎると、本当に歩いた測位まで捨てて現在地が遅れます。
+            ジョギングのような使い方を想定するなら見直しが必要です。
+        </div>
+        <div class="important">
+            <strong>自動テストが無い</strong><br>
+            このマージで追加した <code>locationPlausibility.js</code> と <code>useRouteSnapping.js</code> には、現時点で専用のテストファイルがありません。
+            しきい値を変えるときは手動での確認が必要です。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li><code>npm run dev</code> で起動し、ルートを作って案内を開始する</li>
+            <li>Chrome の開発者ツール（F12 →「︙」→「More tools」→「Sensors」→「Location」）で、経路の近く（40m以内）の座標を入れ、現在地マーカーが線の上に表示されることを確かめる</li>
+            <li>経路から100m程度離れた座標を入れ、マーカーが線から外れた位置にそのまま出ることを確かめる</li>
+            <li>1秒ほどの間に数百m離れた座標へ切り替え、マーカーがすぐには飛ばないこと、同じ付近の座標を続けて入れると3回目で移ることを確かめる</li>
+            <li><code>frontend</code> で <code>npm run lint</code> と <code>npm run build</code>、<code>npm test</code>（既存の <code>RouteNavigationView.test.js</code> などが壊れていないこと）</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>frontend/src/utils/locationPlausibility.js</code></td><td>（新規）徒歩であり得る移動かの判定</td><td>feature/NZ-274</td></tr>
+                <tr><td><code>frontend/src/composables/useLocationTracking.js</code></td><td>②速さの判定と飛びの連続受け入れを追加</td><td>feature/NZ-274</td></tr>
+                <tr><td><code>frontend/src/composables/useRouteSnapping.js</code></td><td>（新規）表示用の現在地を経路へ吸着</td><td>feature/NZ-274</td></tr>
+                <tr><td><code>frontend/src/utils/routeGeometry.js</code></td><td>吸着先を求める <code>snapToRoute</code> を追加</td><td>feature/NZ-274</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td>地図にだけ <code>displayLocation</code> を渡す</td><td>feature/NZ-274</td></tr>
+                <tr><td><code>.kiro/steering/naming-glossary.md</code></td><td>displayLocation / isSnappedToRoute / MAX_SNAP_DEVIATION_M / MAX_WALKING_SPEED_MPS / jumpCandidate / MAX_CONSECUTIVE_JUMP_COUNT を登録</td><td>feature/NZ-274</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-6（案内画面表示）・US-8（散歩結果確認）の受け入れ条件</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>「ルートとスポット」の節にある本文の用語の定義</td></tr>
+            <tr><td><a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能の実装解説</a></td><td>現在地の追跡の基本（前提になる機能）</td></tr>
+            <tr><td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td><td>①精度の判定と、経路沿いの距離の計算（前提になる機能）</td></tr>
+            <tr><td><a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a></td><td>採用した現在地から歩いた距離を積む仕組み</td></tr>
+        </table>
+    </div>
+</body>
+</html>

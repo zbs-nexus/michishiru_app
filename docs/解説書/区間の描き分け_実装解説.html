@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>区間の描き分け - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>区間の描き分け - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-21<br>
+            <strong>📅 マージ日:</strong> 2026-10-21（12:11）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-173<br>
+            <strong>🔖 対象マージ:</strong> <code>40e902e</code>（次目的地の経路の色変更）
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>区間（leg）</strong><br>
+            ルートを開始地点とスポットで区切った1区間です。スポットが3か所なら「開始→1」「1→2」「2→3」「3→開始（帰り道）」の4区間、つまり<strong>スポット数+1</strong>本になります。
+            Amazon Location Service（Routes）の応答の <code>Legs</code> がそのまま区間に対応します。
+        </div>
+        <div class="prereq">
+            <strong>次の目的地と到達済みの数</strong><br>
+            案内画面では「次の目的地へ」ボタンで到達済みのスポットが1つずつ増えます（<a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a>）。
+            到達済みの数（<code>visitedCount</code>）がそのまま「今の区間の番号」になります。
+        </div>
+        <div class="prereq">
+            <strong>MapLibre GL のソースとレイヤー</strong><br>
+            地図ライブラリ MapLibre GL では、描きたいデータ（GeoJSON）を「ソース」に入れ、その見た目（色・太さ・破線）を「レイヤー」で決めます。
+            後から足したレイヤーほど手前に描かれます。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>案内画面の経路の線を、区間ごとに3通りに描き分ける機能です。</p>
+        <table>
+            <tr><th>区間</th><th>見た目</th><th>コード上の名前</th></tr>
+            <tr><td>歩き終えた区間</td><td>灰色の破線（細め）</td><td><code>walkedLegs</code></td></tr>
+            <tr><td>今の区間（次の目的地まで）</td><td>緑の太線＋白の縁取り。最前面</td><td><code>currentLeg</code></td></tr>
+            <tr><td>これからの区間</td><td>従来の経路の色（青）</td><td><code>upcomingLegs</code></td></tr>
+        </table>
+        <p>全スポットを巡り終えると、帰り道（最後の区間）が今の区間として緑になります。</p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            周回コースでは行きと帰りの道が重なったり交差したりするため、1色の線だと「今どの線をたどればいいか」が分かりにくい問題がありました。
+            次の目的地までの道だけを目立たせ、歩き終えた道を薄くすることで、案内中の迷いを減らします（US-6 案内画面表示の改善）。
+        </p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 区間ごとの線を受け取る（routesRepository.js）</strong><br>
+            <code>CalculateRoutes</code> に <code>LegGeometryFormat: 'Simple'</code> を指定して区間ごとの座標列を得て、
+            <code>extractLegCoordinates</code> が区間ごとに間引いた座標列（<code>legCoordinates</code>）を返します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 区間の数を確かめて応答に載せる（service.js の toRouteLegs）</strong><br>
+            区間の数がスポット数+1で、すべて2点以上なら <code>legs</code> として返します。合わなければ空配列にします（スポットとの対応を保証できないため）。
+            スポットの除外・差し込みを終えた<strong>最終の</strong>スポットと経路で確かめます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: 画面用の形に変換（routeResponse.js の toLegs）</strong><br>
+            各区間を <code>{ geometry: { type: 'LineString', coordinates } }</code> にします。1つでも線にならない区間があれば全体を空にします。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 3つに分ける（routeLegs.js の toRouteLegSections）</strong><br>
+            案内画面の computed（<code>legSections</code>）が、区間の一覧・スポット数・到達済みの数から「歩き終えた・今・これから」に分けます。
+            前提を確かめられなければ <code>null</code> を返します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: 描く（RouteMap.vue）</strong><br>
+            <code>legSections</code> が <code>null</code> なら従来どおり全体を1色で描きます。あれば、青の線にはこれからの区間だけを入れ、
+            歩き終えた区間（破線）と今の区間（縁取り＋緑）を別のソース・レイヤーで重ねます。「次の目的地へ」を押すたびに <code>legSections</code> が変わり、データだけを差し替えます。
+        </div>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>frontend/src/utils/routeLegs.js</h3>
+        <div class="code-block"><pre>export const toRouteLegSections = ({ legs, spotCount, visitedCount }) => {
+  ...
+  if (!Number.isInteger(spotCount) || spotCount &lt; 1 || legs.length !== spotCount + 1) {
+    return null;
+  }
+  ...
+  const currentLegIndex = visitedCount;
+  const geometries = legs.map((leg) => leg.geometry);
+
+  return {
+    walkedLegs: geometries.slice(0, currentLegIndex),
+    currentLeg: geometries[currentLegIndex],
+    upcomingLegs: geometries.slice(currentLegIndex + 1)
+  };
+};</pre></div>
+        <ul>
+            <li><strong>入力:</strong> 区間の一覧・スポット数・到達済みの数</li>
+            <li><strong>出力:</strong> <code>{ walkedLegs, currentLeg, upcomingLegs }</code>、または確かめられないとき <code>null</code></li>
+            <li>Vue に依存しない純関数なので、<code>src/utils/__tests__/routeLegs.test.js</code> で単体テストしています</li>
+        </ul>
+
+        <h3>frontend/src/components/feature/route/RouteMap.vue（描画）</h3>
+        <div class="code-block"><pre>const sections = props.legSections;
+const routeData =
+  sections === null ? routeFeature : toLegFeatureCollection(sections.upcomingLegs);
+const walkedData = toLegFeatureCollection(sections === null ? [] : sections.walkedLegs);
+const currentData = toLegFeatureCollection(sections === null ? [] : [sections.currentLeg]);</pre></div>
+        <ul>
+            <li>描き分けるときは、青の線に全体ではなく「これからの区間」だけを入れます。全体を青で描くと、破線の隙間から青が透けて見えるためです</li>
+            <li>歩き終えた区間の端は <code>butt</code>（四角）にしています。丸めると短い破線が点に潰れるためです</li>
+            <li>今の区間のレイヤーは最後に足し、ほかの区間と交差しても最前面に出します</li>
+            <li>進めるたびに地図を寄せ直す（fit）ことはしません。利用者が動かした地図の位置が戻ってしまうためです</li>
+        </ul>
+
+        <h3>frontend/src/constants/mapDefaults.js（色と太さ）</h3>
+        <table>
+            <tr><th>定数</th><th>値</th></tr>
+            <tr><td><code>ROUTE_WALKED_LEG_COLOR</code> / <code>_WIDTH_PX</code> / <code>_DASH_ARRAY</code></td><td><code>#9AA0A6</code> / 4 / <code>[2, 1.5]</code></td></tr>
+            <tr><td><code>ROUTE_CURRENT_LEG_COLOR</code> / <code>_WIDTH_PX</code></td><td><code>#3F7A5C</code>（次の目的地のバナーの左枠と同じ緑） / 7</td></tr>
+            <tr><td><code>ROUTE_CURRENT_LEG_CASING_WIDTH_PX</code></td><td>12（白の縁取りを含む太さ）</td></tr>
+        </table>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>色は2か所で持っている</strong><br>
+            MapLibre GL の線の色は CSS 変数を読めないため、<code>mapDefaults.js</code> の定数と <code>global.css</code> の
+            <code>--route-walked-leg</code> / <code>--route-current-leg</code> に同じ色を書いています。変えるときは両方直してください。
+        </div>
+        <div class="important">
+            <strong>区間が無い応答でも壊れない</strong><br>
+            古い応答（<code>getRoute</code> の保存済みルートなど）や区間の数が合わない場合は <code>legs</code> が空になり、全体を1色で描きます。
+            区間を前提にした処理を足すときは、この「区間なし」の道を必ず残してください。
+        </div>
+        <div class="important">
+            <strong>案内画面だけが描き分ける</strong><br>
+            <code>legSections</code> を渡すのは案内画面（<code>RouteNavigationMap</code>）だけです。ルート提案画面の地図は従来どおり1色です。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li><code>npm run dev</code> で起動し、ルートを作って案内を開始する</li>
+            <li>開始地点から1つ目のスポットまでが緑の太線、それ以外が青で描かれることを確かめる</li>
+            <li>「次の目的地へ」を押すたびに、歩き終えた区間が灰色の破線になり、緑の区間が次へ移ることを確かめる。「前の目的地へ」で戻ることも確かめる</li>
+            <li>全スポットを巡ると、帰り道が緑になることを確かめる</li>
+            <li>テスト: <code>frontend</code> で <code>npm test</code>（<code>routeLegs.test.js</code> / <code>routeResponse.test.js</code> / <code>RouteMap.test.js</code> / <code>RouteNavigationView.test.js</code>）、
+                <code>backend</code> で <code>npm test</code>（<code>createRoute/__tests__/routesRepository.test.js</code> / <code>service.test.js</code>）</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>backend/functions/createRoute/repositories/routesRepository.js</code></td><td>区間ごとの座標列（<code>legCoordinates</code>）の取り出し</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>backend/functions/createRoute/service.js</code></td><td><code>toRouteLegs</code> で数を確かめて応答の <code>legs</code> にする</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>backend/functions/createRoute/handler.js</code></td><td>応答へ <code>legs</code> を載せる</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>frontend/src/utils/routeResponse.js</code></td><td>応答の <code>legs</code> を画面用に変換</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>frontend/src/utils/routeLegs.js</code></td><td>3つに分ける純関数（新規）</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteMap.vue</code></td><td>区間ごとのソース・レイヤーの描画</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteNavigationMap.vue</code></td><td><code>legSections</code> の受け渡し</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>frontend/src/views/RouteNavigationView.vue</code></td><td><code>legSections</code> の computed</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>frontend/src/constants/mapDefaults.js</code> / <code>assets/styles/global.css</code></td><td>区間の色と太さ</td><td>feature/NZ-173</td></tr>
+                <tr><td><code>.agents/tasks/route-leg-highlight/</code></td><td>計画・レビュー・検証の記録</td><td>feature/NZ-173</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-6（案内画面表示）の受け入れ条件</td></tr>
+            <tr><td><a href="../仕様書.md">仕様書</a></td><td>案内画面の区間の描き分けの追記</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>leg / legs / legCoordinates / currentLegIndex / legSections / walkedLegs / currentLeg / upcomingLegs の定義</td></tr>
+            <tr><td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td><td>到達済みの数が増える・戻る仕組み（前提になる機能）</td></tr>
+            <tr><td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td><td>Routes の経路計算全体</td></tr>
+        </table>
+    </div>
+</body>
+</html>

@@ -109,12 +109,43 @@
             <strong>🗓 対象期間:</strong> 2026-10-01 〜 2026-10-07<br>
             <strong>📅 マージ日:</strong> 2026-10-07（10:55 / 12:20 の2回）<br>
             <strong>🌿 対象ブランチ:</strong> feature/NZ-233（2回に分けてマージ）<br>
-            <strong>🔖 対象マージ:</strong> <code>cad1042</code>, <code>cc02d5c</code>
+            <strong>🔖 対象マージ:</strong> <code>cad1042</code>, <code>cc02d5c</code><br>
+            <strong>🔁 その後の変更（2026-10-28）:</strong> <code>b204971</code>（feature/NZ-322: 見えている範囲の中央へ寄せる・固定の倍率）,
+            <code>f218133</code>（feature/NZ-289: 押した時点の倍率のまま寄せる）,
+            <code>f6f7d46</code>（feature/NZ-320: 拡大・縮小ボタンの削除）
+        </div>
+
+        <div class="important">
+            <strong>2026-10-28 時点の動き（この解説書の後半は当初の実装の説明です）</strong><br>
+            現在のボタンは<strong>拡大率を変えず、位置だけを現在地へ戻します</strong>。また、画面上部の操作（バナー・前後のボタン・口コミの表示切り替え）と
+            下部の終了ボタンで隠れている部分を除いた「見えている範囲」の中央へ寄せます。変わった順序は次のとおりです。
+            <ol>
+                <li><code>cc02d5c</code>（10/07）: 拡大率を「画面を開いた直後の倍率（<code>initialZoomLevel</code>）」に戻す</li>
+                <li><code>b204971</code>（10/28）: 戻す倍率を固定値（<code>NAVIGATION_ZOOM_LEVEL</code> = 17）に変更。寄せる位置を見えている範囲の中央へ（<code>offset</code>）。<code>initialZoomLevel</code> は削除</li>
+                <li><code>f218133</code>（10/28）: 倍率を渡すのをやめ、押した時点の倍率のまま寄せる</li>
+                <li><code>f6f7d46</code>（10/28）: 拡大・縮小ボタン（<code>NavigationControl</code>）を削除。拡大率はピンチ操作で変える。現在地へ戻るボタンは右上に単独で置き、口コミの表示切り替えの札の下（<code>controlsTopPx</code>）に追従する</li>
+            </ol>
+            現在のコード:
+            <div class="code-block"><pre>const toVisibleCenterOffsetY = () => (props.topInsetPx - props.bottomInsetPx) / 2;
+
+const centerOnCurrentLocation = () => {
+  if (map === null || props.currentLocation === null) {
+    return;
+  }
+
+  map.easeTo({
+    center: [props.currentLocation.lng, props.currentLocation.lat],
+    offset: [0, toVisibleCenterOffsetY()]
+  });
+};</pre></div>
+            <code>topInsetPx</code> / <code>bottomInsetPx</code> は案内画面（<code>RouteNavigationView.vue</code>）が上部の操作と終了ボタンの位置を測って渡します。詳しくは
+            <a href="./案内開始時の地図表示_実装解説.html">案内開始時の地図表示</a> を参照してください。
+            また、地図に表示する現在地は経路の近くでは線上へ吸着させた座標（<code>displayLocation</code>）なので、ボタンもその位置へ寄せます（<a href="./現在地のずれ対策_実装解説.html">現在地のずれ対策</a>）。
         </div>
 
         <p>
             案内画面の地図に「現在地へ戻る」ボタンを追加しました。地図を指で動かして現在地が画面外へ出てしまっても、
-            ボタンを1回押すだけで現在地が中央に戻り、拡大率（ズーム）も最初に表示していた状態に戻ります。
+            ボタンを1回押すだけで現在地が中央に戻り、拡大率（ズーム）も最初に表示していた状態に戻ります（<code>cc02d5c</code> 時点。現在は拡大率を変えません）。
             変更したのはフロントエンドの2ファイルだけで、バックエンドやAWSの構成には手を入れていません。
         </p>
 
@@ -394,7 +425,8 @@ const ensureRecenterControl = () => {
             「押せるのに反応しない」状態が起こり得ます。
         </div>
         <div class="important">
-            <strong>戻る先の拡大率はルートごとに変わる</strong><br>
+            <strong>（経緯・<code>cc02d5c</code> 時点）戻る先の拡大率はルートごとに変わる</strong><br>
+            <small>※ 現在は <code>initialZoomLevel</code> が削除され、拡大率を変えないため、この注意は当てはまりません。</small><br>
             <code>initialZoomLevel</code> は <code>fitToRoute()</code> が走ったときの倍率です。
             ルートを再作成（<code>regenerate</code>）すると <code>fitToRoute()</code> が再び呼ばれるため、
             新しいルートに合わせた倍率へ更新されます。固定値ではない点に注意してください。
@@ -410,14 +442,15 @@ const ensureRecenterControl = () => {
             <li>リポジトリのルートで <code>npm run dev</code> を実行します（フロントとローカルAPIが同時に起動します）。</li>
             <li>ホーム画面で条件を選んでルートを作成し、提案モーダルで「決定」を押して案内画面へ進みます。</li>
             <li>位置情報の利用を許可し、現在地の青い丸が表示されることを確認します。</li>
-            <li>地図の右上、ズームボタンの下に二重丸のボタンが出ていることを確認します。</li>
-            <li>地図を指（マウス）でドラッグして現在地を画面の外へ出し、さらに縮小します。</li>
-            <li>ボタンを押し、現在地が中央に戻り、かつ拡大率が案内画面を開いた直後の状態に戻ることを確認します。</li>
-            <li>ルート提案画面の地図（プレビュー）には、ズームボタンもこのボタンも出ないことを確認します。</li>
+            <li>地図の右上、口コミの表示切り替え（自分・みんな）の札の下に二重丸のボタンが出ていることを確認します（拡大・縮小ボタンはありません）。</li>
+            <li>地図を指（マウス）でドラッグして現在地を画面の外へ出し、ピンチ（またはマウスホイール）で縮小します。</li>
+            <li>ボタンを押し、現在地がバナーと終了ボタンに挟まれた範囲の中央に戻り、拡大率は押す前のままであることを確認します。</li>
+            <li>ルート提案画面の地図（プレビュー）には、このボタンが出ないことを確認します。</li>
             <li><code>frontend/</code> で <code>npm run lint</code> と <code>npm run build</code> を実行し、エラーが出ないことを確認します。</li>
         </ol>
         <p>
-            この機能には自動テストを追加していません。地図ライブラリのDOM操作が中心のため、確認は上記の手動操作で行います。
+            当初（<code>cad1042</code> / <code>cc02d5c</code>）は自動テストを追加していませんでした。現在は <code>frontend/src/components/feature/route/__tests__/RouteMap.test.js</code> に、
+            現在地へ寄せるときに倍率を渡さないこと・見えている範囲の中央へずらすことなどの確認があります（<code>b204971</code> / <code>f218133</code> / <code>f6f7d46</code> で追加）。<code>frontend/</code> で <code>npm test</code> を実行します。
         </p>
 
         <h2>📁 関連ファイル一覧</h2>

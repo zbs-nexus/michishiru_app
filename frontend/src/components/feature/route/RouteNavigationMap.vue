@@ -197,6 +197,32 @@ defineEmits(['longPressMap', 'selectReviewSpot']);
 }
 
 /*
+ * MapLibre はコントロールに既定で margin: 10px 10px 0 0 を付ける。
+ * そのままだと、親が測った位置（口コミの札の下端＋余白）よりさらに 10px 下がり、
+ * 札との間だけ他の段より広く空く。右も 10px のため、画面上部の段（右端から12px）より 2px はみ出す。
+ * 上は 0 にして親の値だけで位置を決め、右は画面上部の段と同じ 12px に揃える。
+ */
+.navigation-map :deep(.maplibregl-ctrl-top-right .maplibregl-ctrl) {
+  margin: 0 12px 0 0;
+}
+
+/*
+ * 現在地へ戻るボタンの大きさを、前後のボタンの高さ（枠込み 32px）に揃える。
+ * ライブラリの既定は 29px で、枠（--pixel-frame-width × 2）を足すと約39pxになり、
+ * 上の操作より一回り大きく見えるため。中身は 32px − 枠 10px = 22px。
+ */
+.navigation-map :deep(.maplibregl-ctrl-group .recenter-btn) {
+  width: 22px;
+  height: 22px;
+}
+
+/* 中身が小さくなる分、アイコン（global.css の .recenter-btn::after）も 18px から 16px にする */
+.navigation-map :deep(.recenter-btn::after) {
+  width: 16px;
+  height: 16px;
+}
+
+/*
  * 終了ボタン（bottom: 44px、高さ約51px）の上に置く。
  * ボタンの上端は約95pxなので、重ならない位置まで上げる。
  */

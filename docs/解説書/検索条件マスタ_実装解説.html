@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>検索条件マスタ - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>検索条件マスタ - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-09-02 〜 2026-09-09<br>
+            <strong>📅 マージ日:</strong> 2026-09-02, 2026-09-06, 2026-09-09<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-1, feature/NZ-84（develop への直接のマージを含む）<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>4633846</code>（ホーム画面の選択肢を検索条件マスタAPIから取得）,
+            <code>8a8c110</code>（条件をジャンルと距離に絞る・取得失敗をトーストで表示）,
+            <code>dc07a86</code>（検索条件マスタの Lambda <code>getConditions</code> を CDK に追加し、バックエンドを有効化）<br>
+            <small>※ 実装時の判断理由は <a href="../検索条件マスタAPI連携_実装説明書.md">検索条件マスタAPI連携 実装説明書</a>（Markdown）に詳しく書かれています。この解説書は現在のコードに合わせた全体像の入口です。
+            API の認可（2026-10-07）は <a href="./APIの認可_実装解説.html">APIの認可</a>、ジャンルの画像表示（2026-10-28）は <a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a> で扱います。</small>
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>マスタ</strong><br>
+            画面の選択肢のように「あまり変わらないが、コードに直書きしたくない一覧」を入れておくテーブルです。ミチシルでは DynamoDB の <code>michimaster</code> テーブルが検索条件マスタです。
+        </div>
+        <div class="prereq">
+            <strong>項目の種別は pk で見分ける</strong><br>
+            1つのテーブルに目的（<code>PURPOSE#ALL</code>）・ジャンル（<code>GENRE#ALL</code>）・距離（<code>DISTANCE#ALL</code>）が入っており、パーティションキー <code>pk</code> の値で種別を判別します。
+            各項目は <code>isActive</code>（使うか）と <code>sortOrder</code>（表示順）を持ちます。
+        </div>
+        <div class="prereq">
+            <strong>genreId と genreName</strong><br>
+            <code>genreId</code> はコード上の英語ID（<code>nature</code> など）、<code>genreName</code> は画面に出す日本語名（<code>自然</code> など）です。API とのやり取りでは英語IDを使います。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            ホーム画面（US-1）のジャンルの選択肢と距離スライダーの範囲を、コードの定数ではなく検索条件マスタから取得する仕組みです。
+            バックエンドの <code>getConditions</code>（<code>GET /api/v1/conditions</code>）がマスタの全項目を返し、フロントが画面用の形に整えます。
+        </p>
+        <table>
+            <tr><th>種別</th><th>現在の使い方</th></tr>
+            <tr><td>ジャンル（<code>GENRE#ALL</code>）</td><td>ボタンの選択肢。<code>genreId</code> / <code>genreName</code> を使う。おまかせのランダム選択の元にもなる</td></tr>
+            <tr><td>距離（<code>DISTANCE#ALL</code>）</td><td>表示順の先頭を下限、末尾を上限とするスライダーの範囲（例: 1km〜10km）</td></tr>
+            <tr><td>目的（<code>PURPOSE#ALL</code>）</td><td>マスタには残っているが、画面では使わない（<code>8a8c110</code> でジャンルと距離の2項目に絞った）</td></tr>
+        </table>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <ul>
+            <li>選択肢をコードに書くと、ジャンルを増やすたびにフロントの修正とデプロイが必要になるため</li>
+            <li>ルート作成（createRoute）も同じマスタを引いてジャンル → スポットのカテゴリを決めるので、画面とサーバーで選択肢の食い違いを起こさないため</li>
+        </ul>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: ホーム画面を開く</strong><br>
+            <code>RouteConditionView</code> が <code>useRouteConditionOptions</code> の <code>loadConditionOptions()</code> を呼びます。取得中はマスコットを出さず、失敗したらマスコットの吹き出し（注意の見た目）で理由を伝え、「再読み込み」ボタンを出します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: API を呼ぶ（conditionService.js）</strong><br>
+            idToken を <code>Authorization</code> ヘッダーに載せて <code>GET /api/v1/conditions</code> を呼び、JSON でなければ（SPA の <code>index.html</code> が返ってきた等）その場でエラーにします。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: サーバー側（getConditions Lambda）</strong><br>
+            repository が <code>michimaster</code> を全件 Scan して返します。テーブル名の環境変数が未設定（ローカル開発）のときは <code>seedConditions.js</code> の固定データを返します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: 画面用に整える（フロント）</strong><br>
+            種別ごとに有効な項目を表示順に並べ、ジャンルは <code>{ value: genreId, label: genreName, icon }</code>、距離は <code>{ minKm, maxKm, minLabel, maxLabel, defaultKm }</code> にします。
+            選択中の距離が範囲外なら範囲内へ補正します。
+        </div>
+
+        <h3>どのマージが何を担っているか</h3>
+        <table>
+            <tr><th>マージ</th><th>担っている部分</th></tr>
+            <tr><td><code>4633846</code></td><td>Step 1・2・4。当初は外部のマスタAPIを直接呼んでいた（実装説明書の「対象API」）</td></tr>
+            <tr><td><code>8a8c110</code></td><td>目的を外しジャンルと距離の2項目に。エラーを画面上部のトースト（<code>BaseToast</code>）へ集約し、JSON以外の応答を判定する <code>utils/apiResponse.js</code> を追加（取得失敗の表示は、その後のデザイン変更 <code>3c4fc0b</code> でマスコットの吹き出しへ移った）</td></tr>
+            <tr><td><code>dc07a86</code></td><td>Step 3。<code>getConditions</code> Lambda と <code>GET /api/v1/conditions</code> を CDK に追加し、<code>withBackend</code> を有効化。CI に backend の準備を追加。ローカルAPI（<code>tools/localApiServer.js</code>）にも登録</td></tr>
+        </table>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>backend/functions/getConditions/repository.js</h3>
+        <div class="code-block"><pre>export const listConditions = async () => {
+  if (!hasConditionTable()) {
+    return SEED_CONDITIONS;
+  }
+
+  const response = await sendWithRetry(
+    new ScanCommand({
+      TableName: CONDITION_TABLE_NAME
+    })
+  );
+
+  return response.Items ?? [];
+};</pre></div>
+        <ul>
+            <li>規約では Scan を既定の取得方法にしないことになっていますが、マスタは件数が少なく全件が必要なため Scan を使っています（コメントに理由あり）</li>
+            <li>スロットリング（混雑による拒否）は最大3回まで待ち時間を延ばして再試行します</li>
+            <li>service は全項目をそのまま返します。絞り込み・並べ替えはフロントの役割です</li>
+        </ul>
+
+        <h3>frontend/src/services/conditionService.js</h3>
+        <div class="code-block"><pre>const pickActiveItems = (items, itemKey) =>
+  items
+    .filter((item) => item.pk === itemKey &amp;&amp; item.isActive)
+    .sort((first, second) => first.sortOrder - second.sortOrder);
+
+const toDistanceRange = (distanceItems) => {
+  const lowerItem = distanceItems.at(0);
+  const upperItem = distanceItems.at(-1);
+  const defaultItem = distanceItems.find((item) => item.isDefault);
+  ...
+};</pre></div>
+        <p>
+            ジャンルか距離のどちらかが0件だと条件を選べないので、部分的に表示せずエラーにします。
+            距離を「選択肢の列挙」ではなく「下限〜上限の範囲」として扱うのは、マスタの距離が下限・上限の2件で、表示ラベルもその意味だからです。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>マスタテーブルは CDK 管理ではない</strong><br>
+            <code>michimaster</code> はコンソールで手作りされたテーブルで、CDK からは名前で参照しているだけです（<code>Table.fromTableName</code>）。
+            環境ごとに分かれておらず、命名規則（<code>PascalCase-&lt;環境&gt;</code>）や属性名の規約（camelCase）からも外れています。前提条件書の「マスタテーブルのCDK管理」は未対応のままです。
+        </div>
+        <div class="important">
+            <strong>ジャンルIDの値が資料によって違う</strong><br>
+            ローカル用のシード（<code>seedConditions.js</code>）のジャンルIDは <code>nature</code> / <code>photo</code> / <code>history</code> / <code>gourmet</code> ですが、
+            用語辞書の「ジャンルの選択値」は <code>nature</code> / <code>city</code> / <code>history</code> / <code>gourmet</code> のままです。
+            本番のマスタの値はコンソールで確認してください（フロントの <code>constants/genreImages.js</code> は、IDで引けないときに日本語名でも引く保険を持っています）。
+        </div>
+        <div class="important">
+            <strong>ローカルではシードが返る</strong><br>
+            <code>CONDITION_TABLE_NAME</code> を設定しないと本物のマスタを読まず、シードの固定データが返ります。本番との差に気付きにくいので、マスタを変えたときは dev 環境で確認してください。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li><code>npm run dev</code> で起動してログインし、ホーム画面にジャンルのボタンと距離スライダー（1km〜10km）が出ることを確かめる</li>
+            <li>ローカルAPIを止めて再読み込みし、マスコットの吹き出しに「検索条件の取得に失敗しました（…）」が出て、「再読み込み」ボタンで取り直せることを確かめる</li>
+            <li>テスト: <code>backend</code> で <code>npm test</code>（<code>functions/getConditions/__tests__/service.test.js</code>）、<code>frontend</code> で <code>npm test</code>（<code>src/services/__tests__/conditionService.test.js</code>。認可ヘッダーの確認を含む）</li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>backend/functions/getConditions/</code>（handler / service / repository / constants / seedConditions）</td><td>マスタの全項目を返す API</td><td>feature/NZ-84（<code>dc07a86</code>）</td></tr>
+                <tr><td><code>frontend/src/services/conditionService.js</code></td><td>API 呼び出しと画面用の変換</td><td>feature/NZ-1</td></tr>
+                <tr><td><code>frontend/src/composables/useRouteConditionOptions.js</code></td><td>取得状態の管理と距離の補正</td><td>feature/NZ-1</td></tr>
+                <tr><td><code>frontend/src/utils/apiResponse.js</code></td><td>JSON の応答かどうかの判定</td><td>feature/NZ-1（<code>8a8c110</code>）</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteConditionForm.vue</code></td><td>ジャンルのボタンと距離スライダーの表示</td><td>feature/NZ-1</td></tr>
+                <tr><td><code>frontend/src/components/base/BaseSlider.vue</code> / <code>BaseToast.vue</code></td><td>距離スライダーと、画面上部のトースト（未選択・作成失敗の通知）</td><td>feature/NZ-1</td></tr>
+                <tr><td><code>frontend/src/views/RouteConditionView.vue</code></td><td>ホーム画面での取得の呼び出し</td><td>feature/NZ-1</td></tr>
+                <tr><td><code>iac/lib/michishiru-stack.ts</code></td><td><code>GetConditionsFunction</code>・<code>GET /api/v1/conditions</code>・<code>michimaster</code> の参照</td><td>feature/NZ-84（<code>dc07a86</code>）</td></tr>
+                <tr><td><code>.github/workflows/checks.yml</code> / <code>deploy.yml</code></td><td>バックエンドを含めたデプロイ</td><td>feature/NZ-84（<code>dc07a86</code>）</td></tr>
+                <tr><td><code>tools/localApiServer.js</code></td><td>ローカルAPIへの登録</td><td>feature/NZ-84（<code>dc07a86</code>）</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>US-1 の受け入れ条件、「マスタテーブルのCDK管理」「ジャンルの受け渡し形式」の未決事項</td></tr>
+            <tr><td><a href="../検索条件マスタAPI連携_実装説明書.md">検索条件マスタAPI連携 実装説明書</a></td><td>実装時の判断理由・規約準拠点・申し送り（同じ機能の詳細資料）</td></tr>
+            <tr><td><a href="../設計書.md">設計書</a></td><td>API 仕様とデータ構造</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>「検索条件」の節（genre / genreId / genreName）</td></tr>
+            <tr><td><a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a></td><td>このマスタからジャンル・距離をランダムに選ぶ機能（続きの機能）</td></tr>
+            <tr><td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td><td>同じマスタでジャンル → カテゴリを引く処理</td></tr>
+            <tr><td><a href="../NZ-84_CICDの解説.html">CI/CD の解説</a></td><td>バックエンドを含めたデプロイの仕組み</td></tr>
+        </table>
+    </div>
+</body>
+</html>

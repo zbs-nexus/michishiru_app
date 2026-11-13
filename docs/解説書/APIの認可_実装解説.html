@@ -112,6 +112,20 @@
             <strong>🔖 対象マージ:</strong> <code>75de23f</code>
         </div>
 
+        <div class="info-box">
+            <strong>2026-10-28 時点の補足:</strong> この解説書が扱うのは最初の3メソッド（<code>GET</code>/<code>POST /api/v1/routes</code>、<code>GET /api/v1/conditions</code>）です。
+            その後に追加された API も、照合API（<code>POST /api/v1/password-reset-verifications</code>）を除いてすべて同じ Cognito オーソライザー（<code>cognitoAuthorized</code>）で保護されています。
+            <table>
+                <tr><th>API</th><th>追加したマージ</th><th>解説書</th></tr>
+                <tr><td><code>GET /api/v1/spots</code> / <code>POST /api/v1/reviews</code> / <code>POST /api/v1/review-photo-uploads</code> / <code>GET /api/v1/my-reviews</code></td><td><code>1695300</code>, <code>e8725e4</code></td><td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td></tr>
+                <tr><td><code>GET /api/v1/review-spots</code></td><td><code>ca55da2</code></td><td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td></tr>
+                <tr><td><code>POST /api/v1/walk-results</code></td><td><code>dc87c1c</code></td><td><a href="./散歩実績の保存_実装解説.html">散歩実績の保存</a></td></tr>
+                <tr><td><code>GET /api/v1/experience</code></td><td><code>7d58840</code></td><td><a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a></td></tr>
+            </table>
+            いずれの Lambda も、利用者はリクエストの中身ではなく <code>event.requestContext.authorizer.claims.sub</code> から決めます。
+            照合APIの回数制限（総当たり対策）は、前提条件書の「今後追加予定の要素」に未対応のまま残っています。
+        </div>
+
         <h2>🧩 先に知っておきたいこと</h2>
 
         <div class="prereq">

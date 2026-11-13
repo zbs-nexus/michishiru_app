@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>口コミの場所を巡るルート - 実装解説</title>
+    <style>
+        body { font-family: 'Segoe UI', Meiryo, sans-serif; line-height: 1.8; max-width: 1000px; margin: 0 auto; padding: 20px; background-color: #f5f5f5; }
+        .container { background-color: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }
+        h2 { color: #34495e; margin-top: 30px; border-left: 4px solid #3498db; padding-left: 10px; }
+        h3 { color: #555; }
+        .info-box { background-color: #e8f4f8; border-left: 4px solid #3498db; padding: 15px; margin: 20px 0; }
+        .prereq { background-color: #f0f7ec; border-left: 4px solid #27ae60; padding: 15px; margin: 15px 0; }
+        .code-block { background-color: #f8f8f8; border: 1px solid #ddd; border-radius: 4px; padding: 15px; overflow-x: auto; font-family: 'Consolas', 'Monaco', monospace; font-size: 14px; }
+        .flow-step { background-color: #fff9e6; border-left: 4px solid #f39c12; padding: 15px; margin: 10px 0; }
+        .file-list { background-color: #f0f0f0; padding: 15px; border-radius: 4px; }
+        .important { background-color: #ffe6e6; border-left: 4px solid #e74c3c; padding: 10px; margin: 15px 0; }
+        ul, ol { margin-left: 20px; }
+        code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas', 'Monaco', monospace; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+        th { background-color: #3498db; color: white; }
+        a { color: #2980b9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <p><a href="./index.html">← 解説書の一覧へ</a></p>
+
+        <h1>口コミの場所を巡るルート - 実装解説</h1>
+
+        <div class="info-box">
+            <strong>🗓 対象期間:</strong> 2026-10-21<br>
+            <strong>📅 マージ日:</strong> 2026-10-21（6件。10:22 〜 17:14）<br>
+            <strong>🌿 対象ブランチ:</strong> feature/NZ-165, feature/NZ-165_fix<br>
+            <strong>🔖 対象マージ:</strong>
+            <code>2ab9741</code>（口コミの場所を候補に混ぜる・チェーン店を後回し）,
+            <code>75b58f3</code>（ジャンルで絞る・星から紫の丸へ）,
+            <code>edde8ef</code>（評価の高い順・押すと口コミを開く・テスト用データ投入スクリプト）,
+            <code>c1e0271</code>（番号つきの紫の丸に統一）,
+            <code>d756ec1</code>（口コミの場所の上限: 4割・最低1か所）,
+            <code>9edc9fb</code>（自分の口コミの場所をオレンジで描き分け）
+        </div>
+
+        <h2>🧩 先に知っておきたいこと</h2>
+        <div class="prereq">
+            <strong>ルート作成の流れ（createRoute）</strong><br>
+            ジャンル → カテゴリを引き、Amazon Location Service（Places）で周辺の候補を集め、Amazon Bedrock（AI）に選ばせ、
+            Location Service（Routes）で徒歩経路を計算する、という流れです。全体は <a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a> を先に読んでください。
+            この機能は、その「候補」に口コミの場所を混ぜる追加です。
+        </div>
+        <div class="prereq">
+            <strong>口コミの場所</strong><br>
+            利用者が案内画面で投稿した口コミは、DynamoDB の <code>Review-&lt;環境&gt;</code> テーブルに「場所（<code>sk = 'SPOT'</code>）」と「口コミ（<code>sk = 'REVIEW#&lt;userId&gt;'</code>）」の行で保存されています。
+            投稿の仕組みは <a href="./口コミ投稿_実装解説.html">口コミ投稿</a> を参照してください。
+        </div>
+        <div class="prereq">
+            <strong>GSI（グローバルセカンダリインデックス）</strong><br>
+            DynamoDB で「本来のキー以外」の項目で検索するための索引です。ここでは場所の一覧を引く <code>GSI-SpotList</code>（キーが <code>sk</code>）と、
+            利用者ごとの口コミを引く <code>GSI-UserReview</code>（キーが <code>userId</code>）を使います。
+        </div>
+        <div class="prereq">
+            <strong>ピンの色の意味</strong><br>
+            地図の色は意味に1対1で固定しています。赤 = 新規で投稿する場所、オレンジ = 自分の口コミの場所、紫 = 他の人の口コミの場所です（用語辞書「口コミのピンの色」）。
+        </div>
+
+        <h2>📖 この機能について</h2>
+        <p>
+            ルートを作るとき、検索条件のジャンルに合い、現在地から選んだ距離以内にある<strong>口コミの付いた場所</strong>を、
+            平均評価の高い順にルートの候補へ混ぜる機能です。選ばれた口コミの場所は地図で番号つきの丸として描き、
+            他の人の口コミなら紫、自分の口コミならオレンジで塗ります。丸を押すと、その場所の口コミがフォームで開きます。
+        </p>
+        <p>
+            あわせて、Places の候補のうちチェーン店（<code>BusinessChains</code> を持つ場所）は選ぶ優先順位を下げました。
+        </p>
+
+        <h2>🎯 なぜこの機能が必要？</h2>
+        <p>
+            Places の候補だけだと、どこにでもあるチェーン店や「地図上は施設だが散歩で寄るほどではない場所」が選ばれがちでした。
+            実際に歩いた人が評価した場所を巡れば、ルートの満足度が上がり、口コミを投稿する動機（自分の投稿が誰かのルートに入る）にもなります。
+        </p>
+        <p>関連するユーザーストーリーは US-2（条件に合うスポットを DB や AI に選定させる）です。</p>
+
+        <h2>🔄 処理の流れ</h2>
+        <div class="flow-step">
+            <strong>Step 1: 候補を並行して集める（service.js の createRoute）</strong><br>
+            Places の周辺検索と、口コミの場所の取得（<code>collectReviewCandidateSpots</code>）を <code>Promise.all</code> で同時に行います。
+            口コミの場所の取得では、場所の一覧（<code>GSI-SpotList</code>）と自分の口コミ（<code>GSI-UserReview</code>）も並行して引きます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 2: 口コミの場所を絞り込み、並べる</strong><br>
+            ジャンル（投稿時に選んだ <code>genreId</code>）が検索条件と一致し、現在地から「選んだ距離（km）」以内のものだけを残し、
+            平均評価 → 評価件数 → 現在地からの近さ の順に並べます。自分が投稿済みかの目印（<code>isMyReviewSpot</code>）もここで付けます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 3: Bedrock へ渡す候補を組み立てる（buildPromptCandidateSpots）</strong><br>
+            口コミの場所を上位5件まで先頭に置き、それと同じ名前・同じ場所（40m以内）の Places の候補を外し、チェーン店を後ろへ回して、全体を20件までにします。
+            口コミの場所には <code>"isReviewSpot": true</code> と平均評価、チェーン店には <code>"isChain": true</code> を付けて渡します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 4: AI に選ばせる（prompt.js）</strong><br>
+            プロンプトで「口コミの場所はスポットの4割程度・最低1か所・評価の高いものを優先。ただし距離を最優先」「チェーン店はほかに候補があれば選ばない」と指示します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 5: 目印の付け直しと上限（markReviewSpots / limitReviewSpots）</strong><br>
+            AI の出力は名前と座標だけなので、名前から口コミの場所を引き直してIDと元の座標を付けます。
+            口コミの場所が上限（スポット数 × 0.4 を四捨五入、最低1か所）を超えていれば、評価の低いものから外します。
+        </div>
+        <div class="flow-step">
+            <strong>Step 6: 距離の調整</strong><br>
+            既存の距離調整（経路から外れたスポットの除外、超過時のスポット削減）を行います。削るときは口コミでないスポットから外し、口コミの場所をできるだけ残します（<code>removeOneSpotForDistance</code>）。
+        </div>
+        <div class="flow-step">
+            <strong>Step 7: 1か所も通らなければ差し込む（ensureReviewSpot）</strong><br>
+            ルートが口コミの場所を1か所も通らない場合、評価の高い順に「遠回りが最小になる位置へ差し込む」「最寄りのスポットと入れ替える」を最大3通り試します。
+            徒歩で到達でき（経路から150m以内）、総距離が許容範囲に収まるものだけを採用し、だめなら元のルートのままにします（距離を優先）。
+        </div>
+        <div class="flow-step">
+            <strong>Step 8: 自分の口コミかを最終決定し、応答に載せる</strong><br>
+            差し込み後の最終スポットに <code>markMyReviewSpots</code> で <code>isMyReviewSpot</code> を付け、応答の各スポットに
+            <code>isReviewSpot</code> / <code>isMyReviewSpot</code> / <code>reviewSpotId</code> / <code>reviewLng</code> / <code>reviewLat</code> を載せます。
+        </div>
+        <div class="flow-step">
+            <strong>Step 9: 地図に描く（フロント）</strong><br>
+            <code>utils/routeResponse.js</code> がこれらを画面用の形（<code>reviewPosition: { lng, lat }</code>）に変換し、
+            <code>RouteMap.vue</code> が番号の丸（<code>spot-marker is-review</code>、自分の口コミなら <code>is-mine</code> も付く）として描きます。
+            押すと <code>selectReviewSpot</code> を emit し、案内画面がその場所の口コミをフォームで開きます。その場所の口コミのピンは重ねて描きません。
+        </div>
+
+        <h3>どのマージが何を担っているか</h3>
+        <table>
+            <tr><th>マージ</th><th>担っている部分</th></tr>
+            <tr><td><code>2ab9741</code></td><td>Step 1〜5 の土台（<code>reviewSpotRepository.js</code> の追加、プロンプトの指示、チェーン店の判定）。地図ではいったん星の形で描いた。IaC で createRoute に Review テーブルの読み取り権限を追加</td></tr>
+            <tr><td><code>75b58f3</code></td><td>Step 2 のジャンルでの絞り込み。星から紫の丸へ変更</td></tr>
+            <tr><td><code>edde8ef</code></td><td>評価の高い順の優先と、押すと口コミを開くための <code>reviewSpotId</code> / 元の座標を応答に追加。テスト用データの投入スクリプト（<code>backend/tools/seedReviewSpots.js</code>）</td></tr>
+            <tr><td><code>c1e0271</code></td><td>口コミの場所を「番号つきの紫の丸」に統一し、押すと口コミを開く</td></tr>
+            <tr><td><code>d756ec1</code></td><td>Step 5 の上限（4割・最低1か所）をコードでかける。プロンプトの割合も同じ定数から作る</td></tr>
+            <tr><td><code>9edc9fb</code></td><td>Step 1・8 の自分の口コミの判定（<code>GSI-UserReview</code> の読み取り）とオレンジの描き分け</td></tr>
+        </table>
+
+        <h2>💻 コードの解説</h2>
+
+        <h3>backend/functions/createRoute/repositories/reviewSpotRepository.js</h3>
+        <table>
+            <tr><th>関数</th><th>入力 → 出力</th><th>ポイント</th></tr>
+            <tr><td><code>listReviewSpots()</code></td><td>なし → 場所の一覧（spotId / name / genreId / position / ratingAverage / ratingCount）</td><td><code>GSI-SpotList</code> を <code>sk = 'SPOT'</code> で Query 1回。新しい順に最大200件。平均評価は合計 ÷ 件数で都度求める</td></tr>
+            <tr><td><code>queryReviewedSpotIdsByUserId(userId)</code></td><td>sub → 投稿済みの場所IDの一覧</td><td><code>GSI-UserReview</code> を新しい順に最大100件。地図のオレンジのピン（getUserReviews）と同じ件数にそろえ、判定が食い違わないようにしている</td></tr>
+        </table>
+        <p>
+            距離での絞り込みや自分の口コミかの判定は、規約どおり Service 層で行います（repository は取得と形の変換だけ）。
+        </p>
+
+        <h3>backend/functions/createRoute/service.js（主な関数）</h3>
+        <div class="code-block"><pre>const resolveMaxReviewSpotCount = (spotCount) =>
+  Math.max(MIN_REVIEW_SPOT_LIMIT, Math.round(spotCount * REVIEW_SPOT_RATIO));
+
+const limitReviewSpots = (spots) => {
+  let limited = spots;
+
+  while (countReviewSpots(limited) > resolveMaxReviewSpotCount(limited.length)) {
+    const removeIndex = findLowestRatedReviewIndex(limited);
+    limited = limited.filter((_, index) => index !== removeIndex);
+  }
+  ...
+};</pre></div>
+        <p>
+            上限は「2〜3か所なら1、4〜6か所なら2、7〜8か所なら3」です。AI への指示だけでは守られず、4か所中3か所が口コミの場所になることがあったため、コードでも外しています。
+            外すとスポット数が減って上限も下がるので、収まるまで繰り返します。
+        </p>
+        <table>
+            <tr><th>関数</th><th>役割</th></tr>
+            <tr><td><code>fetchReviewSpots</code> / <code>collectMyReviewedSpotIds</code></td><td>取得に失敗しても例外を投げず空で続ける（口コミの場所は付加的な候補のため、ルート作成を止めない）</td></tr>
+            <tr><td><code>collectReviewCandidateSpots</code></td><td>Step 2 の絞り込みと並べ替え</td></tr>
+            <tr><td><code>buildPromptCandidateSpots</code></td><td>Step 3 の候補の組み立て</td></tr>
+            <tr><td><code>markReviewSpots</code></td><td>AI が選んだスポットに口コミの場所の目印・ID・元の座標を付け直す</td></tr>
+            <tr><td><code>removeOneSpotForDistance</code></td><td>距離超過で1か所外すとき、口コミでないスポットを優先して外す</td></tr>
+            <tr><td><code>findBestInsertion</code> / <code>ensureReviewSpot</code></td><td>Step 7 の差し込み・入れ替え</td></tr>
+            <tr><td><code>markMyReviewSpots</code></td><td>最終スポットに自分の口コミかの目印を付ける</td></tr>
+        </table>
+
+        <h3>2つの座標（lng / lat と reviewLng / reviewLat）</h3>
+        <p>
+            ルートのスポットの <code>lng</code> / <code>lat</code> は、線とマーカーがずれないよう<strong>経路上へ寄せた</strong>座標です（最大150mずれる）。
+            一方、口コミを開くときは「半径40m以内を同じ場所とみなす」規則で引くため、寄せた座標では見つからないことがあります。
+            そこで口コミのピンの元の位置を <code>reviewLng</code> / <code>reviewLat</code>（画面では <code>reviewPosition</code>）として別に返しています。
+        </p>
+
+        <h2>⚠️ 注意ポイント</h2>
+        <div class="important">
+            <strong>ジャンルを持たない口コミの場所は候補にならない</strong><br>
+            投稿時の <code>genreId</code> と検索条件のジャンルを突き合わせるため、ジャンルの無い場所は条件に合うか判断できず外れます。
+            ここで比べるのはどちらも検索条件マスタの英語ID（<code>nature</code> など）です。
+        </div>
+        <div class="important">
+            <strong>場所が増えると取りこぼす</strong><br>
+            場所の一覧は新しい順に最大200件しか読みません（<code>REVIEW_SPOT_QUERY_LIMIT</code>）。現在地からの距離は取得後に絞るため、
+            投稿が増えると近くの古い場所が候補に入らなくなります。コード中に「現在地周辺だけを引ける索引へ切り替える」TODO があります。
+        </div>
+        <div class="important">
+            <strong>プロンプトの割合と上限は同じ定数から作る</strong><br>
+            <code>REVIEW_SPOT_RATIO</code>（0.4）を変えると、プロンプトの「4割」と Service 層の上限が両方変わります。片方だけ直さないでください。
+        </div>
+        <div class="important">
+            <strong>テスト用データの投入</strong><br>
+            <code>backend/tools/seedReviewSpots.js</code> は大手町ビル周辺に架空ユーザーの口コミを入れるスクリプトです。既定は確認だけで、
+            <code>--apply</code> で投入、<code>--delete</code> で削除します。テーブル名に <code>prod</code> を含む場合は実行しません。
+        </div>
+
+        <h2>✅ 動作確認方法</h2>
+        <ol>
+            <li>dev のテーブルにテスト用の口コミを入れる（任意）: <code>backend</code> で <code>REVIEW_TABLE_NAME=Review-dev npm run seed:review-spots</code> で内容を確認し、問題なければ <code>-- --apply</code> を付けて投入する（AWS の認証情報が必要）</li>
+            <li>口コミの場所の近く（例: 大手町）を現在地にしてルートを作成し、提案・案内画面で番号つきの紫の丸が出ることを確かめる</li>
+            <li>自分が口コミを投稿した場所がルートに入ったとき、丸がオレンジになることを確かめる</li>
+            <li>案内画面で丸を押し、その場所の口コミがフォームで開くことを確かめる</li>
+            <li>テスト: <code>backend</code> で <code>npm test</code>（<code>functions/createRoute/__tests__/</code> の service / reviewSpotRepository / prompt / placesRepository）、
+                <code>frontend</code> で <code>npm test</code>（<code>src/components/feature/route/__tests__/RouteMap.test.js</code> / <code>src/utils/__tests__/routeResponse.test.js</code>）、<code>iac</code> で <code>npm test</code></li>
+        </ol>
+
+        <h2>📁 関連ファイル一覧</h2>
+        <div class="file-list">
+            <table>
+                <tr><th>ファイル</th><th>役割</th><th>由来のブランチ</th></tr>
+                <tr><td><code>backend/functions/createRoute/repositories/reviewSpotRepository.js</code></td><td>口コミの場所・自分の口コミの取得</td><td>feature/NZ-165, feature/NZ-165_fix</td></tr>
+                <tr><td><code>backend/functions/createRoute/service.js</code></td><td>候補の組み立て・上限・差し込み・目印付け</td><td>feature/NZ-165, feature/NZ-165_fix</td></tr>
+                <tr><td><code>backend/functions/createRoute/constants.js</code></td><td>索引名・件数の上限・割合（<code>REVIEW_SPOT_RATIO</code> など）</td><td>feature/NZ-165</td></tr>
+                <tr><td><code>backend/functions/createRoute/prompt.js</code></td><td>口コミの場所とチェーン店の指示</td><td>feature/NZ-165</td></tr>
+                <tr><td><code>backend/functions/createRoute/repositories/placesRepository.js</code></td><td>候補に <code>isChain</code> を付ける</td><td>feature/NZ-165</td></tr>
+                <tr><td><code>backend/functions/createRoute/handler.js</code></td><td>Cognito の sub を <code>userId</code> として service へ渡す</td><td>feature/NZ-165_fix</td></tr>
+                <tr><td><code>backend/tools/seedReviewSpots.js</code> / <code>reviewSpotSeeds.js</code></td><td>テスト用の口コミの場所の投入・削除</td><td>feature/NZ-165</td></tr>
+                <tr><td><code>frontend/src/utils/routeResponse.js</code></td><td>応答の口コミの場所の情報を画面用に変換</td><td>feature/NZ-165, feature/NZ-165_fix</td></tr>
+                <tr><td><code>frontend/src/components/feature/route/RouteMap.vue</code></td><td>番号つきの丸の描画（紫 / オレンジ）と <code>selectReviewSpot</code></td><td>feature/NZ-165, feature/NZ-165_fix</td></tr>
+                <tr><td><code>frontend/src/assets/styles/global.css</code></td><td><code>.spot-marker.is-review</code> / <code>.is-mine</code> の色（<code>--review-purple</code> / <code>--review-orange</code>）</td><td>feature/NZ-165, feature/NZ-165_fix</td></tr>
+                <tr><td><code>iac/lib/michishiru-stack.ts</code></td><td>createRoute に <code>REVIEW_TABLE_NAME</code> と Review テーブルの読み取り権限（<code>grantReadData</code>。索引を含む）を付与</td><td>feature/NZ-165, feature/NZ-165_fix</td></tr>
+            </table>
+        </div>
+
+        <h2>🔗 関連ドキュメント</h2>
+        <table>
+            <tr><th>ドキュメント</th><th>何が書いてあるか</th></tr>
+            <tr><td><a href="../../.kiro/steering/ミチシル_前提条件.md">前提条件書</a></td><td>構成図の createRoute → DynamoDB（口コミの場所・自分の口コミ。読み取りのみ）と、US-2 の受け入れ条件</td></tr>
+            <tr><td><a href="../仕様書.md">仕様書</a></td><td>ルートの口コミの場所の描き分け（<code>isMyReviewSpot</code>）の追記</td></tr>
+            <tr><td><a href="../../.kiro/steering/naming-glossary.md">用語辞書</a></td><td>reviewCandidates / isReviewSpot / isMyReviewSpot / reviewSpotId / reviewPosition / isChain と、ピンの色の表</td></tr>
+            <tr><td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td><td>createRoute 全体の流れ（前提になる機能）</td></tr>
+            <tr><td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td><td>口コミの保存形式と、丸を押して開くフォーム（前提になる機能）</td></tr>
+        </table>
+    </div>
+</body>
+</html>

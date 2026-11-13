@@ -63,7 +63,8 @@
 
         <div class="lead">
             develop ブランチにマージされた機能の実装解説です。開発に参加したばかりの方は、
-            上から順に読まず、担当する機能のものから読んでください。
+            上から順に読まず、担当する機能のものから読んでください。<br>
+            「最終更新」は、その解説書が扱っている最も新しいマージの日付です（2026-10-28 時点で全期間を見直し済み）。
         </div>
 
         <table>
@@ -74,10 +75,94 @@
                 <th>対象マージ</th>
             </tr>
             <tr>
+                <td><a href="./チュートリアル_実装解説.html">チュートリアル</a></td>
+                <td>ホームのメニューから始め、マスコットの案内に沿ってルート作成〜案内〜口コミの評価〜結果までを、ダミーのデータで一通り練習できる機能。</td>
+                <td>2026-10-28</td>
+                <td><code>adc6934</code>, <code>769e5c2</code>, <code>62ae3dc</code>, <code>2ece117</code>, <code>c1b34cf</code>, <code>16b753f</code>, <code>fdf8fb1</code>, <code>ff7282d</code></td>
+            </tr>
+            <tr>
+                <td><a href="./マスコットのレベルアップ_実装解説.html">マスコットのレベルアップ</a></td>
+                <td>口コミの件数・累計距離・累計時間を経験値にしてマスコットを Lv.1〜Lv.10 に育て、散歩後にレベルが上がったら全画面で祝う機能。</td>
+                <td>2026-10-28</td>
+                <td><code>7d58840</code>, <code>ce94517</code>, <code>e8cd294</code>, <code>31fcd2c</code>, <code>c20633a</code>, <code>10ca729</code>, <code>0b675e9</code>, <code>cabcdf5</code></td>
+            </tr>
+            <tr>
+                <td><a href="./案内開始時の地図表示_実装解説.html">案内開始時の地図表示</a></td>
+                <td>案内開始時にスタート地点を見えている範囲の中央へ固定の倍率で置き、拡大・縮小ボタンを外して地図の上の操作を整理した変更。</td>
+                <td>2026-10-28</td>
+                <td><code>f6f7d46</code>, <code>b204971</code>, <code>24fc296</code></td>
+            </tr>
+            <tr>
+                <td><a href="./現在地へ戻るボタン_実装解説.html">現在地へ戻るボタン</a></td>
+                <td>案内画面の地図に、押すと現在地を見えている範囲の中央へ戻すボタンを追加した機能（現在は拡大率を変えない）。</td>
+                <td>2026-10-28</td>
+                <td><code>cad1042</code>, <code>cc02d5c</code>, <code>b204971</code>, <code>f218133</code>, <code>f6f7d46</code></td>
+            </tr>
+            <tr>
                 <td><a href="./口コミ投稿_実装解説.html">口コミ投稿</a></td>
-                <td>案内画面の地図を長押ししてピンを立て、ロケーション名・ジャンル・5段階評価・写真（最大4枚）を投稿でき、自分の投稿はオレンジのピンで表示される機能。</td>
-                <td>2026-10-07</td>
-                <td><code>cce3717</code>, <code>8eeaf26</code>, <code>939f1cf</code>, <code>1695300</code>, <code>e8725e4</code></td>
+                <td>案内画面の地図を長押しして場所に口コミ（名前・ジャンル・5段階評価・写真）を投稿し、自分の口コミをオレンジ、他の人の口コミを紫のピンで表示する機能。</td>
+                <td>2026-10-28</td>
+                <td><code>cce3717</code>, <code>8eeaf26</code>, <code>939f1cf</code>, <code>1695300</code>, <code>e8725e4</code>, <code>ca55da2</code>, <code>00a85a5</code>, <code>c2594c1</code>, <code>1587ecf</code>, <code>236028f</code>, <code>4ebadfa</code>, <code>f72fac3</code>, <code>ff7282d</code>, <code>ba1fdde</code></td>
+            </tr>
+            <tr>
+                <td><a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a></td>
+                <td>配色と書体を <code>global.css</code> に集約し、古地図とドット絵風の見た目（書体は DotGothic16）で全画面を揃え、案内役のマスコットを吹き出しで登場させたデザイン。</td>
+                <td>2026-10-28</td>
+                <td><code>3c4fc0b</code>, <code>4e24e22</code>, <code>5bd23f0</code>, <code>b72a9d7</code>, <code>0d851b4</code>, <code>7f188e5</code>, <code>c3d8e30</code>, <code>ce94517</code>, <code>c8983b2</code>, <code>b8c06ae</code>, <code>8c95b92</code>, <code>3d8e20d</code>, <code>ba1fdde</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a></td>
+                <td>ホーム画面のジャンルと距離を「おまかせ」にすると、アプリが条件を自動で選び、選ばれた内容をトーストで知らせる機能。</td>
+                <td>2026-10-28</td>
+                <td><code>c4d66d3</code>, <code>9103fce</code>, <code>ab48b44</code></td>
+            </tr>
+            <tr>
+                <td><a href="./口コミの場所を巡るルート_実装解説.html">口コミの場所を巡るルート</a></td>
+                <td>ジャンルと距離に合う評価の高い口コミの場所をルートに混ぜ（4割まで）、チェーン店を後回しにし、地図で自分の口コミをオレンジ・他の人の口コミを紫の丸で描く機能。</td>
+                <td>2026-10-21</td>
+                <td><code>2ab9741</code>, <code>75b58f3</code>, <code>edde8ef</code>, <code>c1e0271</code>, <code>d756ec1</code>, <code>9edc9fb</code></td>
+            </tr>
+            <tr>
+                <td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td>
+                <td>案内画面の上部に次の目的地と残り距離（経路沿い）を表示し、「次の目的地へ」「前の目的地へ」のボタンで切り替える機能。</td>
+                <td>2026-10-21</td>
+                <td><code>2c29b50</code>, <code>3e8aed6</code>, <code>3e9c18d</code>, <code>134185b</code>, <code>210eaca</code>, <code>609e869</code>, <code>bfa90b3</code>, <code>b8c06ae</code>, <code>27539d4</code></td>
+            </tr>
+            <tr>
+                <td><a href="./区間の描き分け_実装解説.html">区間の描き分け</a></td>
+                <td>案内中の経路を、歩き終えた区間（灰色の破線）・今の区間（緑の太線）・これからの区間（青）に描き分ける機能。</td>
+                <td>2026-10-21</td>
+                <td><code>40e902e</code></td>
+            </tr>
+            <tr>
+                <td><a href="./散歩実績の保存_実装解説.html">散歩実績の保存</a></td>
+                <td>散歩を終えたときに1回分の実績と利用者ごとの累計を DynamoDB へ保存し、送れなかった分を端末に退避して自動で送り直す機能。</td>
+                <td>2026-10-21</td>
+                <td><code>dc87c1c</code>, <code>c20633a</code></td>
+            </tr>
+            <tr>
+                <td><a href="./ダブルタップでの拡大防止_実装解説.html">ダブルタップでの拡大防止</a></td>
+                <td>ボタンなどの操作部品をダブルタップしても画面が拡大しないようにした変更（ピンチ拡大は残す）。</td>
+                <td>2026-10-21</td>
+                <td><code>37fe610</code></td>
+            </tr>
+            <tr>
+                <td><a href="./現在地のずれ対策_実装解説.html">現在地のずれ対策</a></td>
+                <td>ビル街での現在地の飛びを、徒歩ではあり得ない速さの測位を捨てることで防ぎ、地図の現在地を経路の線上へ吸着させて表示する変更。</td>
+                <td>2026-10-14</td>
+                <td><code>4d4cbb4</code></td>
+            </tr>
+            <tr>
+                <td><a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a></td>
+                <td>案内中の現在地をつなぎ合わせて歩いた距離を積み上げ、計測の欠落（測位の中断・画面の非表示）を検知して、結果画面に実測値と注記を表示する機能。</td>
+                <td>2026-10-14</td>
+                <td><code>95b51ab</code>, <code>dc87c1c</code></td>
+            </tr>
+            <tr>
+                <td><a href="./ルート提案と再作成_実装解説.html">ルート提案と再作成</a></td>
+                <td>ルート提案画面の「決定」「再作成」「ホームに戻る」の3つの操作（詳細画面の削除、再作成のロード表示と失敗時の通知）。</td>
+                <td>2026-10-14</td>
+                <td><code>ec68ced</code>, <code>4c0f3c5</code>, <code>09f2248</code>, <code>a0b759b</code></td>
             </tr>
             <tr>
                 <td><a href="./パスワード再設定の改善_実装解説.html">パスワード再設定の改善</a></td>
@@ -87,39 +172,15 @@
             </tr>
             <tr>
                 <td><a href="./APIの認可_実装解説.html">APIの認可</a></td>
-                <td>ルートの取得・生成と検索条件マスタの取得を、API Gateway の Cognito オーソライザーでログイン済みの人だけが呼べる状態にした修正。</td>
+                <td>API Gateway の Cognito オーソライザーで、ログイン済みの人だけが API を呼べるようにした修正（後から追加された API にも同じ認可が付いている）。</td>
                 <td>2026-10-07</td>
                 <td><code>75de23f</code></td>
             </tr>
             <tr>
-                <td><a href="./マスコットとファンタジー調デザイン_実装解説.html">マスコットとファンタジー調デザイン</a></td>
-                <td>配色と書体を <code>global.css</code> に集約して全画面を羊皮紙調に揃え、案内役のマスコット（フクロウ）を吹き出しで各画面に登場させたデザイン変更。</td>
-                <td>2026-10-07</td>
-                <td><code>3c4fc0b</code></td>
-            </tr>
-            <tr>
-                <td><a href="./散歩実績の計測_実装解説.html">散歩実績の計測</a></td>
-                <td>案内中の現在地をつなぎ合わせて実際に歩いた距離を積み上げ、散歩結果画面の総距離・スポット数・所要時間を実測値で表示する機能。</td>
-                <td>2026-10-07</td>
-                <td><code>95b51ab</code></td>
-            </tr>
-            <tr>
-                <td><a href="./現在地へ戻るボタン_実装解説.html">現在地へ戻るボタン</a></td>
-                <td>案内画面の地図に、1回押すと現在地を中央へ戻し拡大率も初期状態に戻すボタンを追加した機能。</td>
-                <td>2026-10-07</td>
-                <td><code>cad1042</code>, <code>cc02d5c</code></td>
-            </tr>
-            <tr>
-                <td><a href="./NZ-153_次の目的地表示_実装解説.html">次の目的地表示</a></td>
-                <td>案内画面の上部に次の目的地と残り距離（経路沿い）を表示し、40m以内に近づくと到達として次へ切り替える機能。</td>
+                <td><a href="./ログイン画面_実装解説.html">ログイン画面</a></td>
+                <td>ユーザー名とパスワードでログインする画面と、未ログインの人をログイン画面へ送るルーターガード。Amplify の導入。</td>
                 <td>2026-09-30</td>
-                <td><code>2c29b50</code>, <code>3e8aed6</code>, <code>3e9c18d</code>, <code>134185b</code></td>
-            </tr>
-            <tr>
-                <td><a href="./NZ-185_おまかせ条件_実装解説.html">おまかせ条件</a></td>
-                <td>ホーム画面のジャンルと距離を「おまかせ」にすると、アプリが条件を自動で選び、選ばれた内容をトーストで知らせる機能。</td>
-                <td>2026-09-30</td>
-                <td><code>c4d66d3</code>, <code>9103fce</code></td>
+                <td><code>2e069cd</code>, <code>194f15e</code></td>
             </tr>
             <tr>
                 <td><a href="./NZ-186_パスワード再設定画面_実装解説.html">パスワード再設定画面</a></td>
@@ -147,20 +208,26 @@
             </tr>
             <tr>
                 <td><a href="./NZ-106_ルート作成API_実装解説.html">ルート作成API</a></td>
-                <td>入力された目的・ジャンル・距離から、周辺スポットの検索とAIの選定を経て散歩ルートを自動生成する中核のAPI。</td>
-                <td>2026-09-09</td>
+                <td>入力されたジャンル・距離から、周辺スポットの検索とAIの選定を経て散歩ルートを自動生成する中核のAPI（距離の調整・タイムアウト対策・飛び地の除外・再検索を含む）。</td>
+                <td>2026-09-30</td>
+                <td><code>82a8af2</code>, <code>eec8b62</code>, <code>afcdfec</code>, <code>91f35d0</code>, <code>9f8faf9</code>, <code>f7dfb0b</code>, <code>5bafcb3</code>, <code>4824242</code>, <code>433dd9c</code>, <code>da45137</code>, <code>e25f22d</code>, <code>eaca0c2</code>, <code>fc3a531</code>, <code>9d799cc</code>, <code>c6c440c</code>, <code>2999924</code>, <code>65d961c</code></td>
+            </tr>
+            <tr>
+                <td><a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能</a></td>
+                <td>ルート作成の出発地を固定座標から実際のユーザー現在地に変え、案内画面にリアルタイムの現在地表示を追加した機能。</td>
+                <td>2026-09-16</td>
                 <td>-</td>
+            </tr>
+            <tr>
+                <td><a href="./検索条件マスタ_実装解説.html">検索条件マスタ</a></td>
+                <td>ホーム画面のジャンルの選択肢と距離の範囲を、検索条件マスタ（<code>michimaster</code>）から <code>GET /api/v1/conditions</code> で取得する仕組み。</td>
+                <td>2026-09-09</td>
+                <td><code>4633846</code>, <code>8a8c110</code>, <code>dc07a86</code></td>
             </tr>
             <tr>
                 <td><a href="../NZ-84_CICDの解説.html">CI/CD</a></td>
                 <td>GitHub Actions による CI（build / lint / test）と、OIDC で AWS へデプロイする CD の仕組みの解説。</td>
                 <td>2026-09-09</td>
-                <td>-</td>
-            </tr>
-            <tr>
-                <td><a href="../NZ-143_現在地取得機能の実装解説.html">現在地取得機能</a></td>
-                <td>ルート作成の出発地を固定座標から実際のユーザー現在地に変え、案内画面にリアルタイムの現在地表示を追加した機能。</td>
-                <td>2026-09</td>
                 <td>-</td>
             </tr>
             <tr>
